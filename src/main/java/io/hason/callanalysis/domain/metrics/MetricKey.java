@@ -19,14 +19,29 @@ public enum MetricKey {
     RTT("RTT", LogSource.ENDCALL),
     JITTER("Jitter", LogSource.ENDCALL),
 
-    ICE_FINAL_STATE("Trang thai ICE cuoi cung", LogSource.WEBRTC);
+    ICE_FINAL_STATE("Trang thai ICE cuoi cung", LogSource.WEBRTC),
+
+    // ---- Chi so "Neu kip" (T11), MVP muc 4.3 ----
+
+    /** PROXY: khoang trong lon nhat giua cac PAIR_PING — phai ghi ro la proxy trong report. */
+    MAX_PAIR_PING_GAP("Khoang trong PAIR_PING lon nhat", LogSource.SIGNALING, true),
+    INTERNAL_API_LATENCY("Latency API noi bo luc INIT_CALL", LogSource.SIGNALING),
+    WARN_COUNT_BY_SERVICE("So WARN theo service", LogSource.SIGNALING),
+    ERROR_COUNT_BY_SERVICE("So ERROR theo service", LogSource.SIGNALING),
+    NETWORK_CONTEXT("ISP / ASN / quoc gia", LogSource.SIGNALING);
 
     private final String displayName;
     private final LogSource source;
+    private final boolean proxy;
 
     MetricKey(String displayName, LogSource source) {
+        this(displayName, source, false);
+    }
+
+    MetricKey(String displayName, LogSource source, boolean proxy) {
         this.displayName = displayName;
         this.source = source;
+        this.proxy = proxy;
     }
 
     public String displayName() {
@@ -37,9 +52,18 @@ public enum MetricKey {
         return source;
     }
 
+    /**
+     * Chi so PROXY: khong do truc tiep thu can biet, chi la dau hieu gian tiep.
+     * MVP muc 4.3 yeu cau ghi ro trong report de nguoi doc khong hieu nham.
+     */
+    public boolean isProxy() {
+        return proxy;
+    }
+
     /** Chi so tinh rieng cho tung ben, phai kem leg khi hien thi. */
     public boolean isPerLeg() {
         return this == MOS || this == PACKET_LOSS || this == RTT
-                || this == JITTER || this == ICE_FINAL_STATE;
+                || this == JITTER || this == ICE_FINAL_STATE
+                || this == MAX_PAIR_PING_GAP || this == NETWORK_CONTEXT;
     }
 }

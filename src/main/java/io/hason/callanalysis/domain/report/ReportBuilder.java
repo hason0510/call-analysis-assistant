@@ -54,10 +54,13 @@ public class ReportBuilder {
     private static CallReport.MetricEntry toEntry(CallMetric metric) {
         return switch (metric.value()) {
             case MetricValue.Present p -> new CallReport.MetricEntry(metric.label(),
-                    p.value().stripTrailingZeros().toPlainString(), p.unit(), null,
+                    p.value().stripTrailingZeros().toPlainString(),
+                    metric.key().isProxy() ? p.unit() + " [proxy]" : p.unit(), null,
                     metric.key().source().name());
+            // Chi so PROXY phai ghi ro trong report (MVP muc 4.3)
             case MetricValue.Text t -> new CallReport.MetricEntry(metric.label(),
-                    t.value(), null, null, metric.key().source().name());
+                    metric.key().isProxy() ? t.value() + " [proxy]" : t.value(),
+                    null, null, metric.key().source().name());
             case MetricValue.NotAvailable n -> new CallReport.MetricEntry(metric.label(),
                     null, null, n.reason(), metric.key().source().name());
         };

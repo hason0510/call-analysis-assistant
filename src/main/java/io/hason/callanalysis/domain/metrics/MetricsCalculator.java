@@ -5,6 +5,7 @@ import io.hason.callanalysis.domain.event.EventTime;
 import io.hason.callanalysis.domain.event.EventType;
 import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
+import io.hason.callanalysis.domain.event.Severity;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 
 import java.math.BigDecimal;
@@ -12,6 +13,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -66,9 +68,129 @@ public class MetricsCalculator {
                     decimalFrom(quality, "transport.currentRttMs", "ms", timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.JITTER, leg, jitter(quality, timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.ICE_FINAL_STATE, leg, iceFinalState(timeline, leg)));
+            metrics.add(CallMetric.of(MetricKey.MAX_PAIR_PING_GAP, leg, maxPairPingGap(timeline, leg)));
+            metrics.add(CallMetric.of(MetricKey.NETWORK_CONTEXT, leg, networkContext(timeline, leg)));
         }
 
+        metrics.add(CallMetric.of(MetricKey.INTERNAL_API_LATENCY, internalApiLatency(timeline)));
+        metrics.add(CallMetric.of(MetricKey.WARN_COUNT_BY_SERVICE,
+                countByService(timeline, Severity.WARN)));
+        metrics.add(CallMetric.of(MetricKey.ERROR_COUNT_BY_SERVICE,
+                countByService(timeline, Severity.ERROR)));
+
         return new CallMetrics(timeline.callId(), List.copyOf(metrics));
+    }
+
+    // ================= Chi so "Neu kip" (T11), MVP muc 4.3 =================
+
+    /**
+     * Khoang trong lon nhat giua hai PAIR_PING lien tiep cua cung mot leg.
+     *
+     * Day la chi so PROXY, khong phai do truc tiep: PAIR_PING la nhip tim cua tang
+     * SIGNALING, nen khoang trong lon GOI Y duong signaling co van de — nhung KHONG
+     * chung minh duoc media co van de. Cuoc goi 2D9057AA la vi du: PAIR_PING chay deu
+     * suot 33 giay trong khi media da chet han.
+     */
+    private MetricValue maxPairPingGap(CallTimeline timeline, Leg leg) {
+        List<Instant> pings = timeline.mainTrack().stream()
+                .filter(e -> e.source() == LogSource.SIGNALING)
+                .filter(e -> "PAIR_PING".equals(e.name()))
+                .filter(e -> e.leg() == leg)
+                .flatMap(e -> instantOf(e).stream())
+                .sorted()
+                .toList();
+
+        if (pings.size() < 2) {
+            return MetricValue.unavailable(pings.isEmpty()
+                    ? "cuoc goi khong co PAIR_PING nao cua " + leg.name().toLowerCase()
+                    : "chi co 1 PAIR_PING, khong do duoc khoang trong");
+        }
+        long max = 0;
+        for (int i = 1; i < pings.size(); i++) {
+            max = Math.max(max, java.time.Duration.between(pings.get(i - 1), pings.get(i)).toMillis());
+        }
+        return MetricValue.millis(max);
+    }
+
+    /** Latency cua cac API noi bo, lay tu truong latencyMs cua su kien INIT_CALL. */
+    private MetricValue internalApiLatency(CallTimeline timeline) {
+        List<Long> values = timeline.mainTrack().stream()
+                .filter(e -> e.source() == LogSource.SIGNALING)
+                .filter(e -> INIT_CALL.equals(e.name()))
+                .map(e -> e.attribute("latencyMs"))
+                .filter(java.util.Objects::nonNull)
+                .map(Long::parseLong)
+                .sorted()
+                .toList();
+
+        if (values.isEmpty()) {
+            return MetricValue.unavailable("khong su kien INIT_CALL nao ghi latencyMs");
+        }
+        long max = values.getLast();
+        long median = values.get(values.size() / 2);
+        return MetricValue.text(String.format("max %d ms, trung vi %d ms (%d mau)",
+                max, median, values.size()));
+    }
+
+    /**
+     * Dem su kien theo muc do, nhom theo service.
+     *
+     * MVP muc 4.3 ghi ro: "WARN khong dong nghia voi loi". Tren data mau co 223/1059
+     * su kien WARN va chung xuat hien o CA cuoc goi thanh cong, nen day chi la thong tin
+     * tham khao, khong duoc dung lam tin hieu verdict.
+     */
+    private MetricValue countByService(CallTimeline timeline, Severity severity) {
+        // Khong co signaling thi khong the noi "0 su kien" — do la KHONG DO DUOC,
+        // khac han voi "do duoc va bang 0".
+        if (!timeline.hasSource(LogSource.SIGNALING)) {
+            return MetricValue.unavailable("khong co du lieu signaling");
+        }
+        Map<String, Long> byService = new java.util.TreeMap<>();
+        timeline.mainTrack().stream()
+                .filter(e -> e.source() == LogSource.SIGNALING)
+                .filter(e -> e.severity() == severity)
+                .forEach(e -> byService.merge(
+                        e.attribute("service") == null ? "(khong ro)" : e.attribute("service"),
+                        1L, Long::sum));
+
+        if (byService.isEmpty()) {
+            return MetricValue.count(0);
+        }
+        String detail = byService.entrySet().stream()
+                .map(en -> en.getKey() + "=" + en.getValue())
+                .collect(java.util.stream.Collectors.joining(", "));
+        long total = byService.values().stream().mapToLong(Long::longValue).sum();
+        return MetricValue.text(total + " (" + detail + ")");
+    }
+
+    /** ISP / ASN / quoc gia cua tung leg. Thieu o 63/1059 su kien nen phai chiu N/A. */
+    private MetricValue networkContext(CallTimeline timeline, Leg leg) {
+        List<CanonicalEvent> events = timeline.mainTrack().stream()
+                .filter(e -> e.source() == LogSource.SIGNALING)
+                .filter(e -> e.leg() == leg)
+                .toList();
+
+        if (events.isEmpty()) {
+            return MetricValue.unavailable("khong co su kien signaling nao cua "
+                    + leg.name().toLowerCase());
+        }
+        String isp = firstAttribute(events, "isp");
+        String asn = firstAttribute(events, "asn");
+        String country = firstAttribute(events, "countryCode");
+
+        if (isp == null && asn == null && country == null) {
+            return MetricValue.unavailable("su kien signaling khong ghi isp/asn/countryCode");
+        }
+        return MetricValue.text(String.format("%s / %s / %s",
+                isp == null ? "?" : isp, asn == null ? "?" : asn, country == null ? "?" : country));
+    }
+
+    private static String firstAttribute(List<CanonicalEvent> events, String key) {
+        return events.stream()
+                .map(e -> e.attribute(key))
+                .filter(v -> v != null && !v.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
     private MetricValue durationBetween(CallTimeline timeline, String fromCmd, String toCmd) {

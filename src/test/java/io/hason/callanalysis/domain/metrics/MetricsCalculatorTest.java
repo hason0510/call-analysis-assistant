@@ -45,6 +45,34 @@ class MetricsCalculatorTest {
                 new SourceRef("signaling.json", n + 1, cmd));
     }
 
+    private CanonicalEvent sigWarn(long millis, String cmd, String service) {
+        int n = ordinal++;
+        return new CanonicalEvent("signaling.json#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+                EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
+                EventType.SIGNALING_COMMAND, cmd, Map.of("service", service),
+                io.hason.callanalysis.domain.event.Severity.WARN,
+                new SourceRef("signaling.json", n + 1, cmd));
+    }
+
+    private CanonicalEvent sigCtx(long millis, String cmd, Leg leg,
+                                  String isp, String asn, String country) {
+        int n = ordinal++;
+        return new CanonicalEvent("signaling.json#" + n, "CALL-1", leg, LogSource.SIGNALING,
+                EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
+                EventType.SIGNALING_COMMAND, cmd,
+                Map.of("isp", isp, "asn", asn, "countryCode", country), Severity.INFO,
+                new SourceRef("signaling.json", n + 1, cmd));
+    }
+
+    private CanonicalEvent sigLatency(long millis, int latencyMs) {
+        int n = ordinal++;
+        return new CanonicalEvent("signaling.json#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+                EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
+                EventType.SIGNALING_COMMAND, "INIT_CALL",
+                Map.of("latencyMs", String.valueOf(latencyMs)), Severity.INFO,
+                new SourceRef("signaling.json", n + 1, "INIT_CALL"));
+    }
+
     private static CanonicalEvent summary(Leg leg, Map<String, String> fields) {
         return new CanonicalEvent("endcall#1", "CALL-1", leg, LogSource.ENDCALL,
                 EventTime.absolute(Instant.parse("2026-09-21T08:01:00Z"), ClockDomain.CLIENT_CALLEE),
@@ -166,11 +194,16 @@ class MetricsCalculatorTest {
         assertThat(metrics.valueOf(MetricKey.NO_SESSIONS_FOUND).display())
                 .contains("khong co truong text");
 
+        // Chi so DEM duoc phep bang 0 — "dem duoc va bang 0" khac "khong do duoc".
+        // Cac chi so DO LUONG thi khong bao gio duoc mac dinh ve 0.
+        List<MetricKey> countingKeys = List.of(
+                MetricKey.INVITE_RETRANSMISSIONS, MetricKey.BYE_RETRANSMISSIONS,
+                MetricKey.WARN_COUNT_BY_SERVICE, MetricKey.ERROR_COUNT_BY_SERVICE);
+
         assertThat(metrics.metrics()).noneMatch(m ->
                 m.value() instanceof MetricValue.Present p
                         && p.value().signum() == 0
-                        && m.key() != MetricKey.INVITE_RETRANSMISSIONS
-                        && m.key() != MetricKey.BYE_RETRANSMISSIONS);
+                        && !countingKeys.contains(m.key()));
     }
 
     @Test
@@ -201,6 +234,69 @@ class MetricsCalculatorTest {
         assertThat(calculator.calculate(timelineOf(List.of(failed)))
                 .find(MetricKey.ICE_FINAL_STATE, Leg.CALLEE)).get()
                 .extracting(m -> m.value().display()).isEqualTo("failed");
+    }
+
+    @Test
+    @DisplayName("T11: khoang trong PAIR_PING lon nhat, danh dau la chi so PROXY")
+    void maxPairPingGapIsMarkedAsProxy() {
+        CallTimeline timeline = timelineOf(List.of(
+                sigAt(0, "PAIR_PING", Leg.CALLER),
+                sigAt(1000, "PAIR_PING", Leg.CALLER),
+                sigAt(6000, "PAIR_PING", Leg.CALLER),   // khoang trong 5000 ms
+                sigAt(7000, "PAIR_PING", Leg.CALLER)));
+
+        assertThat(calculator.calculate(timeline).find(MetricKey.MAX_PAIR_PING_GAP, Leg.CALLER))
+                .get().extracting(m -> m.value().display()).isEqualTo("5000 ms");
+        assertThat(MetricKey.MAX_PAIR_PING_GAP.isProxy()).isTrue();
+    }
+
+    @Test
+    @DisplayName("T11: duoi 2 PAIR_PING thi khong do duoc khoang trong")
+    void singlePairPingCannotMeasureGap() {
+        CallTimeline timeline = timelineOf(List.of(sigAt(0, "PAIR_PING", Leg.CALLER)));
+
+        assertThat(calculator.calculate(timeline)
+                .find(MetricKey.MAX_PAIR_PING_GAP, Leg.CALLER).orElseThrow()
+                .value().display()).contains("chi co 1 PAIR_PING");
+    }
+
+    @Test
+    @DisplayName("T11: WARN dem theo service, KHONG duoc coi la tin hieu loi")
+    void warnIsCountedButNotTreatedAsError() {
+        // 223/1059 su kien trong data mau la WARN, co ca o cuoc goi thanh cong.
+        CallTimeline timeline = timelineOf(List.of(
+                sigWarn(0, "INIT_CALL", "SVC-A"),
+                sigWarn(10, "INIT_CALL", "SVC-A"),
+                sigWarn(20, "INIT_CALL", "SVC-B")));
+
+        assertThat(calculator.calculate(timeline).valueOf(MetricKey.WARN_COUNT_BY_SERVICE).display())
+                .isEqualTo("3 (SVC-A=2, SVC-B=1)");
+        assertThat(calculator.calculate(timeline).valueOf(MetricKey.ERROR_COUNT_BY_SERVICE).display())
+                .isEqualTo("0 lan");
+    }
+
+    @Test
+    @DisplayName("T11: ISP/ASN/quoc gia lay theo tung leg")
+    void networkContextIsPerLeg() {
+        CallTimeline timeline = timelineOf(List.of(
+                sigCtx(0, "INIT_CALL", Leg.CALLER, "MOBIFONE", "AS131429", "VN"),
+                sigCtx(100, "RINGING", Leg.CALLEE, "FPT", "AS18403", "VN")));
+
+        CallMetrics m = calculator.calculate(timeline);
+        assertThat(m.find(MetricKey.NETWORK_CONTEXT, Leg.CALLER)).get()
+                .extracting(x -> x.value().display()).isEqualTo("MOBIFONE / AS131429 / VN");
+        assertThat(m.find(MetricKey.NETWORK_CONTEXT, Leg.CALLEE)).get()
+                .extracting(x -> x.value().display()).isEqualTo("FPT / AS18403 / VN");
+    }
+
+    @Test
+    @DisplayName("T11: latency API noi bo lay tu truong latencyMs cua INIT_CALL")
+    void internalApiLatencyFromInitCall() {
+        CallTimeline timeline = timelineOf(List.of(
+                sigLatency(0, 12), sigLatency(10, 16), sigLatency(20, 17)));
+
+        assertThat(calculator.calculate(timeline).valueOf(MetricKey.INTERNAL_API_LATENCY).display())
+                .isEqualTo("max 17 ms, trung vi 16 ms (3 mau)");
     }
 
     @Test
