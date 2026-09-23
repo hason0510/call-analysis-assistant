@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: call-analysis-assistant
+  main:
+    banner-mode: "off"
+    web-application-type: none          # Sprint 1 chua co web UI (MVP muc 1.5)
+  elasticsearch:
+    uris: http://localhost:9200
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+logging:
+  level:
+    root: WARN
+    io.hason.callanalysis: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %-32logger{0} %msg%n"

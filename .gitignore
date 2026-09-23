@@ -1,0 +1,21 @@
+# Build
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Data mau cua mentor — KHONG commit: chua IP cong cong that va log production
+/data/
+ai20k_sample/
+*.log
+
+# Moi truong
+.env
+
+# Tai lieu va ghi chu — khong dua vao repo
+*.md
+docs/
+.claude/

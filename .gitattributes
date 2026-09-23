@@ -1,0 +1,10 @@
+# Chuan hoa xuong dong: dev tren Windows, mentor co the dung macOS/Linux
+* text=auto eol=lf
+
+# Script Windows phai giu CRLF
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Nhi phan
+*.jar  binary
+*.png  binary
