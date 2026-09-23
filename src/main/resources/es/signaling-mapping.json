@@ -1,0 +1,33 @@
+{
+  "mappings": {
+    "dynamic": "strict",
+
+    "properties": {
+      "callId":        { "type": "keyword" },
+      "ordinal":       { "type": "integer" },
+
+      "@timestamp":    { "type": "date", "format": "strict_date_optional_time_nanos" },
+
+      "service":       { "type": "keyword" },
+      "level":         { "type": "keyword" },
+      "cmd":           { "type": "keyword" },
+      "csid":          { "type": "keyword" },
+      "requestId":     { "type": "keyword" },
+      "appUserId":     { "type": "keyword" },
+      "callSessionId": { "type": "keyword" },
+      "isp":           { "type": "keyword" },
+      "asn":           { "type": "keyword" },
+      "countryCode":   { "type": "keyword" },
+      "latencyMs":     { "type": "long" },
+
+      "sourceTruncated":     { "type": "boolean" },
+      "sourceReturned":      { "type": "integer" },
+      "sourceTotalMatching": { "type": "integer" }
+    }
+  },
+
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  }
+}
