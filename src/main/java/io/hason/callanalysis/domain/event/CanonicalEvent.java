@@ -44,4 +44,14 @@ public record CanonicalEvent(
     public String attribute(String key) {
         return attributes.get(key);
     }
+
+    /**
+     * Gan lai leg sau khi buoc correlate xac dinh duoc chu so huu that cua file.
+     * Can thiet vi ten file khong dang tin: data mau co `calleer_webrtc.log` thuc chat
+     * la log cua caller.
+     */
+    public CanonicalEvent withLeg(Leg newLeg) {
+        return newLeg == leg ? this : new CanonicalEvent(
+                eventId, callId, newLeg, source, time, type, name, attributes, severity, sourceRef);
+    }
 }

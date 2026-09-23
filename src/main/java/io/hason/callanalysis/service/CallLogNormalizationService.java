@@ -7,7 +7,10 @@ import io.hason.callanalysis.domain.parse.FileTypeDetector;
 import io.hason.callanalysis.domain.parse.ParseContext;
 import io.hason.callanalysis.domain.parse.ParseResult;
 import io.hason.callanalysis.domain.parse.WebRtcLogParser;
+import io.hason.callanalysis.domain.signaling.LegAssignment;
 import io.hason.callanalysis.domain.signaling.SignalingNormalizer;
+import io.hason.callanalysis.domain.timeline.CallTimeline;
+import io.hason.callanalysis.domain.timeline.TimelineBuilder;
 import io.hason.callanalysis.service.port.SignalingSource;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +35,7 @@ public class CallLogNormalizationService {
     private final EndCallLogParser endCallParser = new EndCallLogParser();
     private final WebRtcLogParser webRtcParser = new WebRtcLogParser();
     private final SignalingNormalizer signalingNormalizer = new SignalingNormalizer();
+    private final TimelineBuilder timelineBuilder = new TimelineBuilder();
 
     public CallLogNormalizationService(SignalingSource signalingSource) {
         this.signalingSource = signalingSource;
@@ -50,6 +54,14 @@ public class CallLogNormalizationService {
             }
             return all;
         }
+    }
+
+    /** Chuan hoa roi dung luon timeline — dau vao cho T6 (chi so) va T7 (evidence). */
+    public CallTimeline buildTimeline(String callId, Map<String, List<String>> attachedFiles) {
+        CallOutcome outcome = normalize(callId, attachedFiles);
+        LegAssignment legs = LegAssignment.fromFirstInitCall(
+                signalingSource.fetchByCallId(callId).records());
+        return timelineBuilder.build(callId, outcome.combined().events(), legs);
     }
 
     public CallOutcome normalize(String callId, Map<String, List<String>> attachedFiles) {
