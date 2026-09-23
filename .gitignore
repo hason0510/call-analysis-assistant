@@ -15,7 +15,14 @@ ai20k_sample/
 # Moi truong
 .env
 
-# Tai lieu va ghi chu — khong dua vao repo
+# Ghi chu lam viec ca nhan — khong dua vao repo
 *.md
-docs/
 .claude/
+
+# Ngoai tru: DELIVERABLE cua Sprint 1 (MVP muc 5.3), mentor phai doc duoc
+!README.md
+!docs/architecture-v1.md
+!docs/ai-provider-proposal.md
+!docs/design-decisions.md
+!docs/demo-sprint-1.md
+!docs/kiem-thu-tay.md

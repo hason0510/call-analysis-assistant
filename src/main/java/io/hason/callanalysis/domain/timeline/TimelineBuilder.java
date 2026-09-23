@@ -146,23 +146,47 @@ public class TimelineBuilder {
                             + "|" + e.sourceRef().rawLine());
         }
 
-        Map<List<String>, String> firstFileWithFingerprint = new LinkedHashMap<>();
-        Set<String> duplicateFiles = new LinkedHashSet<>();
-        fingerprintByFile.forEach((fileName, fingerprint) -> {
-            String existing = firstFileWithFingerprint.putIfAbsent(fingerprint, fileName);
-            if (existing != null) {
-                duplicateFiles.add(fileName);
-            }
-        });
+        // Giu file co ten DUNG QUY UOC nhat, khong phai file dung truoc theo thu tu chu cai.
+        // Neu khong, evidence se trich dan ten file vo nghia (vi du "ban_sao.log")
+        // thay vi "callee_webrtc.log", lam report kho doc.
+        Map<List<String>, String> keptByFingerprint = new LinkedHashMap<>();
+        fingerprintByFile.forEach((fileName, fingerprint) ->
+                keptByFingerprint.merge(fingerprint, fileName, TimelineBuilder::preferredFileName));
+
+        Set<String> kept = new LinkedHashSet<>(keptByFingerprint.values());
+        Set<String> duplicateFiles = new LinkedHashSet<>(fingerprintByFile.keySet());
+        duplicateFiles.removeAll(kept);
 
         if (duplicateFiles.isEmpty()) {
             return new Deduplicated(events, 0, List.of());
         }
 
-        List<CanonicalEvent> kept = events.stream()
+        List<CanonicalEvent> remaining = events.stream()
                 .filter(e -> !duplicateFiles.contains(e.sourceRef().fileName()))
                 .toList();
-        return new Deduplicated(kept, events.size() - kept.size(), List.copyOf(duplicateFiles));
+        return new Deduplicated(remaining, events.size() - remaining.size(), List.copyOf(duplicateFiles));
+    }
+
+    /** Ten file dung quy uong dat ten cua data mau: caller_/callee_ + _endcall/_webrtc.log */
+    private static final java.util.regex.Pattern CONVENTIONAL_NAME =
+            java.util.regex.Pattern.compile("^(caller|callee)_(endcall|webrtc)\\.log$");
+
+    /** Chon ten file de giu lai giua hai file trung noi dung. */
+    private static String preferredFileName(String a, String b) {
+        int scoreA = nameScore(a);
+        int scoreB = nameScore(b);
+        if (scoreA != scoreB) {
+            return scoreA > scoreB ? a : b;
+        }
+        return a.compareTo(b) <= 0 ? a : b;
+    }
+
+    private static int nameScore(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (CONVENTIONAL_NAME.matcher(lower).matches()) {
+            return 2;
+        }
+        return lower.startsWith("caller") || lower.startsWith("callee") ? 1 : 0;
     }
 
     /**

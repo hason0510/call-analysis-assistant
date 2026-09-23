@@ -134,6 +134,26 @@ class TimelineBuilderTest {
     }
 
     @Test
+    @DisplayName("trung noi dung thi giu ten DUNG QUY UOC, khong giu ten dung truoc bang chu cai")
+    void duplicateKeepsConventionalFileName() {
+        // "ban_sao.log" dung truoc "callee_webrtc.log" theo thu tu chu cai, nhung giu no
+        // se khien evidence trich dan ten file vo nghia.
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                webRtc("ban_sao.log", 1, 100, "mot", "ios"),
+                webRtc("ban_sao.log", 2, 200, "hai", "ios"),
+                webRtc("callee_webrtc.log", 1, 100, "mot", "ios"),
+                webRtc("callee_webrtc.log", 2, 200, "hai", "ios")),
+                LegAssignment.unknown());
+
+        assertThat(timeline.relativeTracks()).singleElement()
+                .extracting(RelativeTrack::fileName).isEqualTo("callee_webrtc.log");
+        assertThat(timeline.notes())
+                .filteredOn(n -> n.kind() == TimelineNote.Kind.DEDUPED)
+                .singleElement()
+                .satisfies(n -> assertThat(n.message()).contains("ban_sao.log"));
+    }
+
+    @Test
     @DisplayName("file WebRTC sai ten duoc gan lai leg theo platform, khong theo ten")
     void misnamedWebRtcFileIsRetaggedByContent() {
         // Tai hien `calleer_webrtc.log` trong data mau: ten goi y CALLEE, thuc te la CALLER.
