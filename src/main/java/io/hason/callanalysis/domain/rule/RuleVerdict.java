@@ -7,8 +7,8 @@ import io.hason.callanalysis.domain.taxonomy.Verdict;
 import java.util.List;
 
 /**
- * Ket luan theo rule. Sprint 2 se dung day lam moc doi chieu cho verdict cua AI
- * va lam duong lui khi AI loi (MVP muc 3.2, 6.1 T8).
+ * Kết luận theo rule. Sprint 2 sẽ dùng đây làm mốc đối chiếu cho verdict của AI
+ * và làm đường lui khi AI lỗi (MVP mục 3.2, 6.1 T8).
  */
 public record RuleVerdict(
         Verdict verdict,

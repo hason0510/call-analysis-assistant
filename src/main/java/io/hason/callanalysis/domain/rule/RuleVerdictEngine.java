@@ -9,12 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Suy verdict tu tin hieu tho.
+ * Suy verdict từ tín hiệu thô.
  *
- * Thu tu kiem tra co chu dich, va ca quan trong nhat la ca thu tu:
- * cuoc goi 2D9057AA trong data mau co signaling HOAN HAO (OK_ACK_OK, BYE, PAIR_PING
- * deu dan 33 giay) nhung ground truth la FAIL vi ICE that bai va 0 byte audio.
- * Rule chi xet signaling se ket luan SUCCESS va sai ngay tren tap dev.
+ * Thứ tự kiểm tra có chủ đích, và ca quan trọng nhất là ca thứ tự:
+ * cuộc gọi 2D9057AA trong data mẫu có signaling HOÀN HẢO (OK_ACK_OK, BYE, PAIR_PING
+ * đều đặn 33 giây) nhưng ground truth là FAIL vì ICE thất bại và 0 byte audio.
+ * Rule chỉ xét signaling sẽ kết luận SUCCESS và sai ngay trên tập dev.
  */
 public class RuleVerdictEngine {
 
@@ -22,94 +22,115 @@ public class RuleVerdictEngine {
         List<String> limitations = new ArrayList<>();
 
         if (!signals.hasSignaling()) {
-            limitations.add("Khong co du lieu signaling nen khong dung duoc timeline cuoc goi");
-            return unknown("Thieu nguon signaling", limitations);
+            limitations.add("Không có dữ liệu signaling nên không dựng được timeline cuộc gọi");
+            return unknown("Thiếu nguồn signaling", limitations);
         }
         if (signals.signalingTruncated()) {
-            limitations.add("Ban export signaling bi cat bot, co the thieu su kien");
+            limitations.add("Bản export signaling bị cắt bớt, có thể thiếu sự kiện");
         }
         if (!signals.availableSources().contains(LogSource.ENDCALL)) {
-            limitations.add("Khong co end call log nen khong kiem chung duoc chat luong media");
+            limitations.add("Không có end call log nên không kiểm chứng được chất lượng media");
         }
 
-        // 1. Chua bao gio goi toi callee
+        // 1. Chưa bao giờ gọi tới callee
         if (!signals.sentInvite()) {
-            return fail(IssueCategory.SIGNALING_FAILURE, ConfidenceLevel.HIGH,
-                    "Khong ton tai INVITE: server chua tung goi toi callee", limitations);
+            // Kết luận này dựa vào việc KHÔNG THẤY một event. Bản export thiếu event
+            // thì chính cái không thấy đó có thể chỉ là do bị cắt mất.
+            return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),
+                    "Không tồn tại INVITE: server chưa từng gọi tới callee", limitations);
         }
 
-        // 2. Loi cung o tang signaling
+        // 2. Lỗi cứng ở tầng signaling
         if (signals.failHard()) {
-            return fail(IssueCategory.SIGNALING_FAILURE, ConfidenceLevel.HIGH,
-                    "Xuat hien FAIL_HARD truoc khi thiet lap xong", limitations);
+            return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),
+                    "Xuất hiện FAIL_HARD trước khi thiết lập xong", limitations);
         }
 
-        // 3. Huy truoc khi bat tay xong
+        // 3. Huỷ trước khi bắt tay xong
         if (signals.cancelled() && !signals.reachedConfirmed()) {
-            limitations.add("CANCEL chua phan biet duoc la nguoi dung chu dong huy"
-                    + " hay he thong timeout — xem knownAmbiguity cua SIGNALING_FAILURE");
+            limitations.add("CANCEL chưa phân biệt được là người dùng chủ động huỷ"
+                    + " hay hệ thống timeout — xem knownAmbiguity của SIGNALING_FAILURE");
             return fail(IssueCategory.SIGNALING_FAILURE, ConfidenceLevel.MEDIUM,
-                    "Co CANCEL va khong dat OK_ACK_OK", limitations);
+                    "Có CANCEL và không đạt OK_ACK_OK", limitations);
         }
 
-        // 4. Bat tay khong hoan tat vi ly do khac
+        // 4. Bắt tay không hoàn tất vì lý do khác
         if (!signals.reachedConfirmed()) {
             return fail(IssueCategory.SIGNALING_FAILURE, ConfidenceLevel.MEDIUM,
-                    "Khong dat OK_ACK_OK nen cuoc goi chua duoc thiet lap", limitations);
+                    "Không đạt OK_ACK_OK nên cuộc gọi chưa được thiết lập", limitations);
         }
 
-        // 5. Da thiet lap nhung media khong chay — ca 2D9057AA
+        // 5. Đã thiết lập nhưng media không chạy — ca 2D9057AA
         if (signals.mediaFailed()) {
+            // KHÔNG hạ theo signalingTruncated: kết luận này đứng trên bằng chứng
+            // DƯƠNG TÍNH từ end call log và WebRTC log (ICE failed, 0 byte audio),
+            // không phải trên việc thiếu vắng một event signaling nào.
             return fail(IssueCategory.ICE_FAILURE,
                     signals.iceEverFailed() ? ConfidenceLevel.HIGH : ConfidenceLevel.MEDIUM,
                     mediaFailureReason(signals), limitations);
         }
 
-        // 6. Thiet lap duoc, media chay, nhung chat luong kem
+        // 6. Thiết lập được, media chạy, nhưng chất lượng kém
         if (signals.qualityDegraded()) {
             return new RuleVerdict(Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS,
                     ConfidenceLevel.LOW,
-                    "Cuoc goi thiet lap va ket thuc binh thuong nhung chi so chat luong vuot nguong",
+                    "Cuộc gọi thiết lập và kết thúc bình thường nhưng chỉ số chất lượng vượt ngưỡng",
                     withUnvalidatedThresholdNote(limitations));
         }
 
-        // 7. Binh thuong
+        // 7. Bình thường
         if (!signals.terminatedNormally()) {
-            limitations.add("Khong thay BYE nen chua xac nhan duoc cuoc goi ket thuc binh thuong");
+            limitations.add("Không thấy BYE nên chưa xác nhận được cuộc gọi kết thúc bình thường");
             return new RuleVerdict(Verdict.SUCCESS, false, null, ConfidenceLevel.MEDIUM,
-                    "Da dat OK_ACK_OK va khong co dau hieu loi media", limitations);
+                    "Đã đạt OK_ACK_OK và không có dấu hiệu lỗi media", limitations);
         }
 
         return new RuleVerdict(Verdict.SUCCESS, false, null,
                 confidenceForSuccess(signals),
-                "Da dat OK_ACK_OK, ket thuc bang BYE, khong co dau hieu loi media", limitations);
+                "Đã đạt OK_ACK_OK, kết thúc bằng BYE, không có dấu hiệu lỗi media", limitations);
     }
 
     private static String mediaFailureReason(RuleSignals signals) {
         if (signals.iceEverFailed() && !signals.iceEverConnected()) {
-            return "ICE chuyen sang failed va khong bao gio dat connected";
+            return "ICE chuyển sang failed và không bao giờ đạt connected";
         }
         if (signals.noMediaBytes()) {
-            return "Khong mot byte audio nao duoc truyen du da thiet lap cuoc goi";
+            return "Không một byte audio nào được truyền dù đã thiết lập cuộc gọi";
         }
-        return "transport.hasMediaFail bat co bao loi media";
+        return "transport.hasMediaFail bật cờ báo lỗi media";
     }
 
     /**
-     * Do tin cay suy bang logic tat dinh (MVP muc 7.2), khong de AI sinh so.
-     * Du ca ba nguon log va khong co gioi han du lieu thi moi HIGH.
+     * Độ tin cậy suy bằng logic tất định (MVP mục 7.2), không để AI sinh số.
+     * Đủ cả ba nguồn log, ICE từng connected, và bản export không bị cắt thì mới HIGH.
      */
     private static ConfidenceLevel confidenceForSuccess(RuleSignals signals) {
-        if (signals.availableSources().size() == 3 && signals.iceEverConnected()) {
+        // Kết luận "bình thường" là kết luận dựa trên việc KHÔNG thấy dấu hiệu lỗi,
+        // nên nó yếu đi theo mọi thiếu hụt: thiếu nguồn log, hay bản export bị cắt.
+        if (signals.availableSources().size() == 3
+                && signals.iceEverConnected()
+                && !signals.signalingTruncated()) {
             return ConfidenceLevel.HIGH;
         }
         return signals.hasClientLog() ? ConfidenceLevel.MEDIUM : ConfidenceLevel.LOW;
     }
 
+    /**
+     * Hạ trần độ tin cậy cho kết luận rút ra TỪ SIGNALING khi bản export bị cắt bớt.
+     *
+     * Chỉ hạ theo giới hạn nào ĐỤNG TỚI căn cứ của chính kết luận đó, không hạ theo
+     * mọi giới hạn: kết luận SIGNALING_FAILURE chỉ cần signaling, nên thiếu end call
+     * log không làm nó kém chắc chắn đi. Hạ tuốt thì gần như mọi cuộc gọi đều tụt
+     * xuống MEDIUM và con số tin cậy hết còn phân biệt được gì.
+     */
+    private static ConfidenceLevel cappedBySignalingGaps(RuleSignals signals) {
+        return signals.signalingTruncated() ? ConfidenceLevel.MEDIUM : ConfidenceLevel.HIGH;
+    }
+
     private static List<String> withUnvalidatedThresholdNote(List<String> limitations) {
         List<String> all = new ArrayList<>(limitations);
-        all.add("Nguong phat hien chat luong kem CHUA kiem chung duoc:"
-                + " tap data mau khong co cuoc goi nao bi suy giam chat luong");
+        all.add("Ngưỡng phát hiện chất lượng kém CHƯA kiểm chứng được:"
+                + " tập data mẫu không có cuộc gọi nào bị suy giảm chất lượng");
         return all;
     }
 

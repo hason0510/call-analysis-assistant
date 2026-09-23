@@ -18,7 +18,7 @@ class RuleVerdictEngineTest {
     private static final Set<LogSource> ALL_SOURCES =
             Set.of(LogSource.SIGNALING, LogSource.ENDCALL, LogSource.WEBRTC);
 
-    /** Builder gon cho tung kich ban; mac dinh la cuoc goi khoe manh. */
+    /** Builder gọn cho từng kịch bản; mặc định là cuộc gọi khoẻ mạnh. */
     private static RuleSignals signals(java.util.function.Consumer<Builder> tweak) {
         Builder b = new Builder();
         tweak.accept(b);
@@ -47,7 +47,7 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("cuoc goi khoe manh du ba nguon -> SUCCESS, do tin cay HIGH")
+    @DisplayName("cuộc gọi khoẻ mạnh đủ ba nguồn -> SUCCESS, độ tin cậy HIGH")
     void healthyCallIsSuccess() {
         RuleVerdict v = engine.decide(signals(b -> { }));
 
@@ -58,9 +58,9 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("chua tung gui INVITE -> FAIL + SIGNALING_FAILURE")
+    @DisplayName("chưa từng gửi INVITE -> FAIL + SIGNALING_FAILURE")
     void neverSentInviteIsSignalingFailure() {
-        // Tai hien 1B009D42 va D114749E: chi co INIT_CALL roi im lang.
+        // Tái hiện 1B009D42 và D114749E: chỉ có INIT_CALL rồi im lặng.
         RuleVerdict v = engine.decide(signals(b -> {
             b.sentInvite = false;
             b.reachedConfirmed = false;
@@ -78,7 +78,7 @@ class RuleVerdictEngineTest {
     @Test
     @DisplayName("FAIL_HARD -> FAIL + SIGNALING_FAILURE")
     void failHardIsSignalingFailure() {
-        // Tai hien 0EC7B700: INVITE gui 15 lan roi FAIL_HARD.
+        // Tái hiện 0EC7B700: INVITE gửi 15 lần rồi FAIL_HARD.
         RuleVerdict v = engine.decide(signals(b -> {
             b.failHard = true;
             b.reachedConfirmed = false;
@@ -91,7 +91,7 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("CANCEL truoc khi bat tay xong -> FAIL, do tin cay MEDIUM vi con mo ho")
+    @DisplayName("CANCEL trước khi bắt tay xong -> FAIL, độ tin cậy MEDIUM vì còn mơ hồ")
     void cancelBeforeConfirmedIsAmbiguousFailure() {
         RuleVerdict v = engine.decide(signals(b -> {
             b.cancelled = true;
@@ -106,10 +106,10 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("SIGNALING HOAN HAO nhung ICE that bai -> van phai FAIL")
+    @DisplayName("SIGNALING HOÀN HẢO nhưng ICE thất bại -> vẫn phải FAIL")
     void perfectSignalingWithFailedIceIsStillFailure() {
-        // Day la ca 2D9057AA: OK_ACK_OK + BYE + PAIR_PING deu 33 giay, nhung ICE failed
-        // va 0 byte audio. Rule chi xet signaling se ket luan SUCCESS va sai.
+        // Đây là ca 2D9057AA: OK_ACK_OK + BYE + PAIR_PING đều 33 giây, nhưng ICE failed
+        // và 0 byte audio. Rule chỉ xét signaling sẽ kết luận SUCCESS và sai.
         RuleVerdict v = engine.decide(signals(b -> {
             b.iceEverConnected = false;
             b.iceEverFailed = true;
@@ -123,7 +123,7 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("khong mot byte audio nao du da thiet lap -> FAIL du chua thay ICE failed")
+    @DisplayName("không một byte audio nào dù đã thiết lập -> FAIL dù chưa thấy ICE failed")
     void zeroMediaBytesAloneIsEnoughToFail() {
         RuleVerdict v = engine.decide(signals(b -> {
             b.iceEverConnected = false;
@@ -136,18 +136,18 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("chat luong kem -> SUCCESS kem co, kem ghi chu nguong chua kiem chung")
+    @DisplayName("chất lượng kém -> SUCCESS kèm cờ, kèm ghi chú ngưỡng chưa kiểm chứng")
     void degradedQualityIsSuccessWithFlag() {
         RuleVerdict v = engine.decide(signals(b -> b.qualityDegraded = true));
 
         assertThat(v.verdict()).isEqualTo(Verdict.SUCCESS);
         assertThat(v.qualityFlag()).isTrue();
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.NETWORK_PACKET_LOSS);
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("CHUA kiem chung"));
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("CHƯA kiểm chứng"));
     }
 
     @Test
-    @DisplayName("khong co signaling -> UNKNOWN, khong doan bua")
+    @DisplayName("không có signaling -> UNKNOWN, không đoán bừa")
     void missingSignalingIsUnknown() {
         RuleVerdict v = engine.decide(signals(b -> b.sources = Set.of(LogSource.WEBRTC)));
 
@@ -157,7 +157,7 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("thieu end call log -> SUCCESS nhung ha do tin cay va ghi gioi han du lieu")
+    @DisplayName("thiếu end call log -> SUCCESS nhưng hạ độ tin cậy và ghi giới hạn dữ liệu")
     void missingClientLogLowersConfidence() {
         RuleVerdict v = engine.decide(signals(b -> {
             b.sources = Set.of(LogSource.SIGNALING);
@@ -170,11 +170,70 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("ban export signaling bi cat bot duoc ghi vao gioi han du lieu")
+    @DisplayName("bản export signaling bị cắt bớt được ghi vào giới hạn dữ liệu")
     void truncatedExportIsRecorded() {
-        // Cuoc goi DE7DD314: truncated=true, tra ve 200/201 event.
+        // Cuộc gọi DE7DD314: truncated=true, trả về 200/201 event.
         RuleVerdict v = engine.decide(signals(b -> b.signalingTruncated = true));
 
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("cat bot"));
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("cắt bớt"));
+    }
+
+    @Test
+    @DisplayName("bản export bị cắt bớt thì KHÔNG được báo độ tin cậy HIGH")
+    void truncatedExportLowersConfidence() {
+        // Cùng một cuộc gọi khoẻ mạnh, chỉ khác ở chỗ nguồn trả thiếu event.
+        // Trước đây confidenceForSuccess bỏ qua limitations nên vẫn ra HIGH,
+        // tức là tự nhận chắc chắn trên dữ liệu mà chính nó vừa ghi nhận là thiếu.
+        assertThat(engine.decide(signals(b -> { })).confidence())
+                .isEqualTo(ConfidenceLevel.HIGH);
+
+        assertThat(engine.decide(signals(b -> b.signalingTruncated = true)).confidence())
+                .isEqualTo(ConfidenceLevel.MEDIUM);
+    }
+
+    @Test
+    @DisplayName("kết luận rút từ signaling bị hạ tin cậy khi bản export thiếu event")
+    void signalingVerdictIsCappedWhenExportTruncated() {
+        // "Chưa từng gửi INVITE" là kết luận dựa trên việc KHÔNG THẤY một event.
+        // Nếu bản export bị cắt thì đúng cái event quyết định đó có thể đã mất.
+        assertThat(engine.decide(signals(b -> b.sentInvite = false)).confidence())
+                .isEqualTo(ConfidenceLevel.HIGH);
+
+        assertThat(engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.signalingTruncated = true;
+        })).confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+    }
+
+    @Test
+    @DisplayName("kết luận media KHÔNG bị hạ vì signaling thiếu event — căn cứ nằm ở nguồn khác")
+    void mediaVerdictIsNotCappedBySignalingGaps() {
+        // Ca 2D9057AA: bằng chứng là ICE failed + 0 byte audio, lấy từ end call log
+        // và WebRTC log. Bản export signaling thiếu event không đụng tới căn cứ đó.
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.iceEverConnected = false;
+            b.iceEverFailed = true;
+            b.noMediaBytes = true;
+            b.signalingTruncated = true;
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.ICE_FAILURE);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("cắt bớt"));
+    }
+
+    @Test
+    @DisplayName("thiếu end call log KHÔNG hạ tin cậy của kết luận SIGNALING_FAILURE")
+    void missingEndCallLogDoesNotCapSignalingVerdict() {
+        // Signaling một mình đã đủ chứng minh server chưa từng gọi tới callee.
+        // Hạ tin cậy theo MỌI giới hạn sẽ làm gần như cuộc gọi nào cũng thành MEDIUM.
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.sources = Set.of(LogSource.SIGNALING);
+        }));
+
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("end call log"));
     }
 }

@@ -3,11 +3,11 @@ package io.hason.callanalysis.domain.signaling;
 import java.util.List;
 
 /**
- * Ket qua truy van signaling cua mot cuoc goi, kem metadata cua ban export goc.
+ * Kết quả truy vấn signaling của một cuộc gọi, kèm metadata của bản export gốc.
  *
- * {@code truncated} bat buoc phai duoc mang theo: cuoc goi DE7DD314 trong data mau
- * co truncated=true (returned 200 / total 201), va MVP muc 3.3 yeu cau nhung thieu hut
- * du lieu nhu vay phai duoc neu ro o muc "Gioi han du lieu" cua report.
+ * {@code truncated} bắt buộc phải được mang theo: cuộc gọi DE7DD314 trong data mẫu
+ * có truncated=true (returned 200 / total 201), và MVP mục 3.3 yêu cầu những thiếu hụt
+ * dữ liệu như vậy phải được nêu rõ ở mục "Giới hạn dữ liệu" của report.
  */
 public record SignalingFetch(
         String callId,

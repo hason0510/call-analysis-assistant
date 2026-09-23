@@ -1,50 +1,50 @@
 # Verdict & Issue Taxonomy (T5)
 #
-# De o dang du lieu chu khong hard-code trong Java vi ba ly do:
-#   - Mentor review duoc ma khong can doc code.
-#   - Sprint 2 nap thang vao prompt cho AI.
-#   - Doi nguong khong phai build lai.
+# Để ở dạng dữ liệu chứ không hard-code trong Java vì ba lý do:
+#   - Mentor review được mà không cần đọc code.
+#   - Sprint 2 nạp thẳng vào prompt cho AI.
+#   - Đổi ngưỡng không phải build lại.
 #
-# Truong `calibration` ghi ro dieu kien phat hien da duoc kiem chung tren data hay chua.
-# Tap data mau chi phu 2/6 category, nen 4 category con lai dang o muc phong doan va
-# phai duoc ghi vao Known Limitations.
+# Trường `calibration` ghi rõ điều kiện phát hiện đã được kiểm chứng trên data hay chưa.
+# Tập data mẫu chỉ phủ 2/6 category, nên 4 category còn lại đang ở mức phỏng đoán và
+# phải được ghi vào Known Limitations.
 
 categories:
 
   - id: SIGNALING_FAILURE
     definition: >-
-      Cuoc goi khong thiet lap duoc o tang signaling: server chua tung goi toi callee,
-      hoac phien bi huy/tu choi truoc khi hai ben bat tay xong.
+      Cuộc gọi không thiết lập được ở tầng signaling: server chưa từng gọi tới callee,
+      hoặc phiên bị huỷ/từ chối trước khi hai bên bắt tay xong.
     symptoms:
-      - "Chi co INIT_CALL, khong bao gio co INVITE"
-      - "Xuat hien FAIL_HARD"
-      - "INVITE gui lai nhieu lan roi ket thuc bang FAIL_HARD"
-      - "Co CANCEL truoc khi dat OK_ACK_OK"
+      - "Chỉ có INIT_CALL, không bao giờ có INVITE"
+      - "Xuất hiện FAIL_HARD"
+      - "INVITE gửi lại nhiều lần rồi kết thúc bằng FAIL_HARD"
+      - "Có CANCEL trước khi đạt OK_ACK_OK"
     requiredEvidence:
       - source: SIGNALING
         field: cmd
     detectionConditions:
-      - "khong ton tai cmd=INVITE"
-      - "ton tai cmd=FAIL_HARD"
-      - "ton tai cmd=CANCEL va khong ton tai cmd=OK_ACK_OK"
+      - "không tồn tại cmd=INVITE"
+      - "tồn tại cmd=FAIL_HARD"
+      - "tồn tại cmd=CANCEL và không tồn tại cmd=OK_ACK_OK"
     knownAmbiguity: >-
-      CANCEL chua ro la nguoi dung chu dong huy hay he thong timeout roi tu huy.
-      Neu la nguoi dung huy thi day khong phai loi he thong. Can hoi mentor.
+      CANCEL chưa rõ là người dùng chủ động huỷ hay hệ thống timeout rồi tự huỷ.
+      Nếu là người dùng huỷ thì đây không phải lỗi hệ thống. Cần hỏi mentor.
     calibration:
       status: VALIDATED
       evidence: >-
-        3 ca chac chan trong data co nhan: 2 ca chi co INIT_CALL (1B009D42, D114749E),
-        1 ca co FAIL_HARD (0EC7B700). Them 7 ca CANCEL nhung mo ho.
+        3 ca chắc chắn trong data có nhãn: 2 ca chỉ có INIT_CALL (1B009D42, D114749E),
+        1 ca có FAIL_HARD (0EC7B700). Thêm 7 ca CANCEL nhưng mơ hồ.
 
   - id: ICE_FAILURE
     definition: >-
-      Signaling bat tay xong nhung duong truyen media khong thiet lap duoc:
-      ICE chuyen sang failed va khong bao gio dat connected.
+      Signaling bắt tay xong nhưng đường truyền media không thiết lập được:
+      ICE chuyển sang failed và không bao giờ đạt connected.
     symptoms:
-      - "IceConnectionState chuyen checking => failed"
-      - "Gui STUN BINDING request lien tuc ma khong nhan duoc response nao"
-      - "Khong co dong 'Switching selected connection'"
-      - "audio.bytesReceived = 0 va audio.bytesSent = 0"
+      - "IceConnectionState chuyển checking => failed"
+      - "Gửi STUN BINDING request liên tục mà không nhận được response nào"
+      - "Không có dòng 'Switching selected connection'"
+      - "audio.bytesReceived = 0 và audio.bytesSent = 0"
       - "transport.hasMediaFail = 1"
     requiredEvidence:
       - source: WEBRTC
@@ -52,51 +52,57 @@ categories:
       - source: ENDCALL
         field: transport.hasMediaFail
     detectionConditions:
-      - "iceStateTo=failed va khong ton tai iceStateTo=connected"
+      - "iceStateTo=failed và không tồn tại iceStateTo=connected"
       - "transport.hasMediaFail=1"
-      - "audio.bytesReceived=0 sau khi da dat OK_ACK_OK"
+      - "audio.bytesReceived=0 sau khi đã đạt OK_ACK_OK"
     knownAmbiguity: >-
-      Timeout ICE mac dinh khoang 15 giay; cuoc goi bi cup may truoc moc do se khong
-      kip sinh trang thai failed du media that su khong chay.
+      Timeout ICE mặc định khoảng 15 giây; cuộc gọi bị cúp máy trước mốc đó sẽ không
+      kịp sinh trạng thái failed dù media thật sự không chạy.
+      Theo RFC 8445, một cặp candidate hỏng KHÔNG có nghĩa phiên ICE hỏng, nên rule
+      chỉ kết luận khi có failed mà CHƯA BAO GIỜ đạt connected.
+      Giới hạn đã biết: tín hiệu iceEverConnected/iceEverFailed đang gộp chung cả hai
+      leg của cuộc gọi. Nếu một bên đạt connected còn bên kia failed thì bất thường đó
+      bị che. Data mẫu không có ca nào như vậy (2 dòng failed đều thuộc cùng một leg
+      của 2D9057AA) nên chưa kiểm chứng được cách xử lý đúng.
     calibration:
       status: VALIDATED
       evidence: >-
-        1 ca co nhan: 2D9057AA. Signaling hoan hao (OK_ACK_OK + BYE + PAIR_PING deu 33 giay)
-        nhung ICE checking => failed sau 15,6 giay, 0 byte audio, codeReason=419
-        "Vui long kiem tra ket noi mang", originator=2 (he thong tu ngat).
+        1 ca có nhãn: 2D9057AA. Signaling hoàn hảo (OK_ACK_OK + BYE + PAIR_PING đều 33 giây)
+        nhưng ICE checking => failed sau 15,6 giây, 0 byte audio, codeReason=419
+        "Vui lòng kiểm tra kết nối mạng", originator=2 (hệ thống tự ngắt).
 
   - id: TURN_FAILURE
     definition: >-
-      Khong cap phat duoc relay tren TURN server, nen khong co duong du phong khi
-      ket noi truc tiep that bai.
+      Không cấp phát được relay trên TURN server, nên không có đường dự phòng khi
+      kết nối trực tiếp thất bại.
     symptoms:
-      - "TURN allocate that bai lien tuc tren MOI cong"
-      - "Khong co dong 'TURN allocate requested successfully' nao"
-      - "Khong sinh duoc candidate loai relay"
+      - "TURN allocate thất bại liên tục trên MỌI cổng"
+      - "Không có dòng 'TURN allocate requested successfully' nào"
+      - "Không sinh được candidate loại relay"
     requiredEvidence:
       - source: WEBRTC
         field: message
     detectionConditions:
-      - "co 'Received TURN allocate error response' ma KHONG co 'TURN allocate requested successfully' tren cung mot Port"
+      - "có 'Received TURN allocate error response' mà KHÔNG có 'TURN allocate requested successfully' trên cùng một Port"
     knownAmbiguity: >-
-      TUYET DOI khong duoc dem rieng dong loi. "Received TURN allocate error response
-      code=401" la buoc bat tay xac thuc chuan cua TURN (RFC 5766): request dau khong kem
-      credential, server tra 401 kem nonce, client gui lai roi moi duoc cap.
-      Tren toan bo data mau co 73 dong error va DUNG 73 dong allocate thanh cong,
-      khong cong nao that bai han. Dem dong loi se bao nham 17/20 cuoc goi,
-      trong do 7 thuoc nhom success.
+      TUYỆT ĐỐI không được đếm riêng dòng lỗi. "Received TURN allocate error response
+      code=401" là bước bắt tay xác thực chuẩn của TURN (RFC 8656): request đầu không kèm
+      credential, server trả 401 kèm nonce, client gửi lại rồi mới được cấp.
+      Trên toàn bộ data mẫu có 73 dòng error và ĐÚNG 73 dòng allocate thành công,
+      không cổng nào thất bại hẳn. Đếm dòng lỗi sẽ báo nhầm 17/20 cuộc gọi,
+      trong đó 7 thuộc nhóm success.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHONG co ca mau nao trong data. Dieu kien phat hien viet theo suy luan tu
-        vong doi TURN, chua kiem chung duoc.
+        KHÔNG có ca mẫu nào trong data. Điều kiện phát hiện viết theo suy luận từ
+        vòng đời TURN, chưa kiểm chứng được.
 
   - id: NETWORK_PACKET_LOSS
     definition: >-
-      Cuoc goi thiet lap va chay duoc nhung mat goi du lam giam chat luong thoai.
+      Cuộc gọi thiết lập và chạy được nhưng mất gói đủ làm giảm chất lượng thoại.
     symptoms:
-      - "audio.packetLostPercent cao keo dai"
-      - "audio.audioMos tut"
+      - "audio.packetLostPercent cao kéo dài"
+      - "audio.audioMos tụt"
       - "transport.hasMediaPoor = 1"
     requiredEvidence:
       - source: ENDCALL
@@ -104,25 +110,25 @@ categories:
       - source: ENDCALL
         field: audio.audioMos
     detectionConditions:
-      - "audio.packetLostPercent > 5.0 keo dai tren nhieu mau lien tiep"
+      - "audio.packetLostPercent > 5.0 kéo dài trên nhiều mẫu liên tiếp"
       - "audio.audioMos < 3.5"
-      - "transport.hasMediaPoor=1 hoac transport.countMediaPoor > 0"
+      - "transport.hasMediaPoor=1 hoặc transport.countMediaPoor > 0"
     knownAmbiguity: >-
-      Mat goi thoang qua la binh thuong. Phai xet CHUOI mau #H7 chu khong chi doc
-      ban ghi #H9 cuoi cung — DE7DD314 co loss cuoi = 0 nhung tung len 2,0% giua cuoc goi.
+      Mất gói thoáng qua là bình thường. Phải xét CHUỖI mẫu #H7 chứ không chỉ đọc
+      bản ghi #H9 cuối cùng — DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHONG co ca mau chat luong kem. Duong nen do duoc tren 399 mau stats cua cac
-        cuoc goi khoe manh: loss cao nhat 3,704%, MOS thap nhat 4,335.
-        Nguong canh bao vi vay phai dat CAO HON 3,7% va MOS THAP HON 4,3,
-        neu khong se gan co nham cho cuoc goi tot. Con so 5.0 / 3.5 la phong doan.
+        KHÔNG có ca mẫu chất lượng kém. Đường nền đo được trên 399 mẫu stats của các
+        cuộc gọi khoẻ mạnh: loss cao nhất 3,704%, MOS thấp nhất 4,335.
+        Ngưỡng cảnh báo vì vậy phải đặt CAO HƠN 3,7% và MOS THẤP HƠN 4,3,
+        nếu không sẽ gắn cờ nhầm cho cuộc gọi tốt. Con số 5.0 / 3.5 là phỏng đoán.
 
   - id: NETWORK_DELAY_JITTER
     definition: >-
-      Do tre hoac do rung goi cao lam thoai bi ngat quang du khong mat goi dang ke.
+      Độ trễ hoặc độ rung gói cao làm thoại bị ngắt quãng dù không mất gói đáng kể.
     symptoms:
-      - "transport.currentRttMs cao keo dai"
+      - "transport.currentRttMs cao kéo dài"
       - "audio.jitter cao"
     requiredEvidence:
       - source: ENDCALL
@@ -130,34 +136,34 @@ categories:
       - source: ENDCALL
         field: audio.jitter
     detectionConditions:
-      - "transport.currentRttMs > 300 keo dai tren nhieu mau lien tiep"
-      - "audio.jitter > 0.050 (giay)"
+      - "transport.currentRttMs > 300 kéo dài trên nhiều mẫu liên tiếp"
+      - "audio.jitter > 0.050 (giây)"
     knownAmbiguity: >-
-      Rat de trung trieu chung voi NETWORK_PACKET_LOSS. Khi ca hai dieu kien cung dung,
-      uu tien category co bang chung manh hon.
-      Luu y transport.rttMs la gia tri TICH LUY, khong dung de so voi nguong.
+      Rất dễ trùng triệu chứng với NETWORK_PACKET_LOSS. Khi cả hai điều kiện cùng đúng,
+      ưu tiên category có bằng chứng mạnh hơn.
+      Lưu ý transport.rttMs là giá trị TÍCH LUỸ, không dùng để so với ngưỡng.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHONG co ca mau. Duong nen do duoc: RTT cao nhat 181 ms (0/399 mau vuot 200 ms),
-        jitter cao nhat 26 ms. Nguong 300 ms / 50 ms la phong doan, chi biet chac
-        phai cao hon duong nen nay.
+        KHÔNG có ca mẫu. Đường nền đo được: RTT cao nhất 181 ms (0/399 mẫu vượt 200 ms),
+        jitter cao nhất 26 ms. Ngưỡng 300 ms / 50 ms là phỏng đoán, chỉ biết chắc
+        phải cao hơn đường nền này.
 
   - id: UNKNOWN
     definition: >-
-      Khong du bang chung de ket luan nguyen nhan.
+      Không đủ bằng chứng để kết luận nguyên nhân.
     symptoms:
-      - "Thieu file log cua mot hoac ca hai ben"
-      - "Bang chung tu cac nguon mau thuan nhau"
-      - "Ban export signaling bi cat bot"
+      - "Thiếu file log của một hoặc cả hai bên"
+      - "Bằng chứng từ các nguồn mâu thuẫn nhau"
+      - "Bản export signaling bị cắt bớt"
     requiredEvidence: []
     detectionConditions:
-      - "khong xac dinh duoc bat ky category nao khac"
-      - "thieu nguon log thiet yeu de kiem chung"
+      - "không xác định được bất kỳ category nào khác"
+      - "thiếu nguồn log thiết yếu để kiểm chứng"
     knownAmbiguity: >-
-      Tra UNKNOWN khi thieu du lieu la dung; doan bua khi khong co can cu moi la loi nang.
+      Trả UNKNOWN khi thiếu dữ liệu là đúng; đoán bừa khi không có căn cứ mới là lỗi nặng.
     calibration:
       status: VALIDATED
       evidence: >-
-        Rat nhieu ca trong data: 9B556E56 chi co signaling + caller_webrtc, khong co
-        end call log nao.
+        Rất nhiều ca trong data: 9B556E56 chỉ có signaling + caller_webrtc, không có
+        end call log nào.

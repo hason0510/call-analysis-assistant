@@ -15,7 +15,7 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Nap taxonomy tu resources/taxonomy.yaml. Doc file la I/O nen thuoc tang infrastructure. */
+/** Nạp taxonomy từ resources/taxonomy.yaml. Đọc file là I/O nên thuộc tầng infrastructure. */
 @Component
 public class TaxonomyLoader {
 
@@ -29,7 +29,7 @@ public class TaxonomyLoader {
             try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
                 cached = parse(yaml.readTree(in));
             } catch (IOException e) {
-                throw new UncheckedIOException("Khong nap duoc " + RESOURCE, e);
+                throw new UncheckedIOException("Không nạp được " + RESOURCE, e);
             }
         }
         return cached;

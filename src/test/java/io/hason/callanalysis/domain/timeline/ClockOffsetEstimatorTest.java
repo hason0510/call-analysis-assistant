@@ -39,10 +39,10 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("do lech bang trung vi hieu so giua gio server va gio client")
+    @DisplayName("độ lệch bằng trung vị hiệu số giữa giờ server và giờ client")
     void measuresMedianOffset() {
         List<CanonicalEvent> events = new ArrayList<>();
-        // client gui luc 1000/2000/3000; server ghi nhan cham hon 100ms
+        // client gửi lúc 1000/2000/3000; server ghi nhận chậm hơn 100ms
         for (int i = 1; i <= 3; i++) {
             events.add(clientSend(i * 1000L, "PAIR_PING", Leg.CALLER));
             events.add(serverEvent(i * 1000L + 100, "PAIR_PING"));
@@ -59,10 +59,10 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("dung TRUNG VI nen mot cap ghep nham khong keo lech ket qua")
+    @DisplayName("dùng TRUNG VỊ nên một cặp ghép nhầm không kéo lệch kết quả")
     void medianResistsMismatchedRetransmission() {
-        // Lenh co gui lai (TRYING, INVITE) de bi ghep nham giua cac lan gui.
-        // Tren data mau viec ghep nham day gia tri len hon 4 giay.
+        // Lệnh có gửi lại (TRYING, INVITE) dễ bị ghép nhầm giữa các lần gửi.
+        // Trên data mẫu việc ghép nhầm đẩy giá trị lên hơn 4 giây.
         List<CanonicalEvent> events = new ArrayList<>(List.of(
                 clientSend(1000, "PAIR_PING", Leg.CALLER), serverEvent(1080, "PAIR_PING"),
                 clientSend(2000, "PAIR_PING", Leg.CALLER), serverEvent(2070, "PAIR_PING"),
@@ -74,7 +74,7 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("do rieng cho tung leg")
+    @DisplayName("đo riêng cho từng leg")
     void measuresEachLegSeparately() {
         List<CanonicalEvent> events = new ArrayList<>();
         for (int i = 1; i <= 3; i++) {
@@ -92,7 +92,7 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("duoi 3 cap khop thi khong ket luan — mau qua nho")
+    @DisplayName("dưới 3 cặp khớp thì không kết luận — mẫu quá nhỏ")
     void tooFewSamplesProducesNoEstimate() {
         assertThat(estimator.estimate(List.of(
                 clientSend(1000, "PAIR_PING", Leg.CALLER),
@@ -100,7 +100,7 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("lech lon hon 1 giay bi danh dau la dang ke")
+    @DisplayName("lệch lớn hơn 1 giây bị đánh dấu là đáng kể")
     void largeOffsetIsFlagged() {
         List<CanonicalEvent> events = new ArrayList<>();
         for (int i = 1; i <= 3; i++) {
@@ -112,7 +112,7 @@ class ClockOffsetEstimatorTest {
     }
 
     @Test
-    @DisplayName("chi co signaling, khong co end call log -> khong do duoc")
+    @DisplayName("chỉ có signaling, không có end call log -> không đo được")
     void noClientLogMeansNoEstimate() {
         assertThat(estimator.estimate(List.of(
                 serverEvent(1000, "INIT_CALL"), serverEvent(2000, "INVITE")))).isEmpty();

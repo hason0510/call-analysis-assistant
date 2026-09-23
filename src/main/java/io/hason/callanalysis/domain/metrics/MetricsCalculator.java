@@ -17,15 +17,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Tinh bo chi so Core theo MVP muc 4.3.
+ * Tính bộ chỉ số Core theo MVP mục 4.3.
  *
- * Toan bo chi so do CODE tinh, khong giao cho AI (MVP muc 3.2) — so lieu phai dung
- * 100% va giong nhau moi lan chay.
+ * Toàn bộ chỉ số do CODE tính, không giao cho AI (MVP mục 3.2) — số liệu phải đúng
+ * 100% và giống nhau mỗi lần chạy.
  *
- * Ba chi so MVP yeu cau nhung data KHONG co, deu tra N/A kem ly do:
- *   - "So lan No sessions found": signaling khong co truong text nao.
- *   - Lenh mau 4.3 ghi OK_ACK, cmd that trong data la OK_ACK_OK.
- *   - Chi so chat luong: chi 2/20 cuoc goi co ban ghi call summary (#H9).
+ * Ba chỉ số MVP yêu cầu nhưng data KHÔNG có, đều trả N/A kèm lý do:
+ *   - "Số lần No sessions found": signaling không có trường text nào.
+ *   - Lệnh mẫu 4.3 ghi OK_ACK, cmd thật trong data là OK_ACK_OK.
+ *   - Chỉ số chất lượng: chỉ 2/20 cuộc gọi có bản ghi call summary (#H9).
  */
 public class MetricsCalculator {
 
@@ -47,7 +47,7 @@ public class MetricsCalculator {
         metrics.add(CallMetric.of(MetricKey.INVITE_RETRANSMISSIONS,
                 retransmissions(timeline, INVITE)));
         metrics.add(CallMetric.of(MetricKey.NO_SESSIONS_FOUND, MetricValue.unavailable(
-                "signaling khong co truong text de dem thong bao nay")));
+                "signaling không có trường text để đếm thông báo này")));
         metrics.add(CallMetric.of(MetricKey.RINGING_TIME,
                 durationBetween(timeline, RINGING, OK)));
         metrics.add(CallMetric.of(MetricKey.CONNECTED_DURATION,
@@ -63,8 +63,8 @@ public class MetricsCalculator {
             metrics.add(CallMetric.of(MetricKey.PACKET_LOSS, leg,
                     decimalFrom(quality, "audio.packetLostPercent", "%", timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.RTT, leg,
-                    // transport.rttMs la gia tri TICH LUY (8385 khi RTT that la 63),
-                    // chi so dung phai la currentRttMs.
+                    // transport.rttMs là giá trị TÍCH LUỸ (8385 khi RTT thật là 63),
+                    // chỉ số đúng phải là currentRttMs.
                     decimalFrom(quality, "transport.currentRttMs", "ms", timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.JITTER, leg, jitter(quality, timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.ICE_FINAL_STATE, leg, iceFinalState(timeline, leg)));
@@ -81,15 +81,15 @@ public class MetricsCalculator {
         return new CallMetrics(timeline.callId(), List.copyOf(metrics));
     }
 
-    // ================= Chi so "Neu kip" (T11), MVP muc 4.3 =================
+    // ================= Chỉ số "Nếu kịp" (T11), MVP mục 4.3 =================
 
     /**
-     * Khoang trong lon nhat giua hai PAIR_PING lien tiep cua cung mot leg.
+     * Khoảng trống lớn nhất giữa hai PAIR_PING liên tiếp của cùng một leg.
      *
-     * Day la chi so PROXY, khong phai do truc tiep: PAIR_PING la nhip tim cua tang
-     * SIGNALING, nen khoang trong lon GOI Y duong signaling co van de — nhung KHONG
-     * chung minh duoc media co van de. Cuoc goi 2D9057AA la vi du: PAIR_PING chay deu
-     * suot 33 giay trong khi media da chet han.
+     * Đây là chỉ số PROXY, không phải đo trực tiếp: PAIR_PING là nhịp tim của tầng
+     * SIGNALING, nên khoảng trống lớn GỢI Ý đường signaling có vấn đề — nhưng KHÔNG
+     * chứng minh được media có vấn đề. Cuộc gọi 2D9057AA là ví dụ: PAIR_PING chạy đều
+     * suốt 33 giây trong khi media đã chết hẳn.
      */
     private MetricValue maxPairPingGap(CallTimeline timeline, Leg leg) {
         List<Instant> pings = timeline.mainTrack().stream()
@@ -102,8 +102,8 @@ public class MetricsCalculator {
 
         if (pings.size() < 2) {
             return MetricValue.unavailable(pings.isEmpty()
-                    ? "cuoc goi khong co PAIR_PING nao cua " + leg.name().toLowerCase()
-                    : "chi co 1 PAIR_PING, khong do duoc khoang trong");
+                    ? "cuộc gọi không có PAIR_PING nào của " + leg.name().toLowerCase()
+                    : "chỉ có 1 PAIR_PING, không đo được khoảng trống");
         }
         long max = 0;
         for (int i = 1; i < pings.size(); i++) {
@@ -112,7 +112,7 @@ public class MetricsCalculator {
         return MetricValue.millis(max);
     }
 
-    /** Latency cua cac API noi bo, lay tu truong latencyMs cua su kien INIT_CALL. */
+    /** Latency của các API nội bộ, lấy từ trường latencyMs của sự kiện INIT_CALL. */
     private MetricValue internalApiLatency(CallTimeline timeline) {
         List<Long> values = timeline.mainTrack().stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
@@ -124,33 +124,33 @@ public class MetricsCalculator {
                 .toList();
 
         if (values.isEmpty()) {
-            return MetricValue.unavailable("khong su kien INIT_CALL nao ghi latencyMs");
+            return MetricValue.unavailable("không sự kiện INIT_CALL nào ghi latencyMs");
         }
         long max = values.getLast();
         long median = values.get(values.size() / 2);
-        return MetricValue.text(String.format("max %d ms, trung vi %d ms (%d mau)",
+        return MetricValue.text(String.format("max %d ms, trung vị %d ms (%d mẫu)",
                 max, median, values.size()));
     }
 
     /**
-     * Dem su kien theo muc do, nhom theo service.
+     * Đếm sự kiện theo mức độ, nhóm theo service.
      *
-     * MVP muc 4.3 ghi ro: "WARN khong dong nghia voi loi". Tren data mau co 223/1059
-     * su kien WARN va chung xuat hien o CA cuoc goi thanh cong, nen day chi la thong tin
-     * tham khao, khong duoc dung lam tin hieu verdict.
+     * MVP mục 4.3 ghi rõ: "WARN không đồng nghĩa với lỗi". Trên data mẫu có 223/1059
+     * sự kiện WARN và chúng xuất hiện ở CẢ cuộc gọi thành công, nên đây chỉ là thông tin
+     * tham khảo, không được dùng làm tín hiệu verdict.
      */
     private MetricValue countByService(CallTimeline timeline, Severity severity) {
-        // Khong co signaling thi khong the noi "0 su kien" — do la KHONG DO DUOC,
-        // khac han voi "do duoc va bang 0".
+        // Không có signaling thì không thể nói "0 sự kiện" — đó là KHÔNG ĐO ĐƯỢC,
+        // khác hẳn với "đo được và bằng 0".
         if (!timeline.hasSource(LogSource.SIGNALING)) {
-            return MetricValue.unavailable("khong co du lieu signaling");
+            return MetricValue.unavailable("không có dữ liệu signaling");
         }
         Map<String, Long> byService = new java.util.TreeMap<>();
         timeline.mainTrack().stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
                 .filter(e -> e.severity() == severity)
                 .forEach(e -> byService.merge(
-                        e.attribute("service") == null ? "(khong ro)" : e.attribute("service"),
+                        e.attribute("service") == null ? "(không rõ)" : e.attribute("service"),
                         1L, Long::sum));
 
         if (byService.isEmpty()) {
@@ -163,7 +163,7 @@ public class MetricsCalculator {
         return MetricValue.text(total + " (" + detail + ")");
     }
 
-    /** ISP / ASN / quoc gia cua tung leg. Thieu o 63/1059 su kien nen phai chiu N/A. */
+    /** ISP / ASN / quốc gia của từng leg. Thiếu ở 63/1059 sự kiện nên phải chịu N/A. */
     private MetricValue networkContext(CallTimeline timeline, Leg leg) {
         List<CanonicalEvent> events = timeline.mainTrack().stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
@@ -171,7 +171,7 @@ public class MetricsCalculator {
                 .toList();
 
         if (events.isEmpty()) {
-            return MetricValue.unavailable("khong co su kien signaling nao cua "
+            return MetricValue.unavailable("không có sự kiện signaling nào của "
                     + leg.name().toLowerCase());
         }
         String isp = firstAttribute(events, "isp");
@@ -179,7 +179,7 @@ public class MetricsCalculator {
         String country = firstAttribute(events, "countryCode");
 
         if (isp == null && asn == null && country == null) {
-            return MetricValue.unavailable("su kien signaling khong ghi isp/asn/countryCode");
+            return MetricValue.unavailable("sự kiện signaling không ghi isp/asn/countryCode");
         }
         return MetricValue.text(String.format("%s / %s / %s",
                 isp == null ? "?" : isp, asn == null ? "?" : asn, country == null ? "?" : country));
@@ -195,51 +195,51 @@ public class MetricsCalculator {
 
     private MetricValue durationBetween(CallTimeline timeline, String fromCmd, String toCmd) {
         if (!timeline.hasSource(LogSource.SIGNALING)) {
-            return MetricValue.unavailable("khong co du lieu signaling");
+            return MetricValue.unavailable("không có dữ liệu signaling");
         }
         Optional<Instant> from = timeline.firstSignaling(fromCmd).flatMap(MetricsCalculator::instantOf);
         if (from.isEmpty()) {
-            return MetricValue.unavailable("cuoc goi khong dat toi " + fromCmd);
+            return MetricValue.unavailable("cuộc gọi không đạt tới " + fromCmd);
         }
         Optional<Instant> to = timeline.firstSignaling(toCmd).flatMap(MetricsCalculator::instantOf);
         if (to.isEmpty()) {
-            return MetricValue.unavailable("cuoc goi khong dat toi " + toCmd);
+            return MetricValue.unavailable("cuộc gọi không đạt tới " + toCmd);
         }
-        // Phai tru o do chinh xac NANO roi moi cat ve mili.
-        // Cat tung Instant ve mili truoc khi tru lam sai lech 1 ms tren 5/20 cuoc goi,
-        // trong khi Metric Correctness yeu cau dung 100%.
+        // Phải trừ ở độ chính xác NANO rồi mới cắt về mili.
+        // Cắt từng Instant về mili trước khi trừ làm sai lệch 1 ms trên 5/20 cuộc gọi,
+        // trong khi Metric Correctness yêu cầu đúng 100%.
         long millis = java.time.Duration.between(from.get(), to.get()).toMillis();
         if (millis < 0) {
-            return MetricValue.unavailable(toCmd + " xay ra truoc " + fromCmd + ", du lieu mau thuan");
+            return MetricValue.unavailable(toCmd + " xảy ra trước " + fromCmd + ", dữ liệu mâu thuẫn");
         }
         return MetricValue.millis(millis);
     }
 
     /**
-     * Khoang cach toi da giua hai dong log cua CUNG MOT lan gui.
+     * Khoảng cách tối đa giữa hai dòng log của CÙNG MỘT lần gửi.
      *
-     * Khong phai con so doan: do tren toan bo 451 khoang cach giua cac su kien signaling
-     * lien tiep cung lenh, phan bo luong cuc rat sach —
-     *   363 khoang cach duoi 100 ms  (nhieu dong log cua cung mot lan gui)
-     *   0   khoang cach trong dai 100-500 ms
-     *   88  khoang cach tu 500 ms tro len  (lan gui lai, theo exponential backoff)
-     * Dai trong 87 ms -> 506 ms cho phep dat nguong o giua ma khong co ca nao nhap nhang.
+     * Không phải con số đoán: đo trên toàn bộ 451 khoảng cách giữa các sự kiện signaling
+     * liên tiếp cùng lệnh, phân bố lưỡng cực rất sạch —
+     *   363 khoảng cách dưới 100 ms  (nhiều dòng log của cùng một lần gửi)
+     *   0   khoảng cách trong dải 100-500 ms
+     *   88  khoảng cách từ 500 ms trở lên  (lần gửi lại, theo exponential backoff)
+     * Dải trống 87 ms -> 506 ms cho phép đặt ngưỡng ở giữa mà không có ca nào nhập nhằng.
      */
     private static final long SAME_TRANSMISSION_WINDOW_MS = 250;
 
     /**
-     * Dem so LAN GUI, khong phai so dong log.
+     * Đếm số LẦN GỬI, không phải số dòng log.
      *
-     * Mot lan gui sinh nhieu dong log: cuoc goi EE129C8F co 10 su kien cmd=INVITE nhung
-     * chi 1 requestId, va timestamp gom thanh 4 cum cach nhau 0,5s / 1,0s / 2,0s —
-     * dung dau hieu gui lai theo exponential backoff. Dem thang so su kien se ra 9 lan
-     * gui lai thay vi 3.
+     * Một lần gửi sinh nhiều dòng log: cuộc gọi EE129C8F có 10 sự kiện cmd=INVITE nhưng
+     * chỉ 1 requestId, và timestamp gom thành 4 cụm cách nhau 0,5s / 1,0s / 2,0s —
+     * đúng dấu hiệu gửi lại theo exponential backoff. Đếm thẳng số sự kiện sẽ ra 9 lần
+     * gửi lại thay vì 3.
      *
-     * Lan gui dau khong tinh la gui lai.
+     * Lần gửi đầu không tính là gửi lại.
      */
     private MetricValue retransmissions(CallTimeline timeline, String command) {
         if (!timeline.hasSource(LogSource.SIGNALING)) {
-            return MetricValue.unavailable("khong co du lieu signaling");
+            return MetricValue.unavailable("không có dữ liệu signaling");
         }
         List<Instant> times = timeline.mainTrack().stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
@@ -248,7 +248,7 @@ public class MetricsCalculator {
                 .sorted()
                 .toList();
         if (times.isEmpty()) {
-            return MetricValue.unavailable("cuoc goi khong co lenh " + command);
+            return MetricValue.unavailable("cuộc gọi không có lệnh " + command);
         }
 
         long transmissions = 1;
@@ -262,19 +262,19 @@ public class MetricsCalculator {
 
     private MetricValue terminatedBy(CallTimeline timeline) {
         if (!timeline.hasSource(LogSource.SIGNALING)) {
-            return MetricValue.unavailable("khong co du lieu signaling");
+            return MetricValue.unavailable("không có dữ liệu signaling");
         }
         return timeline.firstSignaling(BYE)
                 .map(e -> e.leg() == Leg.UNKNOWN
-                        ? MetricValue.unavailable("khong suy ra duoc ben gui BYE")
+                        ? MetricValue.unavailable("không suy ra được bên gửi BYE")
                         : MetricValue.text(e.leg().name()))
-                .orElseGet(() -> MetricValue.unavailable("cuoc goi khong co BYE"));
+                .orElseGet(() -> MetricValue.unavailable("cuộc gọi không có BYE"));
     }
 
     /**
-     * Uu tien ban ghi call summary (#H9); khong co thi lay ban ghi periodic stats (#H7)
-     * CUOI CUNG. Doc #H9 don thuan se bo sot dien bien trong cuoc goi, nhung o day muc tieu
-     * la gia tri ket thuc nen lay ban ghi sau cung la dung.
+     * Ưu tiên bản ghi call summary (#H9); không có thì lấy bản ghi periodic stats (#H7)
+     * CUỐI CÙNG. Đọc #H9 đơn thuần sẽ bỏ sót diễn biến trong cuộc gọi, nhưng ở đây mục tiêu
+     * là giá trị kết thúc nên lấy bản ghi sau cùng là đúng.
      */
     private Optional<CanonicalEvent> qualityRecord(CallTimeline timeline, Leg leg) {
         Optional<CanonicalEvent> summary = timeline.callSummary(leg);
@@ -293,7 +293,7 @@ public class MetricsCalculator {
                 .orElseGet(() -> unavailableReason(record, field, timeline, leg));
     }
 
-    /** audio.jitter tinh bang GIAY trong log; doi sang mili giay cho de doc. */
+    /** audio.jitter tính bằng GIÂY trong log; đổi sang mili giây cho dễ đọc. */
     private MetricValue jitter(Optional<CanonicalEvent> record, CallTimeline timeline, Leg leg) {
         return readDecimal(record, "audio.jitter", timeline, leg)
                 .map(seconds -> MetricValue.of(
@@ -306,16 +306,16 @@ public class MetricsCalculator {
         return record.map(e -> e.attribute(field)).flatMap(MetricsCalculator::parseDecimal);
     }
 
-    /** Ly do N/A phai cu the theo tung nguyen nhan, dung mot cau chung chung. */
+    /** Lý do N/A phải cụ thể theo từng nguyên nhân, đừng một câu chung chung. */
     private MetricValue unavailableReason(Optional<CanonicalEvent> record, String field,
                                           CallTimeline timeline, Leg leg) {
         if (!hasEndCallLog(timeline, leg)) {
-            return MetricValue.unavailable("khong co end call log cua " + leg.name().toLowerCase());
+            return MetricValue.unavailable("không có end call log của " + leg.name().toLowerCase());
         }
         if (record.isEmpty()) {
-            return MetricValue.unavailable("end call log khong co ban ghi chi so chat luong");
+            return MetricValue.unavailable("end call log không có bản ghi chỉ số chất lượng");
         }
-        return MetricValue.unavailable("truong " + field + " rong trong ban ghi chi so");
+        return MetricValue.unavailable("trường " + field + " rỗng trong bản ghi chỉ số");
     }
 
     private boolean hasEndCallLog(CallTimeline timeline, Leg leg) {
@@ -324,10 +324,10 @@ public class MetricsCalculator {
     }
 
     /**
-     * Trang thai ICE DAT DUOC, khong phai trang thai cuoi cung.
+     * Trạng thái ICE ĐẠT ĐƯỢC, không phải trạng thái cuối cùng.
      *
-     * Cuoc goi thanh cong van ket thuc o `disconnected` khi nguoi dung cup may — bao cao
-     * gia tri cuoi cung se gay hieu nham. Cai can biet la ICE co tung ket noi duoc khong.
+     * Cuộc gọi thành công vẫn kết thúc ở `disconnected` khi người dùng cúp máy — báo cáo
+     * giá trị cuối cùng sẽ gây hiểu nhầm. Cái cần biết là ICE có từng kết nối được không.
      */
     private MetricValue iceFinalState(CallTimeline timeline, Leg leg) {
         List<String> states = timeline.allEvents().stream()
@@ -342,8 +342,8 @@ public class MetricsCalculator {
             return MetricValue.text(everConnected ? "connected" : states.getLast());
         }
         return timeline.allEvents().stream().anyMatch(e -> e.source() == LogSource.WEBRTC && e.leg() == leg)
-                ? MetricValue.unavailable("WebRTC log khong ghi chuyen trang thai ICE nao")
-                : MetricValue.unavailable("khong co WebRTC log cua " + leg.name().toLowerCase());
+                ? MetricValue.unavailable("WebRTC log không ghi chuyển trạng thái ICE nào")
+                : MetricValue.unavailable("không có WebRTC log của " + leg.name().toLowerCase());
     }
 
     private static Optional<BigDecimal> parseDecimal(String raw) {

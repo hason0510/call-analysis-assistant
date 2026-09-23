@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Toan bo taxonomy da nap, tra cuu theo category. */
+/** Toàn bộ taxonomy đã nạp, tra cứu theo category. */
 public record IssueTaxonomy(List<IssueDefinition> definitions) {
 
     public IssueTaxonomy {
@@ -16,7 +16,7 @@ public record IssueTaxonomy(List<IssueDefinition> definitions) {
         return definitions.stream().filter(d -> d.id() == category).findFirst();
     }
 
-    /** Category chua kiem chung duoc tren data — phai ghi vao Known Limitations. */
+    /** Category chưa kiểm chứng được trên data — phải ghi vào Known Limitations. */
     public List<IssueCategory> unvalidatedCategories() {
         return definitions.stream()
                 .filter(d -> !d.calibration().isValidated())

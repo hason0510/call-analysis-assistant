@@ -3,7 +3,7 @@ package io.hason.callanalysis.infrastructure.es;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/** Hinh dang document trong index Elasticsearch. Chi thuoc tang infrastructure. */
+/** Hình dạng document trong index Elasticsearch. Chỉ thuộc tầng infrastructure. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SignalingDocument(
         @JsonProperty("callId") String callId,
@@ -26,8 +26,8 @@ public record SignalingDocument(
 ) {
 
     /**
-     * _id tat dinh: import lai cung mot file khong sinh ban ghi trung.
-     * MVP muc 5.1 T1 yeu cau "script import data mau lap lai duoc".
+     * _id tất định: import lại cùng một file không sinh bản ghi trùng.
+     * MVP mục 5.1 T1 yêu cầu "script import data mẫu lặp lại được".
      */
     public String documentId() {
         return callId + ":" + ordinal;

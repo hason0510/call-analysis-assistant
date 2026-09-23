@@ -19,7 +19,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("giu du danh sach goc cua MVP muc 5.2 va co phan bo sung tu data mau")
+    @DisplayName("giữ đủ danh sách gốc của MVP mục 5.2 và có phần bổ sung từ data mẫu")
     void inventoryCoversBothOrigins() {
         assertThat(inventory).isNotEmpty();
         assertThat(inventory).anyMatch(f -> f.origin() == SensitiveField.Origin.MVP_5_2);
@@ -28,7 +28,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("bi mat xac thuc bi DROP va khong bao gio duoc gui sang AI")
+    @DisplayName("bí mật xác thực bị DROP và không bao giờ được gửi sang AI")
     void secretsAreDropped() {
         assertThat(inventory)
                 .filteredOn(f -> f.classification() == DataClassification.SECRET)
@@ -40,7 +40,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("JWT trong chuoi Authorization bi nhan dien (ca kiem thu S01/S02)")
+    @DisplayName("JWT trong chuỗi Authorization bị nhận diện (ca kiểm thử S01/S02)")
     void jwtIsDetected() {
         SensitiveField credentials = byId("credentials");
         assertThat(credentials.matchesValue(
@@ -49,9 +49,9 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("IP cong cong trong chuoi ICE candidate bi nhan dien")
+    @DisplayName("IP công cộng trong chuỗi ICE candidate bị nhận diện")
     void publicIpInIceCandidateIsDetected() {
-        // Chuoi that lay tu ai20k_sample.
+        // Chuỗi thật lấy từ ai20k_sample.
         String candidate = "candidate:2870078463 1 udp 58674431 14.238.62.98 21355 typ relay "
                 + "raddr 42.115.218.73 rport 20425 generation 0 ufrag CS/8";
 
@@ -60,16 +60,16 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("raddr — dia chi THAT sau relay — duoc liet ke rieng")
+    @DisplayName("raddr — địa chỉ THẬT sau relay — được liệt kê riêng")
     void relayRealAddressIsCoveredSeparately() {
-        // Che dia chi relay ma khong che raddr thi coi nhu khong che gi.
+        // Che địa chỉ relay mà không che raddr thì coi như không che gì.
         SensitiveField raddr = byId("relay-real-address");
         assertThat(raddr.matchesValue("typ relay raddr 42.115.218.73 rport 20425")).isTrue();
         assertThat(raddr.classification()).isEqualTo(DataClassification.SENSITIVE);
     }
 
     @Test
-    @DisplayName("credential cua ICE bi coi la SECRET va DROP")
+    @DisplayName("credential của ICE bị coi là SECRET và DROP")
     void iceCredentialsAreSecret() {
         SensitiveField ice = byId("ice-credentials");
         assertThat(ice.classification()).isEqualTo(DataClassification.SECRET);
@@ -77,7 +77,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("dinh danh nguoi dung duoc PSEUDONYMIZE chu khong MASK — con phai correlate")
+    @DisplayName("định danh người dùng được PSEUDONYMIZE chứ không MASK — còn phải correlate")
     void userIdsArePseudonymisedNotMasked() {
         assertThat(byId("user-and-device-id").policy()).isEqualTo(HandlingPolicy.PSEUDONYMIZE);
         assertThat(byId("session-id").policy()).isEqualTo(HandlingPolicy.PSEUDONYMIZE);
@@ -85,7 +85,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("chi so chat luong duoc ALLOW — day la du lieu chinh de phan tich")
+    @DisplayName("chỉ số chất lượng được ALLOW — đây là dữ liệu chính để phân tích")
     void qualityMetricsAreAllowed() {
         SensitiveField metrics = byId("call-quality-metrics");
         assertThat(metrics.policy()).isEqualTo(HandlingPolicy.ALLOW);
@@ -94,7 +94,7 @@ class SensitiveDataInventoryTest {
     }
 
     @Test
-    @DisplayName("so dien thoai Viet Nam bi nhan dien (ca kiem thu S04)")
+    @DisplayName("số điện thoại Việt Nam bị nhận diện (ca kiểm thử S04)")
     void vietnamesePhoneNumberIsDetected() {
         assertThat(byId("phone-and-email").matchesValue("phone=0987654321")).isTrue();
         assertThat(byId("phone-and-email").matchesValue("lien he: user@example.com")).isTrue();

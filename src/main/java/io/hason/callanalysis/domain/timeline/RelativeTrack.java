@@ -6,10 +6,10 @@ import io.hason.callanalysis.domain.event.Leg;
 import java.util.List;
 
 /**
- * Chuoi su kien dung moc thoi gian TUONG DOI — luon la WebRTC log.
+ * Chuỗi sự kiện dùng mốc thời gian TƯƠNG ĐỐI — luôn là WebRTC log.
  *
- * Duoc giu rieng thay vi tron vao timeline chinh vi log nay khong co goc thoi gian
- * tuyet doi: doan goc de ep ve Instant la bia so lieu.
+ * Được giữ riêng thay vì trộn vào timeline chính vì log này không có gốc thời gian
+ * tuyệt đối: đoán gốc để ép về Instant là bịa số liệu.
  */
 public record RelativeTrack(String fileName, Leg leg, String platform,
                             LegConfidence legConfidence, List<CanonicalEvent> events) {
@@ -19,11 +19,11 @@ public record RelativeTrack(String fileName, Leg leg, String platform,
     }
 
     public enum LegConfidence {
-        /** Doi chieu platform cua log voi cot platform/role cua ban ghi #H1 — chac chan. */
+        /** Đối chiếu platform của log với cột platform/role của bản ghi #H1 — chắc chắn. */
         MATCHED_BY_PLATFORM,
-        /** Chi suy tu ten file — data mau co file dat ten sai. */
+        /** Chỉ suy từ tên file — data mẫu có file đặt tên sai. */
         FILE_NAME_ONLY,
-        /** Khong xac dinh duoc. */
+        /** Không xác định được. */
         UNRESOLVED
     }
 }

@@ -6,11 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Ket qua parse mot file: nhung event doc duoc, va nhung dong khong doc duoc.
+ * Kết quả parse một file: những event đọc được, và những dòng không đọc được.
  *
- * MVP muc 3.3: "Raw log co the malformed, thieu field, trung lap, lech thu tu,
- * sai ten file; parser khong duoc crash." Vi vay loi duoc tra ve nhu du lieu,
- * khong nem ra ngoai.
+ * MVP mục 3.3: "Raw log có thể malformed, thiếu field, trùng lặp, lệch thứ tự,
+ * sai tên file; parser không được crash." Vì vậy lỗi được trả về như dữ liệu,
+ * không ném ra ngoài.
  */
 public record ParseResult(List<CanonicalEvent> events, List<ParseWarning> warnings) {
 

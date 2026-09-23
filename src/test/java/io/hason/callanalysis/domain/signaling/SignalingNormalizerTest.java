@@ -29,7 +29,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("timestamp giu nguyen 9 chu so nano, khong lam tron")
+    @DisplayName("timestamp giữ nguyên 9 chữ số nano, không làm tròn")
     void nanosecondPrecisionSurvives() {
         ParseResult result = normalizer.normalize(fetch(List.of(
                 record(0, "2026-09-21T08:44:28.953756952Z", "INIT_CALL", "U-CALLER", "INFO"))));
@@ -42,7 +42,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("leg suy ra tu appUserId cua INIT_CALL dau tien — signaling khong co truong leg")
+    @DisplayName("leg suy ra từ appUserId của INIT_CALL đầu tiên — signaling không có trường leg")
     void legDerivedFromFirstInitCall() {
         ParseResult result = normalizer.normalize(fetch(List.of(
                 record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U-CALLER", "INFO"),
@@ -54,7 +54,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("cuoc goi chet som chi co INIT_CALL van xac dinh duoc caller")
+    @DisplayName("cuộc gọi chết sớm chỉ có INIT_CALL vẫn xác định được caller")
     void earlyDeathCallStillIdentifiesCaller() {
         LegAssignment legs = LegAssignment.fromFirstInitCall(List.of(
                 record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U-CALLER", "INFO")));
@@ -65,7 +65,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("khong co INIT_CALL thi tra UNKNOWN thay vi doan bua")
+    @DisplayName("không có INIT_CALL thì trả UNKNOWN thay vì đoán bừa")
     void noInitCallMeansUnknown() {
         LegAssignment legs = LegAssignment.fromFirstInitCall(List.of(
                 record(0, "2026-09-21T08:44:28.000000000Z", "BYE", "U-AI-DO", "INFO")));
@@ -75,9 +75,9 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("ban export bi cat bot sinh canh bao de bao vao Gioi han du lieu")
+    @DisplayName("bản export bị cắt bớt sinh cảnh báo để báo vào Giới hạn dữ liệu")
     void truncatedExportProducesWarning() {
-        // Cuoc goi DE7DD314 trong data mau: truncated=true, tra ve 200/201 event.
+        // Cuộc gọi DE7DD314 trong data mẫu: truncated=true, trả về 200/201 event.
         SignalingFetch truncated = new SignalingFetch("CALL-1",
                 List.of(record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U1", "INFO")),
                 true, 200, 201);
@@ -86,13 +86,13 @@ class SignalingNormalizerTest {
 
         assertThat(result.warnings()).hasSize(1);
         assertThat(result.warnings().getFirst().reason())
-                .contains("cat bot").contains("200/201").contains("thieu 1");
+                .contains("cắt bớt").contains("200/201").contains("thiếu 1");
     }
 
     @Test
-    @DisplayName("WARN duoc giu nguyen muc do, KHONG bi nang thanh loi")
+    @DisplayName("WARN được giữ nguyên mức độ, KHÔNG bị nâng thành lỗi")
     void warnIsNotTreatedAsError() {
-        // 223/1059 event trong data mau la WARN, co ca o cuoc goi thanh cong.
+        // 223/1059 event trong data mẫu là WARN, có cả ở cuộc gọi thành công.
         ParseResult result = normalizer.normalize(fetch(List.of(
                 record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U1", "WARN"))));
 
@@ -100,7 +100,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("truong vang mat khong tao attribute rong")
+    @DisplayName("trường vắng mặt không tạo attribute rỗng")
     void missingFieldsAreOmittedNotBlank() {
         RawSignalingRecord sparse = new RawSignalingRecord("CALL-1", 0,
                 "2026-09-21T08:44:28.000000000Z", "SVC", "INFO", "INIT_CALL",
@@ -114,7 +114,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("timestamp hong -> bo ban ghi do kem canh bao, khong throw")
+    @DisplayName("timestamp hỏng -> bỏ bản ghi đó kèm cảnh báo, không throw")
     void malformedTimestampIsWarnedNotThrown() {
         ParseResult result = normalizer.normalize(fetch(List.of(
                 record(0, "khong-phai-thoi-gian", "INIT_CALL", "U1", "INFO"),
@@ -126,7 +126,7 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("fetch rong / null khong lam crash")
+    @DisplayName("fetch rỗng / null không làm crash")
     void emptyFetchIsSafe() {
         assertThatCode(() -> {
             assertThat(normalizer.normalize(null).events()).isEmpty();

@@ -25,10 +25,10 @@
   <dependencyManagement>
     <dependencies>
       <!--
-        Testcontainers 1.20.x keo theo commons-compress 1.24.0, dinh CVE-2024-25710
-        va CVE-2024-26308. Chi anh huong scope test (dung de dong goi build-context
-        cho Docker) nen rui ro thuc te thap, nhung ghim ban da va cho sach canh bao.
-        Cac ban testcontainers 1.x deu con 1.24.0; chi 2.x moi len 1.28.0.
+        Testcontainers 1.20.x kéo theo commons-compress 1.24.0, dính CVE-2024-25710
+        và CVE-2024-26308. Chỉ ảnh hưởng scope test (dùng để đóng gói build-context
+        cho Docker) nên rủi ro thực tế thấp, nhưng ghim bản đã vá cho sạch cảnh báo.
+        Các bản testcontainers 1.x đều còn 1.24.0; chỉ 2.x mới lên 1.28.0.
       -->
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -85,6 +85,15 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!--
+            spring-boot:run fork một JVM riêng. Từ JDK 18, stdout.encoding của JVM
+            lấy theo bảng mã của console chứ không theo file.encoding, nên trên console
+            Windows dùng bảng mã cũ thì chữ tiếng Việt bị thay bằng "?" ngay tại JVM,
+            trước khi tới terminal. Ghim UTF-8 để output không phụ thuộc máy chạy.
+          -->
+          <jvmArguments>-Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8</jvmArguments>
+        </configuration>
       </plugin>
     </plugins>
   </build>

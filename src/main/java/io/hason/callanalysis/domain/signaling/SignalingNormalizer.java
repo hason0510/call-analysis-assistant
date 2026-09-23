@@ -18,14 +18,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Chuan hoa ban ghi signaling tho (lay tu Elasticsearch) sang canonical event.
+ * Chuẩn hoá bản ghi signaling thô (lấy từ Elasticsearch) sang canonical event.
  *
- * Lop nay thuan: khong cham Elasticsearch, nen test duoc bang RawSignalingRecord
- * dung tay. Adapter chi lam viec co hoc la co y.
+ * Lớp này thuần: không chạm Elasticsearch, nên test được bằng RawSignalingRecord
+ * dựng tay. Adapter chỉ làm việc cơ học là cố ý.
  */
 public class SignalingNormalizer {
 
-    /** Ten file ao dung cho SourceRef — signaling khong den tu file nguoi dung dinh kem. */
+    /** Tên file ảo dùng cho SourceRef — signaling không đến từ file người dùng đính kèm. */
     private static final String VIRTUAL_FILE = "signaling.json";
 
     public ParseResult normalize(SignalingFetch fetch) {
@@ -47,7 +47,7 @@ public class SignalingNormalizer {
             Instant instant = parseTimestamp(record.timestamp());
             if (instant == null) {
                 warnings.add(new ParseWarning(VIRTUAL_FILE, record.ordinal() + 1,
-                        "timestamp khong doc duoc: " + record.timestamp()));
+                        "timestamp không đọc được: " + record.timestamp()));
                 continue;
             }
             events.add(toEvent(record, instant, legs, fetch.callId()));
@@ -55,8 +55,8 @@ public class SignalingNormalizer {
 
         if (fetch.truncated()) {
             warnings.add(new ParseWarning(VIRTUAL_FILE, 0,
-                    "ban export signaling bi cat bot: tra ve " + fetch.returned()
-                            + "/" + fetch.totalMatching() + " event, thieu " + fetch.missingCount()));
+                    "bản export signaling bị cắt bớt: trả về " + fetch.returned()
+                            + "/" + fetch.totalMatching() + " event, thiếu " + fetch.missingCount()));
         }
 
         return ParseResult.of(events, warnings);
@@ -87,7 +87,7 @@ public class SignalingNormalizer {
                 r.cmd() == null ? "UNKNOWN" : r.cmd(),
                 attributes,
                 severityOf(r.level()),
-                // ordinal + 1 de so dong bat dau tu 1, thong nhat voi cac parser file
+                // ordinal + 1 để số dòng bắt đầu từ 1, thống nhất với các parser file
                 new SourceRef(VIRTUAL_FILE, r.ordinal() + 1, r.timestamp() + " " + r.cmd()));
     }
 
@@ -98,8 +98,8 @@ public class SignalingNormalizer {
     }
 
     /**
-     * Signaling chi sinh INFO va WARN — ERROR chua tung xuat hien trong data mau.
-     * WARN co o ca cuoc goi thanh cong (223/1059 event) nen KHONG duoc coi la tin hieu loi.
+     * Signaling chỉ sinh INFO và WARN — ERROR chưa từng xuất hiện trong data mẫu.
+     * WARN có ở cả cuộc gọi thành công (223/1059 event) nên KHÔNG được coi là tín hiệu lỗi.
      */
     private static Severity severityOf(String level) {
         if (level == null) {
@@ -112,7 +112,7 @@ public class SignalingNormalizer {
         };
     }
 
-    /** Timestamp co 9 chu so thap phan; Instant.parse giu nguyen do chinh xac nano. */
+    /** Timestamp có 9 chữ số thập phân; Instant.parse giữ nguyên độ chính xác nano. */
     private static Instant parseTimestamp(String value) {
         if (value == null || value.isBlank()) {
             return null;

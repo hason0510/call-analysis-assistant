@@ -4,16 +4,16 @@ import io.hason.callanalysis.domain.event.CanonicalEvent;
 import io.hason.callanalysis.domain.event.LogSource;
 
 /**
- * Mot manh bang chung, co ID rieng de ket luan trich dan duoc.
+ * Một mảnh bằng chứng, có ID riêng để kết luận trích dẫn được.
  *
- * MVP muc 8.2: "moi evidence trace duoc ve dong log goc". Mau report muc 4.5 in ra
- * dang [EV05][callee_endcall.log 10:00:41.000], nen Evidence phai giu ca nguon lan
- * vi tri dong.
+ * MVP mục 8.2: "mọi evidence trace được về dòng log gốc". Mẫu report mục 4.5 in ra
+ * dạng [EV05][callee_endcall.log 10:00:41.000], nên Evidence phải giữ cả nguồn lẫn
+ * vị trí dòng.
  */
 public record Evidence(String id, LogSource source, String timeLabel,
                        String description, CanonicalEvent event) {
 
-    /** Dang trich dan trong report: [EV05][callee_endcall.log:142]. */
+    /** Dạng trích dẫn trong report: [EV05][callee_endcall.log:142]. */
     public String citation() {
         return "[" + id + "][" + event.sourceRef().citation() + "]";
     }

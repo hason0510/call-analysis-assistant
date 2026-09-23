@@ -13,19 +13,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Do do lech giua dong ho client va dong ho server.
+ * Đo độ lệch giữa đồng hồ client và đồng hồ server.
  *
- * Cach neo: end call log ghi lai lenh signaling ma client GUI DI (`send_cmd`), va cung
- * lenh do xuat hien trong signaling voi gio server. Ghep tung lan gui voi su kien server
- * gan nhat cung lenh roi lay TRUNG VI cua hieu so.
+ * Cách neo: end call log ghi lại lệnh signaling mà client GỬI ĐI (`send_cmd`), và cùng
+ * lệnh đó xuất hiện trong signaling với giờ server. Ghép từng lần gửi với sự kiện server
+ * gần nhất cùng lệnh rồi lấy TRUNG VỊ của hiệu số.
  *
- * Dung trung vi chu khong dung trung binh vi cac lenh co gui lai (TRYING, INVITE, BYE)
- * de bi ghep nham giua cac lan gui — tren data mau viec ghep nham day gia tri len toi
- * hon 4 giay, trong khi trung vi thuc te chi khoang 70 ms.
+ * Dùng trung vị chứ không dùng trung bình vì các lệnh có gửi lại (TRYING, INVITE, BYE)
+ * dễ bị ghép nhầm giữa các lần gửi — trên data mẫu việc ghép nhầm đẩy giá trị lên tới
+ * hơn 4 giây, trong khi trung vị thực tế chỉ khoảng 70 ms.
  *
- * Gia tri do duoc la TONG cua do tre mang va do lech dong ho that. Hai thanh phan nay
- * khong tach duoc neu chi co log mot chieu, nen ket qua duoc dung lam GIOI HAN TREN cua
- * do lech — de canh bao, khong de viet lai timestamp.
+ * Giá trị đo được là TỔNG của độ trễ mạng và độ lệch đồng hồ thật. Hai thành phần này
+ * không tách được nếu chỉ có log một chiều, nên kết quả được dùng làm GIỚI HẠN TRÊN của
+ * độ lệch — để cảnh báo, không để viết lại timestamp.
  */
 public class ClockOffsetEstimator {
 

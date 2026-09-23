@@ -5,10 +5,10 @@ import io.hason.callanalysis.domain.event.LogSource;
 import java.util.Set;
 
 /**
- * Cac tin hieu THO rut tu timeline, tach khoi ket luan.
+ * Các tín hiệu THÔ rút từ timeline, tách khỏi kết luận.
  *
- * Tach nhu vay de Sprint 2 khi Guardrails doi chieu verdict cua AI voi rule verdict
- * co the chi ra LECH O TIN HIEU NAO, thay vi chi bao "hai ben khac nhau".
+ * Tách như vậy để Sprint 2 khi Guardrails đối chiếu verdict của AI với rule verdict
+ * có thể chỉ ra LỆCH Ở TÍN HIỆU NÀO, thay vì chỉ báo "hai bên khác nhau".
  */
 public record RuleSignals(
         boolean sentInvite,
@@ -38,7 +38,7 @@ public record RuleSignals(
                 || availableSources.contains(LogSource.WEBRTC);
     }
 
-    /** Co bang chung media that bai tu bat ky nguon nao. */
+    /** Có bằng chứng media thất bại từ bất kỳ nguồn nào. */
     public boolean mediaFailed() {
         return (iceEverFailed && !iceEverConnected) || mediaFailFlag || noMediaBytes;
     }

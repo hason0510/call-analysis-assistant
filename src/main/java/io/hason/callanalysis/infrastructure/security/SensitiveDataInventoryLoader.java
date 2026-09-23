@@ -17,10 +17,10 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Nap Sensitive Data Inventory (T9).
+ * Nạp Sensitive Data Inventory (T9).
  *
- * Sprint 1 chi lap danh muc; Sprint 2 (T7) se dung chinh danh muc nay lam Policy Engine
- * cho Sanitizer, nen no duoc giu o dang du lieu thay vi tai lieu.
+ * Sprint 1 chỉ lập danh mục; Sprint 2 (T7) sẽ dùng chính danh mục này làm Policy Engine
+ * cho Sanitizer, nên nó được giữ ở dạng dữ liệu thay vì tài liệu.
  */
 @Component
 public class SensitiveDataInventoryLoader {
@@ -35,7 +35,7 @@ public class SensitiveDataInventoryLoader {
             try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
                 cached = parse(yaml.readTree(in));
             } catch (IOException e) {
-                throw new UncheckedIOException("Khong nap duoc " + RESOURCE, e);
+                throw new UncheckedIOException("Không nạp được " + RESOURCE, e);
             }
         }
         return cached;

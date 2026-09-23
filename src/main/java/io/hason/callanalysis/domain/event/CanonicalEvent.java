@@ -6,11 +6,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Model chung ma ca ba nguon log deu do vao. Moi thanh phan sau (Timeline, Metrics,
- * Evidence, Rule) chi lam viec voi kieu nay.
+ * Model chung mà cả ba nguồn log đều đổ vào. Mọi thành phần sau (Timeline, Metrics,
+ * Evidence, Rule) chỉ làm việc với kiểu này.
  *
- * {@code sourceRef} la BAT BUOC: MVP muc 8.2 yeu cau moi evidence trace duoc ve dong
- * log goc, va mau report muc 4.5 in ra dang [EV05][callee_endcall.log 10:00:41.000].
+ * {@code sourceRef} là BẮT BUỘC: MVP mục 8.2 yêu cầu mọi evidence trace được về dòng
+ * log gốc, và mẫu report mục 4.5 in ra dạng [EV05][callee_endcall.log 10:00:41.000].
  */
 public record CanonicalEvent(
         String eventId,
@@ -34,8 +34,8 @@ public record CanonicalEvent(
         leg = leg == null ? Leg.UNKNOWN : leg;
         type = type == null ? EventType.LOG_MESSAGE : type;
         severity = severity == null ? Severity.INFO : severity;
-        // LinkedHashMap giu thu tu chen: thu tu doi giua cac lan chay la mat tinh tat dinh,
-        // va Consistency >= 95% (MVP muc 6.5) se fail ma khong ro ly do.
+        // LinkedHashMap giữ thứ tự chèn: thứ tự đổi giữa các lần chạy là mất tính tất định,
+        // và Consistency >= 95% (MVP mục 6.5) sẽ fail mà không rõ lý do.
         attributes = attributes == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
@@ -46,9 +46,9 @@ public record CanonicalEvent(
     }
 
     /**
-     * Gan lai leg sau khi buoc correlate xac dinh duoc chu so huu that cua file.
-     * Can thiet vi ten file khong dang tin: data mau co `calleer_webrtc.log` thuc chat
-     * la log cua caller.
+     * Gán lại leg sau khi bước correlate xác định được chủ sở hữu thật của file.
+     * Cần thiết vì tên file không đáng tin: data mẫu có `calleer_webrtc.log` thực chất
+     * là log của caller.
      */
     public CanonicalEvent withLeg(Leg newLeg) {
         return newLeg == leg ? this : new CanonicalEvent(

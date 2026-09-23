@@ -4,10 +4,10 @@ import io.hason.callanalysis.domain.event.ClockDomain;
 import io.hason.callanalysis.domain.event.Leg;
 
 /**
- * Thong tin ma parser khong tu suy ra duoc tu noi dung file.
+ * Thông tin mà parser không tự suy ra được từ nội dung file.
  *
- * WebRTC log la log goc cua thu vien libwebrtc — no KHONG chua Call-ID cua ung dung,
- * nen callId bat buoc phai duoc truyen vao tu ngoai.
+ * WebRTC log là log gốc của thư viện libwebrtc — nó KHÔNG chứa Call-ID của ứng dụng,
+ * nên callId bắt buộc phải được truyền vào từ ngoài.
  */
 public record ParseContext(String fileName, String callId, Leg leg) {
 

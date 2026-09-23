@@ -17,10 +17,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Kiem tra report co dung schema v1 khong.
+ * Kiểm tra report có đúng schema v1 không.
  *
- * Sprint 1 dung de bao dam report do rule sinh ra luon hop le. Sprint 2 se dung chinh
- * validator nay lam lop Guardrails cho dau ra cua AI (MVP muc 6.1 T6, ca kiem thu G02).
+ * Sprint 1 dùng để bảo đảm report do rule sinh ra luôn hợp lệ. Sprint 2 sẽ dùng chính
+ * validator này làm lớp Guardrails cho đầu ra của AI (MVP mục 6.1 T6, ca kiểm thử G02).
  */
 @Component
 public class ReportSchemaValidator {
@@ -37,7 +37,7 @@ public class ReportSchemaValidator {
                     .getInstance(SpecVersion.VersionFlag.V202012)
                     .getSchema(in);
         } catch (IOException e) {
-            throw new UncheckedIOException("Khong nap duoc " + SCHEMA, e);
+            throw new UncheckedIOException("Không nạp được " + SCHEMA, e);
         }
     }
 
@@ -63,7 +63,7 @@ public class ReportSchemaValidator {
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(report);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new IllegalStateException("Khong serialize duoc report", e);
+            throw new IllegalStateException("Không serialize được report", e);
         }
     }
 }

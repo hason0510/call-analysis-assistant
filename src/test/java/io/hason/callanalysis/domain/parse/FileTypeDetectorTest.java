@@ -12,7 +12,7 @@ class FileTypeDetectorTest {
     private final FileTypeDetector detector = new FileTypeDetector();
 
     @Test
-    @DisplayName("end call log nhan ra qua dong dac ta #H1")
+    @DisplayName("end call log nhận ra qua dòng đặc tả #H1")
     void detectsEndCallLog() {
         assertThat(detector.detect(List.of(
                 "#H1\t#ts\t#tag\tappUserId\tcallId\tcallMode",
@@ -22,7 +22,7 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("WebRTC iOS: khoi [giay:mili][thread] dung dau dong")
+    @DisplayName("WebRTC iOS: khối [giây:mili][thread] đứng đầu dòng")
     void detectsWebRtcIos() {
         assertThat(detector.detect(List.of(
                 "[4712:147][260115] (RTCLogging.mm:34): (RTCAudioSession.mm:680 -[RTCAudioSession x]): Incrementing.")))
@@ -30,7 +30,7 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("WebRTC Android: ten file .cc dung truoc khoi thoi gian")
+    @DisplayName("WebRTC Android: tên file .cc đứng trước khối thời gian")
     void detectsWebRtcAndroid() {
         assertThat(detector.detect(List.of(
                 "peer_connection_factory.cc: [6652:953][12107] (line 398): Using default network controller factory")))
@@ -47,7 +47,7 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("signaling.json nhan ra qua callId + events o cap ngoai")
+    @DisplayName("signaling.json nhận ra qua callId + events ở cấp ngoài")
     void detectsSignalingJson() {
         assertThat(detector.detect(List.of(
                 "{",
@@ -58,9 +58,9 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("ten file sai van nhan dung loai — `calleer_webrtc.log` la log Android")
+    @DisplayName("tên file sai vẫn nhận đúng loại — `calleer_webrtc.log` là log Android")
     void ignoresFileNameEntirely() {
-        // Detector khong he nhan ten file lam tham so: ket luan hoan toan tu noi dung.
+        // Detector không hề nhận tên file làm tham số: kết luận hoàn toàn từ nội dung.
         List<String> androidContent = List.of(
                 "turn_port.cc: [15:652][8429] (line 1687): TurnPort(...): Received TURN probe error response");
 
@@ -69,7 +69,7 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("input rac / rong tra ve UNKNOWN thay vi doan bua")
+    @DisplayName("input rác / rỗng trả về UNKNOWN thay vì đoán bừa")
     void unrecognisedInputIsUnknown() {
         assertThat(detector.detect(List.of())).isEqualTo(DetectedLogType.UNKNOWN);
         assertThat(detector.detect(null)).isEqualTo(DetectedLogType.UNKNOWN);
@@ -79,7 +79,7 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("JSON khong phai signaling thi khong nhan nham")
+    @DisplayName("JSON không phải signaling thì không nhận nhầm")
     void otherJsonIsNotSignaling() {
         assertThat(detector.detect(List.of("{", "  \"name\": \"gi do khac\"", "}")))
                 .isEqualTo(DetectedLogType.UNKNOWN);

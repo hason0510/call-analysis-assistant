@@ -13,7 +13,7 @@ class SignalingJsonReaderTest {
 
     private final SignalingJsonReader reader = new SignalingJsonReader(new ObjectMapper());
 
-    /** Rut gon tu ai20k_sample/fail/1B009D42.../signaling.json, giu nguyen hinh dang that. */
+    /** Rút gọn từ ai20k_sample/fail/1B009D42.../signaling.json, giữ nguyên hình dạng thật. */
     private static final String SAMPLE = """
             {
               "callId": "1B009D42-49CD-479E-B26C-3A2994AEB720",
@@ -50,7 +50,7 @@ class SignalingJsonReaderTest {
             """;
 
     @Test
-    @DisplayName("callId o cap ngoai duoc chen vao tung document")
+    @DisplayName("callId ở cấp ngoài được chèn vào từng document")
     void callIdFromEnvelopeIsCopiedIntoEveryDocument() throws Exception {
         List<SignalingDocument> docs = reader.read(SAMPLE);
 
@@ -60,32 +60,32 @@ class SignalingJsonReaderTest {
     }
 
     @Test
-    @DisplayName("timestamp giu nguyen 9 chu so nano, khong lam tron")
+    @DisplayName("timestamp giữ nguyên 9 chữ số nano, không làm tròn")
     void nanosecondPrecisionIsPreserved() throws Exception {
         assertThat(reader.read(SAMPLE).getFirst().timestamp())
                 .isEqualTo("2026-09-21T08:44:28.953756952Z");
     }
 
     @Test
-    @DisplayName("truong vang mat tra ve null, KHONG mac dinh ve 0 hay chuoi rong")
+    @DisplayName("trường vắng mặt trả về null, KHÔNG mặc định về 0 hay chuỗi rỗng")
     void missingFieldsBecomeNullNotZero() throws Exception {
         List<SignalingDocument> docs = reader.read(SAMPLE);
 
-        // event dau: co isp/asn, khong co latencyMs
+        // event đầu: có isp/asn, không có latencyMs
         assertThat(docs.get(0).isp()).isEqualTo("MOBIFONE");
         assertThat(docs.get(0).latencyMs()).isNull();
 
-        // event sau: khong co isp/asn, co latencyMs
+        // event sau: không có isp/asn, có latencyMs
         assertThat(docs.get(1).isp()).isNull();
         assertThat(docs.get(1).asn()).isNull();
         assertThat(docs.get(1).latencyMs()).isEqualTo(5);
 
-        // callSessionId vang mat o ca hai
+        // callSessionId vắng mặt ở cả hai
         assertThat(docs).allSatisfy(d -> assertThat(d.callSessionId()).isNull());
     }
 
     @Test
-    @DisplayName("metadata truncated duoc mang theo tung document de bao vao Gioi han du lieu")
+    @DisplayName("metadata truncated được mang theo từng document để báo vào Giới hạn dữ liệu")
     void truncationMetadataIsCarried() throws Exception {
         assertThat(reader.read(SAMPLE)).allSatisfy(d -> {
             assertThat(d.sourceTruncated()).isTrue();
@@ -95,7 +95,7 @@ class SignalingJsonReaderTest {
     }
 
     @Test
-    @DisplayName("_id tat dinh: doc lai cung noi dung cho ra cung bo id")
+    @DisplayName("_id tất định: đọc lại cùng nội dung cho ra cùng bộ id")
     void documentIdIsDeterministic() throws Exception {
         List<String> first = reader.read(SAMPLE).stream().map(SignalingDocument::documentId).toList();
         List<String> second = reader.read(SAMPLE).stream().map(SignalingDocument::documentId).toList();
@@ -107,13 +107,13 @@ class SignalingJsonReaderTest {
     }
 
     @Test
-    @DisplayName("ordinal giu thu tu goc trong file, dung lam tie-break khi timestamp trung")
+    @DisplayName("ordinal giữ thứ tự gốc trong file, dùng làm tie-break khi timestamp trùng")
     void ordinalPreservesOriginalOrder() throws Exception {
         assertThat(reader.read(SAMPLE)).extracting(SignalingDocument::ordinal).containsExactly(0, 1);
     }
 
     @Test
-    @DisplayName("file hong bao loi ro rang thay vi sinh du lieu sai")
+    @DisplayName("file hỏng báo lỗi rõ ràng thay vì sinh dữ liệu sai")
     void malformedEnvelopeIsRejectedClearly() {
         assertThatThrownBy(() -> reader.read("""
                 {"environment":"production","events":[]}"""))
@@ -127,7 +127,7 @@ class SignalingJsonReaderTest {
     }
 
     @Test
-    @DisplayName("danh sach events rong van hop le, tra ve danh sach rong")
+    @DisplayName("danh sách events rỗng vẫn hợp lệ, trả về danh sách rỗng")
     void emptyEventListIsValid() throws Exception {
         assertThat(reader.read("""
                 {"callId":"CALL-1","events":[]}""")).isEmpty();

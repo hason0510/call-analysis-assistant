@@ -3,17 +3,17 @@ package io.hason.callanalysis.domain.parse;
 import io.hason.callanalysis.domain.event.LogSource;
 
 /**
- * Loai file nhan dien duoc TU NOI DUNG, khong theo ten file.
+ * Loại file nhận diện được TỪ NỘI DUNG, không theo tên file.
  *
- * Data mau co file ten `calleer_webrtc.log` (thua chu 'e') — doi chieu format cua no
- * (Android) voi cot platform trong ban ghi #H1 cua end call log cho thay do la log
- * cua CALLER bi go sai ten.
+ * Data mẫu có file tên `calleer_webrtc.log` (thừa chữ 'e') — đối chiếu format của nó
+ * (Android) với cột platform trong bản ghi #H1 của end call log cho thấy đó là log
+ * của CALLER bị gõ sai tên.
  */
 public enum DetectedLogType {
 
     SIGNALING_JSON(LogSource.SIGNALING),
     ENDCALL_LOG(LogSource.ENDCALL),
-    /** Format 1 — tien to [giay:mili][thread] dung dau dong. */
+    /** Format 1 — tiền tố [giây:mili][thread] đứng đầu dòng. */
     WEBRTC_IOS(LogSource.WEBRTC),
     /** Format 2 — ten file .cc dung truoc khoi [giay:mili][thread]. */
     WEBRTC_ANDROID(LogSource.WEBRTC),

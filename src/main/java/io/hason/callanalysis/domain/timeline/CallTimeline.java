@@ -10,13 +10,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Timeline cua mot cuoc goi, tach thanh hai phan vi ba nguon log khong cung goc thoi gian:
+ * Timeline của một cuộc gọi, tách thành hai phần vì ba nguồn log không cùng gốc thời gian:
  *
- *   mainTrack      — signaling + end call log, deu co gio tuyet doi, da sap xep
- *   relativeTracks — WebRTC log, moc thoi gian tuong doi, moi file mot track
+ *   mainTrack      — signaling + end call log, đều có giờ tuyệt đối, đã sắp xếp
+ *   relativeTracks — WebRTC log, mốc thời gian tương đối, mỗi file một track
  *
- * Tron hai phan vao nhau se tao ra thu tu gia. Giu rieng la cach trung thuc, va
- * viec khong ghep duoc duoc ghi lai trong notes de bao vao muc "Gioi han du lieu".
+ * Trộn hai phần vào nhau sẽ tạo ra thứ tự giả. Giữ riêng là cách trung thực, và
+ * việc không ghép được được ghi lại trong notes để báo vào mục "Giới hạn dữ liệu".
  */
 public record CallTimeline(
         String callId,
@@ -39,7 +39,7 @@ public record CallTimeline(
         return mainTrack.size() + relativeTracks.stream().mapToInt(t -> t.events().size()).sum();
     }
 
-    /** Toan bo su kien, ke ca track tuong doi — dung khi can tim evidence o moi nguon. */
+    /** Toàn bộ sự kiện, kể cả track tương đối — dùng khi cần tìm evidence ở mọi nguồn. */
     public List<CanonicalEvent> allEvents() {
         List<CanonicalEvent> all = new java.util.ArrayList<>(mainTrack);
         relativeTracks.forEach(t -> all.addAll(t.events()));
@@ -50,7 +50,7 @@ public record CallTimeline(
         return allEvents().stream().filter(e -> e.source() == source).toList();
     }
 
-    /** Su kien signaling dau tien mang lenh nay — dung cho cac chi so o T6. */
+    /** Sự kiện signaling đầu tiên mang lệnh này — dùng cho các chỉ số ở T6. */
     public Optional<CanonicalEvent> firstSignaling(String command) {
         return mainTrack.stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
@@ -72,7 +72,7 @@ public record CallTimeline(
                 .count();
     }
 
-    /** Ban ghi call summary (#H9) — chi ton tai o 2/16 file trong data mau. */
+    /** Bản ghi call summary (#H9) — chỉ tồn tại ở 2/16 file trong data mẫu. */
     public Optional<CanonicalEvent> callSummary(Leg leg) {
         return allEvents().stream()
                 .filter(e -> e.type() == EventType.CALL_SUMMARY)

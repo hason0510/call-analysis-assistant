@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hason.io/call-analysis/report-v1.schema.json",
   "title": "Call Analysis Report v1",
-  "description": "Cau truc report theo mau MVP muc 4.5. Sprint 2: AI chi duoc dien field theo schema nay, khong tu dung bo cuc.",
+  "description": "Cấu trúc report theo mẫu MVP mục 4.5. Sprint 2: AI chỉ được điền field theo schema này, không tự dựng bố cục.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
 
     "qualityFlag": {
       "type": "boolean",
-      "description": "SUCCESS van co the kem co chat luong kem (MVP muc 4.1)."
+      "description": "SUCCESS vẫn có thể kèm cờ chất lượng kém (MVP mục 4.1)."
     },
 
     "issueCategory": {
@@ -34,7 +34,7 @@
 
     "confidenceLevel": {
       "enum": ["HIGH", "MEDIUM", "LOW"],
-      "description": "Suy bang logic tat dinh, khong de AI sinh so (MVP muc 7.2)."
+      "description": "Suy bằng logic tất định, không để AI sinh số (MVP mục 7.2)."
     },
 
     "summary": { "type": "string", "minLength": 1 },
@@ -53,7 +53,7 @@
           "sourceRef": {
             "type": "string",
             "minLength": 1,
-            "description": "Ten file kem so dong — MVP muc 8.2 yeu cau trace ve dong log goc."
+            "description": "Tên file kèm số dòng — MVP mục 8.2 yêu cầu trace về dòng log gốc."
           }
         }
       }
@@ -74,7 +74,7 @@
         },
         "oneOf": [
           {
-            "description": "Co gia tri: value bat buoc, naReason phai vang.",
+            "description": "Có giá trị: value bắt buộc, naReason phải vắng.",
             "properties": {
               "value": { "type": "string", "minLength": 1 },
               "naReason": { "type": "null" }
@@ -82,7 +82,7 @@
             "required": ["value"]
           },
           {
-            "description": "Khong co gia tri: BAT BUOC co ly do. MVP muc 4.3 cam mac dinh ve 0.",
+            "description": "Không có giá trị: BẮT BUỘC có lý do. MVP mục 4.3 cấm mặc định về 0.",
             "properties": {
               "value": { "type": "null" },
               "naReason": { "type": "string", "minLength": 1 }
@@ -108,12 +108,12 @@
     "dataLimitations": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Thieu file, thieu chi so, ban export bi cat bot (MVP muc 3.3)."
+      "description": "Thiếu file, thiếu chỉ số, bản export bị cắt bớt (MVP mục 3.3)."
     },
 
     "degraded": {
       "type": "boolean",
-      "description": "Sprint 2: dat true khi phai lui ve rule verdict do AI loi."
+      "description": "Sprint 2: đặt true khi phải lui về rule verdict do AI lỗi."
     }
   }
 }

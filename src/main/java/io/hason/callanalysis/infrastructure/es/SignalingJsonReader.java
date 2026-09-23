@@ -8,10 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Chuyen noi dung mot file signaling.json thanh danh sach document.
+ * Chuyển nội dung một file signaling.json thành danh sách document.
  *
- * Lop nay KHONG cham dia va KHONG cham Elasticsearch — nho vay test duoc bang
- * chuoi JSON viet thang trong test, chay trong mili giay.
+ * Lớp này KHÔNG chạm đĩa và KHÔNG chạm Elasticsearch — nhờ vậy test được bằng
+ * chuỗi JSON viết thẳng trong test, chạy trong mili giây.
  */
 public class SignalingJsonReader {
 
@@ -26,14 +26,14 @@ public class SignalingJsonReader {
     }
 
     public List<SignalingDocument> read(JsonNode root) {
-        // callId nam o cap NGOAI, khong nam trong tung event -> phai chen vao moi document
+        // callId nằm ở cấp NGOÀI, không nằm trong từng event -> phải chèn vào mọi document
         String callId = text(root, "callId");
         if (callId == null || callId.isBlank()) {
-            throw new IllegalArgumentException("thieu truong callId o cap ngoai");
+            throw new IllegalArgumentException("thiếu trường callId ở cấp ngoài");
         }
         JsonNode events = root.path("events");
         if (!events.isArray()) {
-            throw new IllegalArgumentException("truong 'events' khong phai mang");
+            throw new IllegalArgumentException("trường 'events' không phải mảng");
         }
 
         boolean truncated = root.path("truncated").asBoolean(false);
@@ -65,7 +65,7 @@ public class SignalingJsonReader {
         return docs;
     }
 
-    /** Tra ve null thay vi chuoi "null" khi truong vang mat — 63/1059 event thieu isp/asn. */
+    /** Trả về null thay vì chuỗi "null" khi trường vắng mặt — 63/1059 event thiếu isp/asn. */
     private static String text(JsonNode node, String field) {
         JsonNode v = node.get(field);
         return v == null || v.isNull() ? null : v.asText();

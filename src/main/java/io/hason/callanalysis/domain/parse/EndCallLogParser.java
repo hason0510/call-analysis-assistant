@@ -15,16 +15,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Parser cho `*_endcall.log` — file TSV tu mang schema cua chinh no.
+ * Parser cho `*_endcall.log` — file TSV tự mang schema của chính nó.
  *
- * Chin dong dau (`#H1`..`#H9`) khai bao ten cot cho tung loai ban ghi; cot dau moi
- * dong du lieu la so hieu loai ban ghi. So luong header THAY DOI theo file: trong data
- * mau co file chi khai bao toi `#H5`, va ban ghi `#H9` (call summary) chi ton tai o
- * 2 tren 16 file — nen khong duoc gia dinh header nao la chac chan co.
+ * Chín dòng đầu (`#H1`..`#H9`) khai báo tên cột cho từng loại bản ghi; cột đầu mỗi
+ * dòng dữ liệu là số hiệu loại bản ghi. Số lượng header THAY ĐỔI theo file: trong data
+ * mẫu có file chỉ khai báo tới `#H5`, và bản ghi `#H9` (call summary) chỉ tồn tại ở
+ * 2 trên 16 file — nên không được giả định header nào là chắc chắn có.
  */
 public class EndCallLogParser {
 
-    /** Cot dac ta: dong bat dau bang #H la khai bao schema, khong phai du lieu. */
+    /** Cột đặc tả: dòng bắt đầu bằng #H là khai báo schema, không phải dữ liệu. */
     private static final String HEADER_PREFIX = "#H";
     private static final String COL_TIMESTAMP = "#ts";
     private static final String COL_TAG = "#tag";
@@ -45,8 +45,8 @@ public class EndCallLogParser {
                 continue;
             }
 
-            // -1 BAT BUOC: khong co thi Java xoa het cot rong o cuoi dong,
-            // ma end call log day cot rong -> lech cot hang loat khong bao loi.
+            // -1 BẮT BUỘC: không có thì Java xoá hết cột rỗng ở cuối dòng,
+            // mà end call log đầy cột rỗng -> lệch cột hàng loạt không báo lỗi.
             String[] cols = line.split("\t", -1);
 
             if (cols[0].startsWith(HEADER_PREFIX)) {
@@ -58,7 +58,7 @@ public class EndCallLogParser {
                 toEvent(cols, lineNumber, line, schemas, context, warnings).ifPresent(events::add);
             } catch (RuntimeException e) {
                 warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                        "khong doc duoc ban ghi: " + e.getMessage()));
+                        "không đọc được bản ghi: " + e.getMessage()));
             }
         }
 
@@ -70,7 +70,7 @@ public class EndCallLogParser {
         String recordType = cols[0].substring(HEADER_PREFIX.length());
         if (recordType.isBlank() || cols.length < 2) {
             warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                    "dong header khong hop le: " + cols[0]));
+                    "dòng header không hợp lệ: " + cols[0]));
             return;
         }
         schemas.put(recordType, List.of(cols).subList(1, cols.length));
@@ -83,7 +83,7 @@ public class EndCallLogParser {
         List<String> schema = schemas.get(recordType);
         if (schema == null) {
             warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                    "chua khai bao #H" + recordType + " truoc dong du lieu nay"));
+                    "chưa khai báo #H" + recordType + " trước dòng dữ liệu này"));
             return java.util.Optional.empty();
         }
 
@@ -93,18 +93,18 @@ public class EndCallLogParser {
         Instant instant = parseEpochMillis(rawTimestamp);
         if (instant == null) {
             warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                    "timestamp khong doc duoc: " + rawTimestamp));
+                    "timestamp không đọc được: " + rawTimestamp));
             return java.util.Optional.empty();
         }
 
-        // #H1 mang callId cua chinh file. Lech voi callId dang phan tich la dau hieu
-        // nguoi dung dinh kem file cua cuoc goi khac (MVP muc 6.4, ca kiem thu F03).
+        // #H1 mang callId của chính file. Lệch với callId đang phân tích là dấu hiệu
+        // người dùng đính kèm file của cuộc gọi khác (MVP mục 6.4, ca kiểm thử F03).
         if ("1".equals(recordType)) {
             String fileCallId = row.get("callId");
             if (fileCallId != null && !fileCallId.isBlank()
                     && context.callId() != null && !fileCallId.equals(context.callId())) {
                 warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                        "callId trong file (" + fileCallId + ") khac callId dang phan tich ("
+                        "callId trong file (" + fileCallId + ") khác callId đang phân tích ("
                                 + context.callId() + ")"));
             }
         }
@@ -124,13 +124,13 @@ public class EndCallLogParser {
                 new SourceRef(context.fileName(), lineNumber, rawLine)));
     }
 
-    /** Ghep ten cot voi gia tri. So cot lech van lay phan khop duoc, chi ghi canh bao. */
+    /** Ghép tên cột với giá trị. Số cột lệch vẫn lấy phần khớp được, chỉ ghi cảnh báo. */
     private Map<String, String> zip(List<String> schema, String[] cols, int lineNumber,
                                     ParseContext context, List<ParseWarning> warnings) {
         int values = cols.length - 1;
         if (values != schema.size()) {
             warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                    "so cot lech: schema khai bao " + schema.size() + ", dong nay co " + values));
+                    "số cột lệch: schema khai báo " + schema.size() + ", dòng này có " + values));
         }
         Map<String, String> row = new LinkedHashMap<>();
         int usable = Math.min(schema.size(), values);
@@ -140,7 +140,7 @@ public class EndCallLogParser {
         return row;
     }
 
-    /** Bo cot rong: ban ghi #H7 co 158 cot va #H9 co 211 cot, phan lon de trong. */
+    /** Bỏ cột rỗng: bản ghi #H7 có 158 cột và #H9 có 211 cột, phần lớn để trống. */
     private static Map<String, String> nonBlankOnly(Map<String, String> row) {
         Map<String, String> kept = new LinkedHashMap<>();
         row.forEach((k, v) -> {
@@ -162,7 +162,7 @@ public class EndCallLogParser {
         }
     }
 
-    /** Anh xa so hieu ban ghi sang loai event va ten event. */
+    /** Ánh xạ số hiệu bản ghi sang loại event và tên event. */
     private record RecordShape(EventType type, String name) {
 
         static RecordShape of(String recordType, Map<String, String> row) {
@@ -184,9 +184,9 @@ public class EndCallLogParser {
         }
 
         /**
-         * Ban ghi #H2 (`log_detail`) cho phan lon noi dung. Nhan dang nhe cac dong
-         * ICE de T7 lay evidence de hon; con lai giu nguyen la LOG_MESSAGE va de
-         * Timeline Builder tu phat hien chuyen trang thai tu cot `status`.
+         * Bản ghi #H2 (`log_detail`) cho phần lớn nội dung. Nhận dạng nhẹ các dòng
+         * ICE để T7 lấy evidence dễ hơn; còn lại giữ nguyên là LOG_MESSAGE và để
+         * Timeline Builder tự phát hiện chuyển trạng thái từ cột `status`.
          */
         static RecordShape fromLogDetail(Map<String, String> row) {
             String msg = orDefault(row.get("msg"), "");

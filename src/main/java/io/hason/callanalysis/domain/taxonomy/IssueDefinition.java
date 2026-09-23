@@ -2,7 +2,7 @@ package io.hason.callanalysis.domain.taxonomy;
 
 import java.util.List;
 
-/** Mot muc trong taxonomy.yaml. */
+/** Một mục trong taxonomy.yaml. */
 public record IssueDefinition(
         IssueCategory id,
         String definition,
@@ -21,7 +21,7 @@ public record IssueDefinition(
 
     public record RequiredEvidence(String source, String field) {}
 
-    /** Dieu kien phat hien da kiem chung tren data hay chua. */
+    /** Điều kiện phát hiện đã kiểm chứng trên data hay chưa. */
     public record Calibration(Status status, String evidence) {
         public enum Status { VALIDATED, UNVALIDATED }
 

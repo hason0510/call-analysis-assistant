@@ -13,14 +13,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/** Rut tin hieu tho tu timeline. Khong ket luan gi — viec do thuoc RuleVerdictEngine. */
+/** Rút tín hiệu thô từ timeline. Không kết luận gì — việc đó thuộc RuleVerdictEngine. */
 public class SignalExtractor {
 
     /**
-     * Duong nen do tren 399 mau stats cua cac cuoc goi khoe manh trong data mau:
-     * loss cao nhat 3,704%, MOS thap nhat 4,335, RTT cao nhat 181 ms, jitter cao nhat 26 ms.
-     * Nguong canh bao dat CAO HON duong nen de khong gan co nham cho cuoc goi tot.
-     * Day van la PHONG DOAN vi khong co ca mau chat luong kem — xem taxonomy.yaml.
+     * Đường nền đo trên 399 mẫu stats của các cuộc gọi khoẻ mạnh trong data mẫu:
+     * loss cao nhất 3,704%, MOS thấp nhất 4,335, RTT cao nhất 181 ms, jitter cao nhất 26 ms.
+     * Ngưỡng cảnh báo đặt CAO HƠN đường nền để không gắn cờ nhầm cho cuộc gọi tốt.
+     * Đây vẫn là PHỎNG ĐOÁN vì không có ca mẫu chất lượng kém — xem taxonomy.yaml.
      */
     private static final BigDecimal LOSS_THRESHOLD_PERCENT = new BigDecimal("5.0");
     private static final BigDecimal MOS_THRESHOLD = new BigDecimal("3.5");
@@ -46,9 +46,10 @@ public class SignalExtractor {
                 hasFlag(timeline, "transport.hasMediaFail"),
                 noMediaBytes(timeline),
                 qualityDegraded(timeline),
+                // Chỉ ghi nhận CẮT BỚT, không phải mọi thiếu hụt dữ liệu: kết luận
+                // "bản export bị cắt" cho một timeline rỗng là nói sai sự thật.
                 timeline.notes().stream().anyMatch(n ->
-                        n.kind() == TimelineNote.Kind.DATA_LIMITATION
-                                || n.message().contains("cat bot")),
+                        n.kind() == TimelineNote.Kind.SIGNALING_TRUNCATED),
                 sources);
     }
 
@@ -57,9 +58,9 @@ public class SignalExtractor {
     }
 
     /**
-     * Tin hieu hong manh nhat va re nhat de kiem: khong mot byte audio nao di qua.
-     * Manh hon MOS, vi MOS bang 0 mo ho giua "do duoc va bang 0" voi "khong do duoc".
-     * Chi xet khi da co ban ghi chi so — khong co ban ghi thi khong ket luan.
+     * Tín hiệu hỏng mạnh nhất và rẻ nhất để kiểm: không một byte audio nào đi qua.
+     * Mạnh hơn MOS, vì MOS bằng 0 mơ hồ giữa "đo được và bằng 0" với "không đo được".
+     * Chỉ xét khi đã có bản ghi chỉ số — không có bản ghi thì không kết luận.
      */
     private boolean noMediaBytes(CallTimeline timeline) {
         List<CanonicalEvent> records = qualityRecords(timeline).toList();

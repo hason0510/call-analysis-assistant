@@ -1,12 +1,12 @@
-# Elasticsearch + Kibana local cho Sprint 1 (MVP muc 5.1 - T1)
+# Elasticsearch + Kibana local cho Sprint 1 (MVP mục 5.1 - T1)
 #
-# Phien ban 8.18.8 duoc chon de KHOP voi Elasticsearch Java client 8.18.8
-# ma Spring Boot 3.5.16 quan ly. Lech major giua client va server se loi.
+# Phiên bản 8.18.8 được chọn để KHỚP với Elasticsearch Java client 8.18.8
+# mà Spring Boot 3.5.16 quản lý. Lệch major giữa client và server sẽ lỗi.
 #
-#   docker compose up -d elasticsearch     # chi ES, nhe nhat
+#   docker compose up -d elasticsearch     # chỉ ES, nhẹ nhất
 #   docker compose up -d                   # ES + Kibana
-#   docker compose down                    # dung, GIU du lieu
-#   docker compose down -v                 # dung va XOA du lieu
+#   docker compose down                    # dừng, GIỮ dữ liệu
+#   docker compose down -v                 # dừng và XOÁ dữ liệu
 
 services:
   elasticsearch:
@@ -14,9 +14,9 @@ services:
     container_name: ca-elasticsearch
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false        # chi chay local voi data mau, khong mo ra ngoai
+      - xpack.security.enabled=false        # chỉ chạy local với data mẫu, không mở ra ngoài
       - xpack.security.enrollment.enabled=false
-      - ES_JAVA_OPTS=-Xms2g -Xmx2g          # may 15.7GB, Docker duoc cap 8.1GB -> 2g thoai mai
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g          # máy 15.7GB, Docker được cấp 8.1GB -> 2g thoải mái
     ports:
       - "127.0.0.1:9200:9200"               # chi lang nghe tren localhost
     volumes:

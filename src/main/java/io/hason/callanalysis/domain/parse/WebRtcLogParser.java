@@ -16,20 +16,20 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Parser cho `*_webrtc.log` — log goc cua thu vien libwebrtc.
+ * Parser cho `*_webrtc.log` — log gốc của thư viện libwebrtc.
  *
- * Ba dac diem quyet dinh cach viet parser nay:
+ * Ba đặc điểm quyết định cách viết parser này:
  *
- * 1. Hai format khac nhau, moi file dung dung mot format:
+ * 1. Hai format khác nhau, mỗi file dùng đúng một format:
  *      iOS     : [6652:953][260115] (RTCLogging.mm:34): (RTCAudioSession.mm:680 ...): message
  *      Android : peer_connection.cc: [6652:957][12108] (line 659): message
  *
- * 2. Moc thoi gian la TUONG DOI (giay:mili tu luc log khoi tao), khong phai gio tuyet doi,
- *    va truong giay co do rong BIEN THIEN — quan sat tu [000:000] toi [6652:953].
- *    Viet regex \d{3} se bo sot phan lon du lieu.
+ * 2. Mốc thời gian là TƯƠNG ĐỐI (giây:mili từ lúc log khởi tạo), không phải giờ tuyệt đối,
+ *    và trường giây có độ rộng BIẾN THIÊN — quan sát từ [000:000] tới [6652:953].
+ *    Viết regex \d{3} sẽ bỏ sót phần lớn dữ liệu.
  *
- * 3. 22% so dong (5 966 / 26 712 trong data mau) la dong NOI TIEP cua ban ghi truoc,
- *    chu yeu khi iOS in mo ta audio route dai nhieu dong. Bo qua chung la mat 1/5 du lieu.
+ * 3. 22% số dòng (5 966 / 26 712 trong data mẫu) là dòng NỐI TIẾP của bản ghi trước,
+ *    chủ yếu khi iOS in mô tả audio route dài nhiều dòng. Bỏ qua chúng là mất 1/5 dữ liệu.
  */
 public class WebRtcLogParser {
 
@@ -44,13 +44,13 @@ public class WebRtcLogParser {
     private static final Pattern ICE_STATE = Pattern.compile(
             "IceConnectionState\\s+(\\w+)\\s*=>\\s*(\\w+)");
 
-    /** Wrapper log cua iOS: ngoac dau tien luon la hang so nay, khong mang thong tin. */
+    /** Wrapper log của iOS: ngoặc đầu tiên luôn là hằng số này, không mang thông tin. */
     private static final String RTC_LOGGING_WRAPPER = "RTCLogging.mm";
 
-    /** Ngoac thu hai cua dong iOS di qua wrapper — moi la nguon that. */
+    /** Ngoặc thứ hai của dòng iOS đi qua wrapper — mới là nguồn thật. */
     private static final Pattern NESTED_ORIGIN = Pattern.compile("^\\(([^)]*)\\):\\s*");
 
-    /** "connection.cc:1824" hoac "RTCAudioSession.mm:680 -[RTCAudioSession handleRoute:]" */
+    /** "connection.cc:1824" hoặc "RTCAudioSession.mm:680 -[RTCAudioSession handleRoute:]" */
     private static final Pattern ORIGIN_WITH_LINE =
             Pattern.compile("^([\\w.+-]+):(\\d+)(?:\\s+(.*))?$");
 
@@ -83,9 +83,9 @@ public class WebRtcLogParser {
                 continue;
             }
             if (pending == null) {
-                // Dong noi tiep ma chua co ban ghi nao truoc do — file bi cat dau.
+                // Dòng nối tiếp mà chưa có bản ghi nào trước đó — file bị cắt đầu.
                 warnings.add(new ParseWarning(context.fileName(), lineNumber,
-                        "dong noi tiep mo coi, khong co ban ghi truoc do"));
+                        "dòng nối tiếp mồ côi, không có bản ghi trước đó"));
                 continue;
             }
             pending.append(line);
@@ -117,9 +117,9 @@ public class WebRtcLogParser {
             String origin = ios.group("origin");
             String message = ios.group("message");
 
-            // Log Objective-C di qua wrapper RTCLogging, khien ngoac dau tien luon la
-            // hang so "RTCLogging.mm:34" con nguon that nam o ngoac thu hai cua message.
-            // Log C++ goc thi ngoac dau tien da la nguon that.
+            // Log Objective-C đi qua wrapper RTCLogging, khiến ngoặc đầu tiên luôn là
+            // hằng số "RTCLogging.mm:34" còn nguồn thật nằm ở ngoặc thứ hai của message.
+            // Log C++ gốc thì ngoặc đầu tiên đã là nguồn thật.
             if (origin != null && origin.startsWith(RTC_LOGGING_WRAPPER)) {
                 Matcher nested = NESTED_ORIGIN.matcher(message);
                 if (nested.find()) {
@@ -135,7 +135,7 @@ public class WebRtcLogParser {
         return null;
     }
 
-    /** Tach "connection.cc:1824" thanh module + so dong, thong nhat voi Format 2. */
+    /** Tách "connection.cc:1824" thành module + số dòng, thống nhất với Format 2. */
     private static void putOrigin(Map<String, String> attributes, String origin) {
         if (origin == null || origin.isBlank()) {
             return;
@@ -156,7 +156,7 @@ public class WebRtcLogParser {
         return Duration.ofSeconds(Long.parseLong(seconds)).plusMillis(Long.parseLong(millis));
     }
 
-    /** Ban ghi dang gom, co the con nhan them dong noi tiep. */
+    /** Bản ghi đang gom, có thể còn nhận thêm dòng nối tiếp. */
     private static final class PendingRecord {
 
         private final int lineNumber;
@@ -192,7 +192,7 @@ public class WebRtcLogParser {
                     context.callId(),
                     context.leg(),
                     LogSource.WEBRTC,
-                    // Khong co goc thoi gian tuyet doi — giu nguyen dang tuong doi.
+                    // Không có gốc thời gian tuyệt đối — giữ nguyên dạng tương đối.
                     EventTime.relative(offset),
                     classification.type(),
                     classification.name(),
@@ -234,11 +234,11 @@ public class WebRtcLogParser {
         }
 
         /**
-         * Chi phan loai la su kien TURN, KHONG suy ra la loi.
-         * "Received TURN allocate error response ... code=401" la buoc bat tay xac thuc
-         * chuan cua TURN (RFC 5766): tren toan bo data mau co 73 dong error va dung 73 dong
-         * allocate thanh cong, khong cong nao that bai han. Viec ket luan loi hay khong
-         * thuoc tang rule, khong phai tang parser.
+         * Chỉ phân loại là sự kiện TURN, KHÔNG suy ra là lỗi.
+         * "Received TURN allocate error response ... code=401" là bước bắt tay xác thực
+         * chuẩn của TURN (RFC 8656): trên toàn bộ data mẫu có 73 dòng error và đúng 73 dòng
+         * allocate thành công, không cổng nào thất bại hẳn. Việc kết luận lỗi hay không
+         * thuộc tầng rule, không phải tầng parser.
          */
         private static boolean isTurn(String module, String message) {
             return (module != null && module.contains("turn_port")) || message.contains("TurnPort(");

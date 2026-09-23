@@ -14,7 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Nap data mau vao Elasticsearch local.
+ * Nạp data mẫu vào Elasticsearch local.
  *
  *   mvn spring-boot:run -Dspring-boot.run.arguments="--import-signaling=../ai20k_sample"
  *   mvn spring-boot:run -Dspring-boot.run.arguments="--import-signaling=../ai20k_sample --recreate-index"
@@ -43,15 +43,15 @@ public class ImportSignalingCommand implements ApplicationRunner {
             return;
         }
         int exitCode = runImport(args);
-        // RestClient cua Elasticsearch giu thread non-daemon nen JVM khong tu thoat.
-        // Thoat tuong minh de import chay duoc trong script va CI.
+        // RestClient của Elasticsearch giữ thread non-daemon nên JVM không tự thoát.
+        // Thoát tường minh để import chạy được trong script và CI.
         System.exit(SpringApplication.exit(context, () -> exitCode));
     }
 
     private int runImport(ApplicationArguments args) throws Exception {
         Path root = Path.of(args.getOptionValues(OPTION).getFirst()).toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
-            log.error("Khong phai thu muc: {}", root);
+            log.error("Không phải thư mục: {}", root);
             return 2;
         }
 
@@ -62,15 +62,15 @@ public class ImportSignalingCommand implements ApplicationRunner {
 
         SignalingImporter.ImportReport report = importer.importFrom(root);
 
-        log.info("---- Ket qua import ----");
-        log.info("Thu muc      : {}", root);
-        log.info("File doc duoc: {}", report.filesRead());
-        log.info("Document nap : {}", report.documentsIndexed());
+        log.info("---- Kết quả import ----");
+        log.info("Thư mục      : {}", root);
+        log.info("File đọc được: {}", report.filesRead());
+        log.info("Document nạp : {}", report.documentsIndexed());
         if (report.problems().isEmpty()) {
-            log.info("Van de       : khong co");
+            log.info("Vấn đề       : không có");
             return 0;
         }
-        log.warn("Van de       : {}", report.problems().size());
+        log.warn("Vấn đề       : {}", report.problems().size());
         report.problems().forEach(p -> log.warn("  - {}", p));
         return 1;
     }

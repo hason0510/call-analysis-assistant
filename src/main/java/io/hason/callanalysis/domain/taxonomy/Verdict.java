@@ -1,6 +1,6 @@
 package io.hason.callanalysis.domain.taxonomy;
 
-/** Ba ket luan theo MVP muc 4.1. SUCCESS van co the kem co chat luong kem. */
+/** Ba kết luận theo MVP mục 4.1. SUCCESS vẫn có thể kèm cờ chất lượng kém. */
 public enum Verdict {
     SUCCESS,
     FAIL,

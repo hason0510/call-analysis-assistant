@@ -18,7 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Dung va in timeline cua mot cuoc goi.
+ * Dựng và in timeline của một cuộc gọi.
  *
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--timeline=../ai20k_sample/success/EE129C8F-..."
  */
@@ -48,7 +48,7 @@ public class TimelineCommand implements ApplicationRunner {
         }
         Path folder = Path.of(args.getOptionValues(OPTION).getFirst()).toAbsolutePath().normalize();
         if (!Files.isDirectory(folder)) {
-            log.error("Khong phai thu muc: {}", folder);
+            log.error("Không phải thư mục: {}", folder);
             System.exit(SpringApplication.exit(context, () -> 2));
         }
 
@@ -56,33 +56,33 @@ public class TimelineCommand implements ApplicationRunner {
                 folder.getFileName().toString(), reader.readAll(folder));
 
         log.info("Call-ID : {}", timeline.callId());
-        log.info("Tong su kien : {}  (main track {}, relative {})",
+        log.info("Tổng sự kiện: {}  (main track {}, relative {})",
                 timeline.totalEvents(), timeline.mainTrack().size(),
                 timeline.totalEvents() - timeline.mainTrack().size());
-        log.info("Leg suy ra tu: {}", timeline.legs().derivedFrom());
+        log.info("Leg suy ra từ: {}", timeline.legs().derivedFrom());
         log.info("");
 
-        log.info("--- MAIN TRACK ({} su kien dau) ---", PREVIEW);
+        log.info("--- MAIN TRACK ({} sự kiện đầu) ---", PREVIEW);
         timeline.mainTrack().stream().limit(PREVIEW).forEach(e -> log.info("  {}", describe(e)));
 
         log.info("");
         log.info("--- RELATIVE TRACKS ---");
         for (RelativeTrack track : timeline.relativeTracks()) {
-            log.info("  {}", String.format("%-24s leg=%-7s platform=%-8s doTinCay=%s  (%d su kien)",
+            log.info("  {}", String.format("%-24s leg=%-7s platform=%-8s độ tin cậy=%s  (%d sự kiện)",
                     track.fileName(), track.leg(), track.platform(),
                     track.legConfidence(), track.events().size()));
         }
 
         log.info("");
-        log.info("--- LECH DONG HO ---");
+        log.info("--- LỆCH ĐỒNG HỒ ---");
         if (timeline.clockOffsets().isEmpty()) {
-            log.info("  khong do duoc (thieu cap lenh khop giua client va server)");
+            log.info("  không đo được (thiếu cặp lệnh khớp giữa client và server)");
         }
-        timeline.clockOffsets().forEach(o -> log.info("  {} : {} ms (trung vi tren {} cap){}",
-                o.leg(), o.medianMillis(), o.sampleCount(), o.isNegligible() ? "" : "  <-- DANG KE"));
+        timeline.clockOffsets().forEach(o -> log.info("  {} : {} ms (trung vị trên {} cặp){}",
+                o.leg(), o.medianMillis(), o.sampleCount(), o.isNegligible() ? "" : "  <-- ĐÁNG KỂ"));
 
         log.info("");
-        log.info("--- GHI CHU ({}) ---", timeline.notes().size());
+        log.info("--- GHI CHÚ ({}) ---", timeline.notes().size());
         timeline.notes().forEach(n -> log.info("  [{}] {}", n.kind(), n.message()));
 
         System.exit(SpringApplication.exit(context, () -> 0));

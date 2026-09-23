@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 
-/** Tao index signaling voi mapping tinh (dynamic: strict) neu chua ton tai. */
+/** Tạo index signaling với mapping tĩnh (dynamic: strict) nếu chưa tồn tại. */
 @Component
 public class SignalingIndex {
 
@@ -26,19 +26,19 @@ public class SignalingIndex {
 
     public void createIfAbsent() throws IOException {
         if (client.indices().exists(e -> e.index(NAME)).value()) {
-            log.info("Index '{}' da ton tai, bo qua buoc tao.", NAME);
+            log.info("Index '{}' đã tồn tại, bỏ qua bước tạo.", NAME);
             return;
         }
         try (InputStream mapping = new ClassPathResource(MAPPING).getInputStream()) {
             client.indices().create(c -> c.index(NAME).withJson(mapping));
         }
-        log.info("Da tao index '{}' tu {}.", NAME, MAPPING);
+        log.info("Đã tạo index '{}' từ {}.", NAME, MAPPING);
     }
 
     public void delete() throws IOException {
         if (client.indices().exists(e -> e.index(NAME)).value()) {
             client.indices().delete(d -> d.index(NAME));
-            log.info("Da xoa index '{}'.", NAME);
+            log.info("Đã xoá index '{}'.", NAME);
         }
     }
 }

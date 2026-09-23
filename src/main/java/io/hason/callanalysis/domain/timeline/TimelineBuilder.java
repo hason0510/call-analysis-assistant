@@ -15,13 +15,13 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Dung timeline cua mot cuoc goi tu cac canonical event da chuan hoa.
+ * Dựng timeline của một cuộc gọi từ các canonical event đã chuẩn hoá.
  *
- * Bon viec, theo dung thu tu:
- *   1. Correlate — xac dinh file thuoc ben nao bang NOI DUNG, roi gan lai leg.
- *   2. Deduplicate — loai ban ghi trung lap trong cung mot nguon.
- *   3. Sort — sap xep tat dinh.
- *   4. Do lech dong ho — do va ghi lai, KHONG viet lai timestamp.
+ * Bốn việc, theo đúng thứ tự:
+ *   1. Correlate — xác định file thuộc bên nào bằng NỘI DUNG, rồi gán lại leg.
+ *   2. Deduplicate — loại bản ghi trùng lặp trong cùng một nguồn.
+ *   3. Sort — sắp xếp tất định.
+ *   4. Đo lệch đồng hồ — đo và ghi lại, KHÔNG viết lại timestamp.
  */
 public class TimelineBuilder {
 
@@ -29,13 +29,24 @@ public class TimelineBuilder {
     private final ClockOffsetEstimator clockOffsetEstimator = new ClockOffsetEstimator();
 
     public CallTimeline build(String callId, List<CanonicalEvent> events, LegAssignment legs) {
-        if (events == null || events.isEmpty()) {
-            return new CallTimeline(callId, List.of(), List.of(), legs, List.of(),
-                    List.of(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
-                            "Khong co su kien nao de dung timeline")));
-        }
+        return build(callId, events, legs, List.of());
+    }
 
-        List<TimelineNote> notes = new ArrayList<>();
+    /**
+     * @param seedNotes ghi chú đã biết TRƯỚC khi dựng timeline, ví dụ bản export
+     *                  signaling bị cắt bớt. Những dữ kiện này nằm ở metadata của
+     *                  nguồn chứ không nằm trong chuỗi sự kiện, nên nếu không truyền
+     *                  vào đây thì chúng biến mất khỏi pipeline.
+     */
+    public CallTimeline build(String callId, List<CanonicalEvent> events, LegAssignment legs,
+                              List<TimelineNote> seedNotes) {
+        List<TimelineNote> notes = new ArrayList<>(seedNotes == null ? List.of() : seedNotes);
+
+        if (events == null || events.isEmpty()) {
+            notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
+                    "Không có sự kiện nào để dựng timeline"));
+            return new CallTimeline(callId, List.of(), List.of(), legs, List.of(), notes);
+        }
 
         Map<String, LegCorrelator.FileLeg> correlation = legCorrelator.correlate(events);
         List<CanonicalEvent> retagged = applyCorrelation(events, correlation, notes);
@@ -43,9 +54,9 @@ public class TimelineBuilder {
         Deduplicated deduplicated = deduplicate(retagged);
         if (deduplicated.removed() > 0) {
             notes.add(TimelineNote.of(TimelineNote.Kind.DEDUPED,
-                    "File dinh kem trung noi dung, da bo qua: "
+                    "File đính kèm trùng nội dung, đã bỏ qua: "
                             + String.join(", ", deduplicated.duplicateFiles())
-                            + " (" + deduplicated.removed() + " su kien)"));
+                            + " (" + deduplicated.removed() + " sự kiện)"));
         }
 
         List<CanonicalEvent> mainTrack = new ArrayList<>();
@@ -63,9 +74,9 @@ public class TimelineBuilder {
 
         List<ClockOffset> offsets = clockOffsetEstimator.estimate(mainTrack);
         offsets.forEach(o -> notes.add(TimelineNote.of(TimelineNote.Kind.CLOCK_OFFSET,
-                "Lech dong ho " + o.leg() + " so voi server: " + o.medianMillis()
-                        + " ms (trung vi tren " + o.sampleCount() + " cap"
-                        + (o.isNegligible() ? ", khong dang ke" : ", DANG KE") + ")")));
+                "Lệch đồng hồ " + o.leg() + " so với server: " + o.medianMillis()
+                        + " ms (trung vị trên " + o.sampleCount() + " cặp"
+                        + (o.isNegligible() ? ", không đáng kể" : ", ĐÁNG KỂ") + ")")));
 
         return new CallTimeline(callId, mainTrack, relativeTracks, legs, offsets, notes);
     }
@@ -84,8 +95,8 @@ public class TimelineBuilder {
             }
             if (fileLeg.leg() != e.leg() && reported.add(e.sourceRef().fileName())) {
                 notes.add(TimelineNote.of(TimelineNote.Kind.LEG_UNCERTAIN,
-                        "File " + e.sourceRef().fileName() + " duoc gan lai tu " + e.leg()
-                                + " sang " + fileLeg.leg() + " (doi chieu theo noi dung, khong theo ten file)"));
+                        "File " + e.sourceRef().fileName() + " được gán lại từ " + e.leg()
+                                + " sang " + fileLeg.leg() + " (đối chiếu theo nội dung, không theo tên file)"));
             }
             result.add(e.withLeg(fileLeg.leg()));
         }
@@ -110,11 +121,11 @@ public class TimelineBuilder {
             tracks.add(new RelativeTrack(fileName, leg, platform, confidence, events));
 
             notes.add(TimelineNote.of(TimelineNote.Kind.RELATIVE_TRACK,
-                    fileName + ": " + events.size() + " su kien dung moc thoi gian tuong doi,"
-                            + " chua dong bo duoc voi timeline signaling"));
+                    fileName + ": " + events.size() + " sự kiện dùng mốc thời gian tương đối,"
+                            + " chưa đồng bộ được với timeline signaling"));
             if (confidence != RelativeTrack.LegConfidence.MATCHED_BY_PLATFORM) {
                 notes.add(TimelineNote.of(TimelineNote.Kind.LEG_UNCERTAIN,
-                        fileName + ": chua doi chieu duoc chu so huu theo noi dung ("
+                        fileName + ": chưa đối chiếu được chủ sở hữu theo nội dung ("
                                 + confidence + ")"));
             }
         });
@@ -124,18 +135,18 @@ public class TimelineBuilder {
     private record Deduplicated(List<CanonicalEvent> events, int removed, List<String> duplicateFiles) {}
 
     /**
-     * Loai trung lap o muc FILE, khong phai o muc dong.
+     * Loại trùng lặp ở mức FILE, không phải ở mức dòng.
      *
-     * Hai thu KHONG duoc coi la trung lap:
+     * Hai thứ KHÔNG được coi là trùng lặp:
      *
-     *   - Cung mot su kien xuat hien o signaling VA o end call log (vi du INVITE):
-     *     do la hai goc nhin cua cung mot viec, phai giu ca hai.
-     *   - Dong log lap lai trong cung mot file: libwebrtc that su ghi
-     *     "openssl_adapter.cc ... TLS server done" ba lan trong cung mot mili giay.
-     *     Do la ba ban ghi that; xoa bot se lam sai moi chi so dem.
+     *   - Cùng một sự kiện xuất hiện ở signaling VÀ ở end call log (ví dụ INVITE):
+     *     đó là hai góc nhìn của cùng một việc, phải giữ cả hai.
+     *   - Dòng log lặp lại trong cùng một file: libwebrtc thật sự ghi
+     *     "openssl_adapter.cc ... TLS server done" ba lần trong cùng một mili giây.
+     *     Đó là ba bản ghi thật; xoá bớt sẽ làm sai mọi chỉ số đếm.
      *
-     * Trung lap that su trong bai toan nay la nguoi dung dinh kem CUNG MOT FILE hai lan
-     * duoi hai ten khac nhau. Vi vay so sanh toan bo chuoi su kien cua tung file.
+     * Trùng lặp thật sự trong bài toán này là người dùng đính kèm CÙNG MỘT FILE hai lần
+     * dưới hai tên khác nhau. Vì vậy so sánh toàn bộ chuỗi sự kiện của từng file.
      */
     private Deduplicated deduplicate(List<CanonicalEvent> events) {
         Map<String, List<String>> fingerprintByFile = new LinkedHashMap<>();
@@ -146,9 +157,9 @@ public class TimelineBuilder {
                             + "|" + e.sourceRef().rawLine());
         }
 
-        // Giu file co ten DUNG QUY UOC nhat, khong phai file dung truoc theo thu tu chu cai.
-        // Neu khong, evidence se trich dan ten file vo nghia (vi du "ban_sao.log")
-        // thay vi "callee_webrtc.log", lam report kho doc.
+        // Giữ file có tên ĐÚNG QUY ƯỚC nhất, không phải file đứng trước theo thứ tự chữ cái.
+        // Nếu không, evidence sẽ trích dẫn tên file vô nghĩa (ví dụ "ban_sao.log")
+        // thay vì "callee_webrtc.log", làm report khó đọc.
         Map<List<String>, String> keptByFingerprint = new LinkedHashMap<>();
         fingerprintByFile.forEach((fileName, fingerprint) ->
                 keptByFingerprint.merge(fingerprint, fileName, TimelineBuilder::preferredFileName));
@@ -167,11 +178,11 @@ public class TimelineBuilder {
         return new Deduplicated(remaining, events.size() - remaining.size(), List.copyOf(duplicateFiles));
     }
 
-    /** Ten file dung quy uong dat ten cua data mau: caller_/callee_ + _endcall/_webrtc.log */
+    /** Tên file đúng quy ước đặt tên của data mẫu: caller_/callee_ + _endcall/_webrtc.log */
     private static final java.util.regex.Pattern CONVENTIONAL_NAME =
             java.util.regex.Pattern.compile("^(caller|callee)_(endcall|webrtc)\\.log$");
 
-    /** Chon ten file de giu lai giua hai file trung noi dung. */
+    /** Chọn tên file để giữ lại giữa hai file trùng nội dung. */
     private static String preferredFileName(String a, String b) {
         int scoreA = nameScore(a);
         int scoreB = nameScore(b);
@@ -190,8 +201,8 @@ public class TimelineBuilder {
     }
 
     /**
-     * Thu tu tat dinh. Tie-break den tan so dong de ket qua khong doi giua cac lan chay —
-     * thu tu doi se lam Evidence ID nhay va pha tinh nhat quan do o Sprint 2.
+     * Thứ tự tất định. Tie-break đến tận số dòng để kết quả không đổi giữa các lần chạy —
+     * thứ tự đổi sẽ làm Evidence ID nhảy và phá tính nhất quán đo ở Sprint 2.
      */
     private static final Comparator<CanonicalEvent> MAIN_TRACK_ORDER =
             Comparator.comparingLong((CanonicalEvent e) -> e.time().sortKeyNanos())

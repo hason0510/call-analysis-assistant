@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * In bo chi so cua mot hoac nhieu cuoc goi.
+ * In bộ chỉ số của một hoặc nhiều cuộc gọi.
  *
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--metrics=../ai20k_sample/success/DE7DD314-..."
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--metrics-all=../ai20k_sample"
@@ -62,18 +62,18 @@ public class MetricsCommand implements ApplicationRunner {
     private void printOne(Path folder) {
         CallMetrics metrics = metricsOf(folder);
         log.info("Call-ID: {}", metrics.callId());
-        log.info("{}", String.format("%-34s %s", "CHI SO", "GIA TRI"));
+        log.info("{}", String.format("%-34s %s", "CHỈ SỐ", "GIÁ TRỊ"));
         log.info("{}", "-".repeat(96));
         for (CallMetric m : metrics.metrics()) {
             log.info("{}", String.format("%-34s %s", m.label(), m.value().display()));
         }
         log.info("{}", "-".repeat(96));
-        log.info("Tinh duoc {} / {} chi so", metrics.availableCount(), metrics.metrics().size());
+        log.info("Tính được {} / {} chỉ số", metrics.availableCount(), metrics.metrics().size());
     }
 
     private void printAll(Path root) throws IOException {
         log.info("{}", String.format("%-10s %-10s %10s %10s %10s %9s %8s %8s",
-                "NHOM", "CALL-ID", "SETUP", "RING", "DURATION", "END", "MOS", "LOSS%"));
+                "NHÓM", "CALL-ID", "SETUP", "RING", "DURATION", "END", "MOS", "LOSS%"));
         log.info("{}", "-".repeat(84));
         for (Path folder : findCallFolders(root)) {
             CallMetrics m = metricsOf(folder);
@@ -99,7 +99,7 @@ public class MetricsCommand implements ApplicationRunner {
                                      io.hason.callanalysis.domain.metrics.MetricKey key) {
         return metrics.find(key)
                 .map(m -> m.value() instanceof io.hason.callanalysis.domain.metrics.MetricValue.NotAvailable
-                        ? "N/A" : m.value().display().replace(" ms", "").replace(" lan", ""))
+                        ? "N/A" : m.value().display().replace(" ms", "").replace(" lần", ""))
                 .orElse("-");
     }
 

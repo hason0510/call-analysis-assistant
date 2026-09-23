@@ -8,9 +8,9 @@ import io.hason.callanalysis.domain.taxonomy.Verdict;
 import java.util.List;
 
 /**
- * Report theo mau MVP muc 4.5. Khop 1-1 voi resources/schema/report-v1.schema.json.
+ * Report theo mẫu MVP mục 4.5. Khớp 1-1 với resources/schema/report-v1.schema.json.
  *
- * Sprint 2: AI chi duoc dien field cua record nay, bo cuc do code dung (MVP muc 3.2).
+ * Sprint 2: AI chỉ được điền field của record này, bố cục do code dựng (MVP mục 3.2).
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record CallReport(
@@ -38,7 +38,7 @@ public record CallReport(
     public record EvidenceEntry(String id, String source, String timestamp,
                                 String description, String sourceRef) {}
 
-    /** value va naReason loai tru nhau — schema ep bang oneOf. */
+    /** value và naReason loại trừ nhau — schema ép bằng oneOf. */
     public record MetricEntry(String name, String value, String unit,
                               String naReason, String source) {}
 

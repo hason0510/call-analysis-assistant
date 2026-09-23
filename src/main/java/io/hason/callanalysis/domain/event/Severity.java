@@ -1,6 +1,6 @@
 package io.hason.callanalysis.domain.event;
 
-/** Signaling chi sinh INFO va WARN; ERROR chua tung xuat hien trong data mau. */
+/** Signaling chỉ sinh INFO và WARN; ERROR chưa từng xuất hiện trong data mẫu. */
 public enum Severity {
     INFO,
     WARN,

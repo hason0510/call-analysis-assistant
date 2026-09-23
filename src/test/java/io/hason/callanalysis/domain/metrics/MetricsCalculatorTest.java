@@ -85,10 +85,10 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("khoang thoi gian tinh o do chinh xac NANO roi moi cat ve mili")
+    @DisplayName("khoảng thời gian tính ở độ chính xác NANO rồi mới cắt về mili")
     void durationsUseNanosecondPrecision() {
-        // Cat tung Instant ve mili truoc khi tru se ra 8582 thay vi 8581.
-        // Loi nay tung xuat hien tren 5/20 cuoc goi that.
+        // Cắt từng Instant về mili trước khi trừ sẽ ra 8582 thay vì 8581.
+        // Lỗi này từng xuất hiện trên 5/20 cuộc gọi thật.
         CallTimeline timeline = timelineOf(List.of(
                 sig("2026-09-21T08:00:00.999999000Z", "INIT_CALL", Leg.CALLER),
                 sig("2026-09-21T08:00:09.581000000Z", "OK_ACK_OK", Leg.CALLEE)));
@@ -98,10 +98,10 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("dem so LAN GUI, khong dem so dong log — gom cum theo khoang 250 ms")
+    @DisplayName("đếm số LẦN GỬI, không đếm số dòng log — gom cụm theo khoảng 250 ms")
     void retransmissionsCountTransmissionsNotLogLines() {
-        // Tai hien EE129C8F: 10 su kien INVITE nhung chi 4 lan gui that su,
-        // cach nhau 0,5s / 1,0s / 2,0s theo exponential backoff.
+        // Tái hiện EE129C8F: 10 sự kiện INVITE nhưng chỉ 4 lần gửi thật sự,
+        // cách nhau 0,5s / 1,0s / 2,0s theo exponential backoff.
         List<CanonicalEvent> events = new ArrayList<>();
         long[] clusters = {0, 500, 1500, 3500};
         for (long base : clusters) {
@@ -112,13 +112,13 @@ class MetricsCalculatorTest {
 
         assertThat(calculator.calculate(timelineOf(events))
                 .valueOf(MetricKey.INVITE_RETRANSMISSIONS).display())
-                .isEqualTo("3 lan");
+                .isEqualTo("3 lần");
     }
 
     @Test
-    @DisplayName("mot lan gui duy nhat voi nhieu dong log -> 0 lan gui lai")
+    @DisplayName("một lần gửi duy nhất với nhiều dòng log -> 0 lần gửi lại")
     void singleTransmissionMeansZeroRetransmissions() {
-        // Tai hien 1B009D42: 10 su kien INIT_CALL trong 16 ms — mot lan gui.
+        // Tái hiện 1B009D42: 10 sự kiện INIT_CALL trong 16 ms — một lần gửi.
         List<CanonicalEvent> events = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             events.add(sigAt(i * 2L, "INIT_CALL", Leg.CALLER));
@@ -130,7 +130,7 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("ben ket thuc lay tu leg cua BYE dau tien")
+    @DisplayName("bên kết thúc lấy từ leg của BYE đầu tiên")
     void terminatedByComesFromFirstBye() {
         CallTimeline timeline = timelineOf(List.of(
                 sigAt(0, "INIT_CALL", Leg.CALLER),
@@ -142,9 +142,9 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("chi so chat luong doc tu ban ghi call summary, jitter doi giay sang mili")
+    @DisplayName("chỉ số chất lượng đọc từ bản ghi call summary, jitter đổi giây sang mili")
     void qualityMetricsReadFromCallSummary() {
-        // Gia tri that cua EE129C8F callee.
+        // Giá trị thật của EE129C8F callee.
         CallTimeline timeline = timelineOf(List.of(
                 sigAt(0, "INIT_CALL", Leg.CALLER),
                 summary(Leg.CALLEE, Map.of(
@@ -164,9 +164,9 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("RTT lay currentRttMs, KHONG lay rttMs vi do la gia tri tich luy")
+    @DisplayName("RTT lấy currentRttMs, KHÔNG lấy rttMs vì đó là giá trị tích luỹ")
     void rttUsesCurrentNotCumulative() {
-        // DE7DD314: rttMs = 8385 trong khi RTT that la 63.
+        // DE7DD314: rttMs = 8385 trong khi RTT thật là 63.
         CallTimeline timeline = timelineOf(List.of(
                 sigAt(0, "INIT_CALL", Leg.CALLER),
                 summary(Leg.CALLEE, Map.of("transport.rttMs", "8385", "transport.currentRttMs", "63"))));
@@ -176,26 +176,26 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("thieu du lieu tra N/A kem ly do CU THE, khong bao gio ve 0")
+    @DisplayName("thiếu dữ liệu trả N/A kèm lý do CỤ THỂ, không bao giờ về 0")
     void missingDataNeverBecomesZero() {
         CallMetrics metrics = calculator.calculate(timelineOf(List.of(
                 sigAt(0, "INIT_CALL", Leg.CALLER))));
 
-        // Khong co end call log
+        // Không có end call log
         assertThat(metrics.find(MetricKey.MOS, Leg.CALLEE)).get()
                 .extracting(m -> m.value().display())
-                .asString().contains("khong co end call log");
+                .asString().contains("không có end call log");
 
-        // Cuoc goi chet som truoc khi dat OK_ACK_OK
+        // Cuộc gọi chết sớm trước khi đạt OK_ACK_OK
         assertThat(metrics.valueOf(MetricKey.SETUP_TIME).display())
-                .contains("khong dat toi OK_ACK_OK");
+                .contains("không đạt tới OK_ACK_OK");
 
-        // Chi so MVP yeu cau nhung data khong ho tro
+        // Chỉ số MVP yêu cầu nhưng data không hỗ trợ
         assertThat(metrics.valueOf(MetricKey.NO_SESSIONS_FOUND).display())
-                .contains("khong co truong text");
+                .contains("không có trường text");
 
-        // Chi so DEM duoc phep bang 0 — "dem duoc va bang 0" khac "khong do duoc".
-        // Cac chi so DO LUONG thi khong bao gio duoc mac dinh ve 0.
+        // Chỉ số ĐẾM được phép bằng 0 — "đếm được và bằng 0" khác "không đo được".
+        // Các chỉ số ĐO LƯỜNG thì không bao giờ được mặc định về 0.
         List<MetricKey> countingKeys = List.of(
                 MetricKey.INVITE_RETRANSMISSIONS, MetricKey.BYE_RETRANSMISSIONS,
                 MetricKey.WARN_COUNT_BY_SERVICE, MetricKey.ERROR_COUNT_BY_SERVICE);
@@ -207,7 +207,7 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("ICE bao trang thai DAT DUOC — cuoc goi tot ket thuc o disconnected van la connected")
+    @DisplayName("ICE báo trạng thái ĐẠT ĐƯỢC — cuộc gọi tốt kết thúc ở disconnected vẫn là connected")
     void iceReportsStateReachedNotFinalState() {
         CanonicalEvent connected = new CanonicalEvent("w#1", "CALL-1", Leg.CALLEE, LogSource.WEBRTC,
                 EventTime.relative(java.time.Duration.ofMillis(1000)), EventType.ICE_EVENT,
@@ -224,7 +224,7 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("ICE that bai thi bao failed")
+    @DisplayName("ICE thất bại thì báo failed")
     void iceFailureIsReported() {
         CanonicalEvent failed = new CanonicalEvent("w#1", "CALL-1", Leg.CALLEE, LogSource.WEBRTC,
                 EventTime.relative(java.time.Duration.ofMillis(20195)), EventType.ICE_EVENT,
@@ -237,7 +237,7 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("T11: khoang trong PAIR_PING lon nhat, danh dau la chi so PROXY")
+    @DisplayName("T11: khoảng trống PAIR_PING lớn nhất, đánh dấu là chỉ số PROXY")
     void maxPairPingGapIsMarkedAsProxy() {
         CallTimeline timeline = timelineOf(List.of(
                 sigAt(0, "PAIR_PING", Leg.CALLER),
@@ -251,19 +251,19 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("T11: duoi 2 PAIR_PING thi khong do duoc khoang trong")
+    @DisplayName("T11: dưới 2 PAIR_PING thì không đo được khoảng trống")
     void singlePairPingCannotMeasureGap() {
         CallTimeline timeline = timelineOf(List.of(sigAt(0, "PAIR_PING", Leg.CALLER)));
 
         assertThat(calculator.calculate(timeline)
                 .find(MetricKey.MAX_PAIR_PING_GAP, Leg.CALLER).orElseThrow()
-                .value().display()).contains("chi co 1 PAIR_PING");
+                .value().display()).contains("chỉ có 1 PAIR_PING");
     }
 
     @Test
-    @DisplayName("T11: WARN dem theo service, KHONG duoc coi la tin hieu loi")
+    @DisplayName("T11: WARN đếm theo service, KHÔNG được coi là tín hiệu lỗi")
     void warnIsCountedButNotTreatedAsError() {
-        // 223/1059 su kien trong data mau la WARN, co ca o cuoc goi thanh cong.
+        // 223/1059 sự kiện trong data mẫu là WARN, có cả ở cuộc gọi thành công.
         CallTimeline timeline = timelineOf(List.of(
                 sigWarn(0, "INIT_CALL", "SVC-A"),
                 sigWarn(10, "INIT_CALL", "SVC-A"),
@@ -272,11 +272,11 @@ class MetricsCalculatorTest {
         assertThat(calculator.calculate(timeline).valueOf(MetricKey.WARN_COUNT_BY_SERVICE).display())
                 .isEqualTo("3 (SVC-A=2, SVC-B=1)");
         assertThat(calculator.calculate(timeline).valueOf(MetricKey.ERROR_COUNT_BY_SERVICE).display())
-                .isEqualTo("0 lan");
+                .isEqualTo("0 lần");
     }
 
     @Test
-    @DisplayName("T11: ISP/ASN/quoc gia lay theo tung leg")
+    @DisplayName("T11: ISP/ASN/quốc gia lấy theo từng leg")
     void networkContextIsPerLeg() {
         CallTimeline timeline = timelineOf(List.of(
                 sigCtx(0, "INIT_CALL", Leg.CALLER, "MOBIFONE", "AS131429", "VN"),
@@ -290,17 +290,17 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("T11: latency API noi bo lay tu truong latencyMs cua INIT_CALL")
+    @DisplayName("T11: latency API nội bộ lấy từ trường latencyMs của INIT_CALL")
     void internalApiLatencyFromInitCall() {
         CallTimeline timeline = timelineOf(List.of(
                 sigLatency(0, 12), sigLatency(10, 16), sigLatency(20, 17)));
 
         assertThat(calculator.calculate(timeline).valueOf(MetricKey.INTERNAL_API_LATENCY).display())
-                .isEqualTo("max 17 ms, trung vi 16 ms (3 mau)");
+                .isEqualTo("max 17 ms, trung vị 16 ms (3 mẫu)");
     }
 
     @Test
-    @DisplayName("timeline rong khong lam crash, moi chi so deu N/A")
+    @DisplayName("timeline rỗng không làm crash, mọi chỉ số đều N/A")
     void emptyTimelineIsSafe() {
         CallMetrics metrics = calculator.calculate(timelineOf(List.of()));
 

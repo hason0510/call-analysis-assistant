@@ -16,14 +16,14 @@ import java.util.List;
 /**
  * Adapter Elasticsearch cho {@link SignalingSource}.
  *
- * Lop nay chi lam viec co hoc: truy van va anh xa document sang record tho.
- * Moi viec chuan hoa (parse timestamp, suy ra leg, gan EventType) thuoc tang domain,
- * nho vay chung test duoc ma khong can Elasticsearch.
+ * Lớp này chỉ làm việc cơ học: truy vấn và ánh xạ document sang record thô.
+ * Mọi việc chuẩn hoá (parse timestamp, suy ra leg, gán EventType) thuộc tầng domain,
+ * nhờ vậy chúng test được mà không cần Elasticsearch.
  */
 @Component
 public class ElasticsearchSignalingSource implements SignalingSource {
 
-    /** Cuoc goi nhieu event nhat trong data mau co 200 event; 10 000 la du rong. */
+    /** Cuộc gọi nhiều event nhất trong data mẫu có 200 event; 10 000 là đủ rộng. */
     private static final int MAX_EVENTS = 10_000;
 
     private final ElasticsearchClient client;
@@ -39,7 +39,7 @@ public class ElasticsearchSignalingSource implements SignalingSource {
                             .index(SignalingIndex.NAME)
                             .size(MAX_EVENTS)
                             .query(q -> q.term(t -> t.field("callId").value(callId)))
-                            // sap xep tat dinh: thoi gian truoc, roi thu tu goc trong file
+                            // sắp xếp tất định: thời gian trước, rồi thứ tự gốc trong file
                             .sort(so -> so.field(f -> f.field("@timestamp").order(SortOrder.Asc)))
                             .sort(so -> so.field(f -> f.field("ordinal").order(SortOrder.Asc))),
                     SignalingDocument.class);
@@ -62,7 +62,7 @@ public class ElasticsearchSignalingSource implements SignalingSource {
                     first.sourceTotalMatching());
 
         } catch (IOException e) {
-            throw new UncheckedIOException("Khong truy van duoc signaling cho callId=" + callId, e);
+            throw new UncheckedIOException("Không truy vấn được signaling cho callId=" + callId, e);
         }
     }
 

@@ -57,7 +57,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("su kien co gio tuyet doi vao main track, WebRTC tach thanh track rieng")
+    @DisplayName("sự kiện có giờ tuyệt đối vào main track, WebRTC tách thành track riêng")
     void relativeEventsGoToSeparateTracks() {
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 signaling(0, "2026-09-21T08:00:01Z", "INIT_CALL", Leg.CALLER),
@@ -72,7 +72,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("main track sap xep theo thoi gian, tron ngau nhien dau vao van cho cung ket qua")
+    @DisplayName("main track sắp xếp theo thời gian, trộn ngẫu nhiên đầu vào vẫn cho cùng kết quả")
     void mainTrackOrderIsStableRegardlessOfInputOrder() {
         List<CanonicalEvent> events = new ArrayList<>(List.of(
                 signaling(2, "2026-09-21T08:00:03Z", "RINGING", Leg.CALLEE),
@@ -89,9 +89,9 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("dong log lap lai trong cung file KHONG bi coi la trung — libwebrtc ghi that")
+    @DisplayName("dòng log lặp lại trong cùng file KHÔNG bị coi là trùng — libwebrtc ghi thật")
     void repeatedLinesInSameFileAreKept() {
-        // "TLS server done" that su xuat hien 3 lan cung mili giay trong data mau.
+        // "TLS server done" thật sự xuất hiện 3 lần cùng mili giây trong data mẫu.
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 webRtc("caller_webrtc.log", 10, 6661648, "TLS server done", "android"),
                 webRtc("caller_webrtc.log", 11, 6661648, "TLS server done", "android"),
@@ -103,7 +103,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("cung su kien o signaling va end call log la HAI GOC NHIN, giu ca hai")
+    @DisplayName("cùng sự kiện ở signaling và end call log là HAI GÓC NHÌN, giữ cả hai")
     void sameEventFromTwoSourcesIsKept() {
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 signaling(0, "2026-09-21T08:00:01Z", "INVITE", Leg.CALLER),
@@ -117,7 +117,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("cung mot file dinh kem hai lan duoi hai ten -> bo file thu hai")
+    @DisplayName("cùng một file đính kèm hai lần dưới hai tên -> bỏ file thứ hai")
     void duplicateAttachmentIsDropped() {
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 webRtc("caller_webrtc.log", 1, 100, "mot", "android"),
@@ -134,10 +134,10 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("trung noi dung thi giu ten DUNG QUY UOC, khong giu ten dung truoc bang chu cai")
+    @DisplayName("trùng nội dung thì giữ tên ĐÚNG QUY ƯỚC, không giữ tên đứng trước bảng chữ cái")
     void duplicateKeepsConventionalFileName() {
-        // "ban_sao.log" dung truoc "callee_webrtc.log" theo thu tu chu cai, nhung giu no
-        // se khien evidence trich dan ten file vo nghia.
+        // "ban_sao.log" đứng trước "callee_webrtc.log" theo thứ tự chữ cái, nhưng giữ nó
+        // sẽ khiến evidence trích dẫn tên file vô nghĩa.
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 webRtc("ban_sao.log", 1, 100, "mot", "ios"),
                 webRtc("ban_sao.log", 2, 200, "hai", "ios"),
@@ -154,9 +154,9 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("file WebRTC sai ten duoc gan lai leg theo platform, khong theo ten")
+    @DisplayName("file WebRTC sai tên được gán lại leg theo platform, không theo tên")
     void misnamedWebRtcFileIsRetaggedByContent() {
-        // Tai hien `calleer_webrtc.log` trong data mau: ten goi y CALLEE, thuc te la CALLER.
+        // Tái hiện `calleer_webrtc.log` trong data mẫu: tên gợi ý CALLEE, thực tế là CALLER.
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 metadata("caller_endcall.log", "caller", "android"),
                 metadata("callee_endcall.log", "callee", "ios"),
@@ -171,7 +171,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("WebRTC log luon sinh ghi chu ve moc thoi gian tuong doi")
+    @DisplayName("WebRTC log luôn sinh ghi chú về mốc thời gian tương đối")
     void relativeTrackAlwaysProducesLimitationNote() {
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 webRtc("caller_webrtc.log", 1, 100, "x", "android")), LegAssignment.unknown());
@@ -179,11 +179,11 @@ class TimelineBuilderTest {
         assertThat(timeline.notes())
                 .filteredOn(n -> n.kind() == TimelineNote.Kind.RELATIVE_TRACK)
                 .singleElement()
-                .satisfies(n -> assertThat(n.message()).contains("chua dong bo duoc"));
+                .satisfies(n -> assertThat(n.message()).contains("chưa đồng bộ được"));
     }
 
     @Test
-    @DisplayName("danh sach su kien rong van tra ve timeline hop le kem ghi chu")
+    @DisplayName("danh sách sự kiện rỗng vẫn trả về timeline hợp lệ kèm ghi chú")
     void emptyInputIsSafe() {
         CallTimeline timeline = builder.build("CALL-1", List.of(), LegAssignment.unknown());
 
@@ -193,7 +193,7 @@ class TimelineBuilderTest {
     }
 
     @Test
-    @DisplayName("tien ich tra cuu lenh signaling dung cho T6")
+    @DisplayName("tiện ích tra cứu lệnh signaling dùng cho T6")
     void signalingLookupHelpers() {
         CallTimeline timeline = builder.build("CALL-1", List.of(
                 signaling(0, "2026-09-21T08:00:01Z", "INVITE", Leg.CALLER),

@@ -20,7 +20,7 @@ class WebRtcLogParserTest {
     private final ParseContext context = ParseContext.of("caller_webrtc.log", "CALL-1", Leg.CALLER);
 
     @Test
-    @DisplayName("Format 2 (Android): tach duoc module, thread va so dong nguon")
+    @DisplayName("Format 2 (Android): tách được module, thread và số dòng nguồn")
     void parsesAndroidFormat() {
         ParseResult result = parser.parse(List.of(
                 "peer_connection.cc: [6652:957][12108] (line 659): PeerConnection create with session: 647513"),
@@ -36,7 +36,7 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("Format 1 (iOS): khoi thoi gian dung dau dong")
+    @DisplayName("Format 1 (iOS): khối thời gian đứng đầu dòng")
     void parsesIosFormat() {
         ParseResult result = parser.parse(List.of(
                 "[4712:147][260115] (RTCLogging.mm:34): Incrementing activation count."), context);
@@ -48,7 +48,7 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("iOS: log C++ goc thi ngoac dau tien da la nguon that")
+    @DisplayName("iOS: log C++ gốc thì ngoặc đầu tiên đã là nguồn thật")
     void iosNativeLogUsesFirstParenthesis() {
         ParseResult result = parser.parse(List.of(
                 "[6661:424][259] (connection.cc:1824): Conn[8dcc6e10CRWS]: Sent STUN BINDING request"), context);
@@ -60,9 +60,9 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("iOS: log Objective-C di qua wrapper -> lay nguon o ngoac THU HAI")
+    @DisplayName("iOS: log Objective-C đi qua wrapper -> lấy nguồn ở ngoặc THỨ HAI")
     void iosWrappedLogUsesNestedOrigin() {
-        // 691 dong trong data mau di qua RTCLogging.mm:34 — hang so khong mang thong tin.
+        // 691 dòng trong data mẫu đi qua RTCLogging.mm:34 — hằng số không mang thông tin.
         ParseResult result = parser.parse(List.of(
                 "[4712:147][260115] (RTCLogging.mm:34): (RTCAudioSession.mm:680 "
                         + "-[RTCAudioSession incrementActivationCount]): Incrementing activation count."),
@@ -76,7 +76,7 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("moc thoi gian la TUONG DOI, khong phai gio tuyet doi")
+    @DisplayName("mốc thời gian là TƯƠNG ĐỐI, không phải giờ tuyệt đối")
     void timeIsRelativeNotAbsolute() {
         ParseResult result = parser.parse(List.of(
                 "peer_connection.cc: [6652:957][12108] (line 659): x"), context);
@@ -88,9 +88,9 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("truong giay co do rong bien thien: [000:000] va [6652:953] deu doc duoc")
+    @DisplayName("trường giây có độ rộng biến thiên: [000:000] và [6652:953] đều đọc được")
     void secondsFieldHasVariableWidth() {
-        // Bay that: regex \d{3} chi khop [000:000] va bo sot phan lon du lieu.
+        // Bẫy thật: regex \d{3} chỉ khớp [000:000] và bỏ sót phần lớn dữ liệu.
         ParseResult result = parser.parse(List.of(
                 "[000:000][259] (RTCLogging.mm:34): bat dau",
                 "[6652:953][259] (RTCLogging.mm:34): gan hai gio sau"), context);
@@ -103,9 +103,9 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("dong noi tiep duoc gop vao ban ghi truoc, khong sinh event rieng")
+    @DisplayName("dòng nối tiếp được gộp vào bản ghi trước, không sinh event riêng")
     void continuationLinesAreFolded() {
-        // 22% so dong trong data mau (5 966/26 712) la dong noi tiep kieu nay.
+        // 22% số dòng trong data mẫu (5 966/26 712) là dòng nối tiếp kiểu này.
         ParseResult result = parser.parse(List.of(
                 "[000:002][259] (RTCLogging.mm:34): Previous route: <AVAudioSessionRouteDescription: 0x127a93c30,",
                 "inputs = (",
@@ -121,12 +121,12 @@ class WebRtcLogParserTest {
         CanonicalEvent first = result.events().getFirst();
         assertThat(first.attribute("message")).contains("inputs = (").contains("Loa ngoai");
         assertThat(first.sourceRef().rawLine().lines().count()).isEqualTo(6);
-        // so dong tro ve dong BAT DAU ban ghi, khong phai dong cuoi
+        // số dòng trỏ về dòng BẮT ĐẦU bản ghi, không phải dòng cuối
         assertThat(first.sourceRef().lineNumber()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("dong noi tiep mo coi o dau file -> canh bao, khong throw")
+    @DisplayName("dòng nối tiếp mồ côi ở đầu file -> cảnh báo, không throw")
     void orphanContinuationIsWarned() {
         ParseResult result = parser.parse(List.of(
                 "day la phan duoi cua ban ghi bi cat mat",
@@ -134,11 +134,11 @@ class WebRtcLogParserTest {
 
         assertThat(result.events()).hasSize(1);
         assertThat(result.warnings()).hasSize(1);
-        assertThat(result.warnings().getFirst().reason()).contains("mo coi");
+        assertThat(result.warnings().getFirst().reason()).contains("mồ côi");
     }
 
     @Test
-    @DisplayName("chuyen trang thai ICE duoc tach thanh thuoc tinh, that bai danh dau ERROR")
+    @DisplayName("chuyển trạng thái ICE được tách thành thuộc tính, thất bại đánh dấu ERROR")
     void iceStateTransitionIsExtracted() {
         ParseResult result = parser.parse(List.of(
                 "peer_connection.cc: [20:195][8431] (line 2032): Changing IceConnectionState checking => failed",
@@ -157,11 +157,11 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("dong TURN chi duoc PHAN LOAI, KHONG bi ket luan la loi")
+    @DisplayName("dòng TURN chỉ được PHÂN LOẠI, KHÔNG bị kết luận là lỗi")
     void turnLinesAreClassifiedNotJudged() {
-        // "allocate error response code=401" la buoc bat tay xac thuc chuan cua TURN.
-        // Tren data mau: 73 dong error va dung 73 dong allocate thanh cong.
-        // Ket luan loi hay khong thuoc tang rule, khong phai tang parser.
+        // "allocate error response code=401" là bước bắt tay xác thực chuẩn của TURN.
+        // Trên data mẫu: 73 dòng error và đúng 73 dòng allocate thành công.
+        // Kết luận lỗi hay không thuộc tầng rule, không phải tầng parser.
         ParseResult result = parser.parse(List.of(
                 "turn_port.cc: [0:114][8429] (line 1687): TurnPort(Port[x]-Remote[1.2.3.4:3478/udp]: "
                         + "Received TURN allocate error response, id=616c, code=401"), context);
@@ -172,7 +172,7 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("input rac / rong / dong cuc dai khong lam crash parser")
+    @DisplayName("input rác / rỗng / dòng cực dài không làm crash parser")
     void invalidInputNeverThrows() {
         assertThatCode(() -> {
             assertThat(parser.parse(List.of(), context).events()).isEmpty();
@@ -184,7 +184,7 @@ class WebRtcLogParserTest {
     }
 
     @Test
-    @DisplayName("ket qua tat dinh: cung input cho ra cung danh sach eventId")
+    @DisplayName("kết quả tất định: cùng input cho ra cùng danh sách eventId")
     void parsingIsDeterministic() {
         List<String> lines = List.of(
                 "[000:000][259] (RTCLogging.mm:34): mot",

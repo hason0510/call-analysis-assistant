@@ -1,6 +1,6 @@
 package io.hason.callanalysis.domain.parse;
 
-/** Mot dong khong doc duoc. Parser ghi lai roi di tiep, KHONG bao gio throw. */
+/** Một dòng không đọc được. Parser ghi lại rồi đi tiếp, KHÔNG bao giờ throw. */
 public record ParseWarning(String fileName, int lineNumber, String reason) {
 
     public String describe() {

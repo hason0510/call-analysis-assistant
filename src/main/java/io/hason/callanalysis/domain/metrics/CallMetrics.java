@@ -21,7 +21,7 @@ public record CallMetrics(String callId, List<CallMetric> metrics) {
 
     public MetricValue valueOf(MetricKey key) {
         return find(key).map(CallMetric::value)
-                .orElseGet(() -> MetricValue.unavailable("chua tinh chi so nay"));
+                .orElseGet(() -> MetricValue.unavailable("chưa tính chỉ số này"));
     }
 
     public long availableCount() {

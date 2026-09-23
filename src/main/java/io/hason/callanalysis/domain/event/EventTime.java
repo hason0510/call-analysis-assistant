@@ -4,13 +4,13 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Ba nguon log dung ba he thoi gian khac nhau, khong cung goc:
- *   signaling.json   -> ISO-8601 UTC, nano giay          -> Absolute(SERVER)
- *   *_endcall.log    -> epoch millis, dong ho client     -> Absolute(CLIENT_*)
- *   *_webrtc.log     -> [giay:mili] tu luc log khoi tao  -> Relative
+ * Ba nguồn log dùng ba hệ thời gian khác nhau, không cùng gốc:
+ *   signaling.json   -> ISO-8601 UTC, nano giây          -> Absolute(SERVER)
+ *   *_endcall.log    -> epoch millis, đồng hồ client     -> Absolute(CLIENT_*)
+ *   *_webrtc.log     -> [giây:mili] từ lúc log khởi tạo  -> Relative
  *
- * WebRTC log KHONG co gio tuyet doi. Ep no ve Instant bang cach doan goc thoi gian
- * la bia so lieu, nen kieu duoc tach tuong minh de compiler bat phai xu ly ca hai nhanh.
+ * WebRTC log KHÔNG có giờ tuyệt đối. Ép nó về Instant bằng cách đoán gốc thời gian
+ * là bịa số liệu, nên kiểu được tách tường minh để compiler bắt phải xử lý cả hai nhánh.
  */
 public sealed interface EventTime {
 
@@ -26,7 +26,7 @@ public sealed interface EventTime {
         return new Relative(sinceLogStart);
     }
 
-    /** Khoa sap xep on dinh: event tuyet doi luon dung truoc event tuong doi. */
+    /** Khoá sắp xếp ổn định: event tuyệt đối luôn đứng trước event tương đối. */
     default long sortKeyNanos() {
         return switch (this) {
             case Absolute a -> a.instant().getEpochSecond() * 1_000_000_000L + a.instant().getNano();

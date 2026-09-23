@@ -19,10 +19,10 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Doc cac file signaling.json trong thu muc data mau va nap vao Elasticsearch local.
+ * Đọc các file signaling.json trong thư mục data mẫu và nạp vào Elasticsearch local.
  *
- * Import la idempotent: _id duoc suy ra tat dinh tu (callId, ordinal), nen chay lai
- * nhieu lan khong sinh ban ghi trung — dung yeu cau "lap lai duoc" cua MVP muc 5.1 T1.
+ * Import là idempotent: _id được suy ra tất định từ (callId, ordinal), nên chạy lại
+ * nhiều lần không sinh bản ghi trùng — đúng yêu cầu "lặp lại được" của MVP mục 5.1 T1.
  */
 @Component
 public class SignalingImporter {
@@ -43,7 +43,7 @@ public class SignalingImporter {
     public ImportReport importFrom(Path root) throws IOException {
         List<Path> files = findSignalingFiles(root);
         if (files.isEmpty()) {
-            return new ImportReport(0, 0, List.of("Khong tim thay file " + FILE_NAME + " nao duoi " + root));
+            return new ImportReport(0, 0, List.of("Không tìm thấy file " + FILE_NAME + " nào dưới " + root));
         }
 
         List<String> problems = new ArrayList<>();
@@ -88,7 +88,7 @@ public class SignalingImporter {
         }
         long failed = response.items().stream().filter(i -> i.error() != null).count();
         int indexed = docs.size() - (int) failed;
-        log.info("Da nap {} document ({} loi).", indexed, failed);
+        log.info("Đã nạp {} document ({} lỗi).", indexed, failed);
         return indexed;
     }
 }

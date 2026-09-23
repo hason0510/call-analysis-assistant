@@ -3,13 +3,18 @@ spring:
     name: call-analysis-assistant
   main:
     banner-mode: "off"
-    web-application-type: none          # Sprint 1 chua co web UI (MVP muc 1.5)
+    web-application-type: none          # Sprint 1 chưa có web UI (MVP mục 1.5)
   elasticsearch:
     uris: http://localhost:9200
     connection-timeout: 5s
     socket-timeout: 30s
 
 logging:
+  # Output là tiếng Việt có dấu (MVP mục 4.5). Ghim tường minh UTF-8 cho console
+  # thay vì để Logback lấy charset mặc định của máy: trên Windows charset mặc định
+  # có thể là bảng mã cũ, và khi đó mọi chữ có dấu bị thay bằng "?".
+  charset:
+    console: UTF-8
   level:
     root: WARN
     io.hason.callanalysis: INFO

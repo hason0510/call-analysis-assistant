@@ -11,24 +11,24 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Xac dinh file log thuoc ve ben nao.
+ * Xác định file log thuộc về bên nào.
  *
- * Ten file khong dang tin: data mau co `calleer_webrtc.log` (thua chu 'e') ma thuc chat
- * la log cua CALLER. Cach xac dinh dung la doi chieu noi dung:
+ * Tên file không đáng tin: data mẫu có `calleer_webrtc.log` (thừa chữ 'e') mà thực chất
+ * là log của CALLER. Cách xác định đúng là đối chiếu nội dung:
  *
- *   1. End call log tu khai bao — ban ghi #H1 co cot `role` (caller/callee) va `platform`.
- *   2. WebRTC log khong co `role`, nhung format cua no cho biet nen tang
- *      (Format 1 = iOS, Format 2 = Android). Ghep platform do voi platform cua end call log
- *      la ra chu so huu.
- *   3. Hai ben cung nen tang thi khong phan biet duoc — luc do moi quay ve goi y tu ten file,
- *      va danh dau do tin cay thap hon.
+ *   1. End call log tự khai báo — bản ghi #H1 có cột `role` (caller/callee) và `platform`.
+ *   2. WebRTC log không có `role`, nhưng format của nó cho biết nền tảng
+ *      (Format 1 = iOS, Format 2 = Android). Ghép platform đó với platform của end call log
+ *      là ra chủ sở hữu.
+ *   3. Hai bên cùng nền tảng thì không phân biệt được — lúc đó mới quay về gợi ý từ tên file,
+ *      và đánh dấu độ tin cậy thấp hơn.
  */
 public class LegCorrelator {
 
     private static final String ROLE = "role";
     private static final String PLATFORM = "platform";
 
-    /** Ket qua: leg cua tung file, va do tin cay cua ket luan do. */
+    /** Kết quả: leg của từng file, và độ tin cậy của kết luận đó. */
     public record FileLeg(String fileName, Leg leg, String platform,
                           RelativeTrack.LegConfidence confidence) {}
 
@@ -62,7 +62,7 @@ public class LegCorrelator {
                         : RelativeTrack.LegConfidence.FILE_NAME_ONLY);
     }
 
-    /** Ban ghi #H1 cua end call log tu khai bao role va platform — nguon chac chan nhat. */
+    /** Bản ghi #H1 của end call log tự khai báo role và platform — nguồn chắc chắn nhất. */
     private Map<String, FileLeg> legsFromEndCallMetadata(List<CanonicalEvent> events) {
         Map<String, FileLeg> byFile = new LinkedHashMap<>();
         for (CanonicalEvent e : events) {
@@ -104,7 +104,7 @@ public class LegCorrelator {
         };
     }
 
-    /** Chi dung khi khong con cach nao khac. `calleer_webrtc.log` se bi doan SAI o day. */
+    /** Chỉ dùng khi không còn cách nào khác. `calleer_webrtc.log` sẽ bị đoán SAI ở đây. */
     private static Leg legFromFileName(String fileName) {
         String lower = fileName.toLowerCase();
         if (lower.startsWith("caller")) {

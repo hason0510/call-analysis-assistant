@@ -24,7 +24,7 @@ class EndCallLogParserTest {
     private static final String H3 = "#H3\t#ts\t#tag\tackCmd\tcmd\tcseq\tpayload";
 
     @Test
-    @DisplayName("doc schema tu chinh file roi ghep ten cot voi gia tri")
+    @DisplayName("đọc schema từ chính file rồi ghép tên cột với giá trị")
     void readsSchemaFromFileItself() {
         ParseResult result = parser.parse(List.of(
                 H1,
@@ -42,7 +42,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("#ts la epoch millis, chuyen sang gio tuyet doi cua dong ho client")
+    @DisplayName("#ts là epoch millis, chuyển sang giờ tuyệt đối của đồng hồ client")
     void timestampIsEpochMillisOnClientClock() {
         ParseResult result = parser.parse(List.of(H2,
                 "2\t1789700842905\tlog_detail\t_emitOpening\tINVITE_RECEIVED\temit"), context);
@@ -55,22 +55,22 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("cot rong o CUOI dong khong bi mat — day la bay cua split(\"\\t\") thieu -1")
+    @DisplayName("cột rỗng ở CUỐI dòng không bị mất — đây là bẫy của split(\"\\t\") thiếu -1")
     void trailingEmptyColumnsAreNotDropped() {
-        // Dong nay co 3 gia tri cuoi deu rong. Neu dung split("\t") khong co -1,
-        // Java cat het cot rong o duoi va parser se bao lech cot.
+        // Dòng này có 3 giá trị cuối đều rỗng. Nếu dùng split("\t") không có -1,
+        // Java cắt hết cột rỗng ở đuôi và parser sẽ báo lệch cột.
         ParseResult result = parser.parse(List.of(H3,
                 "3\t1789700842905\tsend_cmd\tC_UNKNOWN\tTRYING\t\t"), context);
 
         assertThat(result.warnings()).isEmpty();
         CanonicalEvent e = result.events().getFirst();
         assertThat(e.name()).isEqualTo("TRYING");
-        // cot rong bi loai khoi attributes, nhung KHONG gay canh bao lech cot
+        // cột rỗng bị loại khỏi attributes, nhưng KHÔNG gây cảnh báo lệch cột
         assertThat(e.attributes()).doesNotContainKeys("cseq", "payload");
     }
 
     @Test
-    @DisplayName("khong co ban ghi #H9 van parse binh thuong — chi 2/16 file trong data mau co")
+    @DisplayName("không có bản ghi #H9 vẫn parse bình thường — chỉ 2/16 file trong data mẫu có")
     void missingHeadersAreFine() {
         ParseResult result = parser.parse(List.of(H1, H2,
                 "1\t1789700842873\tinfo\tU1\tCALL-1\tios\tcallee\tINIT",
@@ -81,7 +81,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("dong du lieu truoc khi co header tuong ung -> canh bao, khong throw")
+    @DisplayName("dòng dữ liệu trước khi có header tương ứng -> cảnh báo, không throw")
     void dataBeforeHeaderProducesWarning() {
         ParseResult result = parser.parse(List.of(
                 "7\t1789700842905\tstats\t4.42"), context);
@@ -92,19 +92,19 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("so cot lech -> van lay phan khop duoc, kem canh bao")
+    @DisplayName("số cột lệch -> vẫn lấy phần khớp được, kèm cảnh báo")
     void columnCountMismatchIsRecoverable() {
         ParseResult result = parser.parse(List.of(H2,
                 "2\t1789700842905\tlog_detail\tmsg\tANSWERED\temit\tTHUA\tTHEM"), context);
 
         assertThat(result.events()).hasSize(1);
         assertThat(result.warnings()).hasSize(1);
-        assertThat(result.warnings().getFirst().reason()).contains("so cot lech");
+        assertThat(result.warnings().getFirst().reason()).contains("số cột lệch");
         assertThat(result.events().getFirst().attribute("status")).isEqualTo("ANSWERED");
     }
 
     @Test
-    @DisplayName("timestamp hong -> bo dong do kem canh bao, cac dong khac van doc")
+    @DisplayName("timestamp hỏng -> bỏ dòng đó kèm cảnh báo, các dòng khác vẫn đọc")
     void malformedTimestampSkipsOnlyThatLine() {
         ParseResult result = parser.parse(List.of(H2,
                 "2\tKHONG-PHAI-SO\tlog_detail\tmsg\tANSWERED\temit",
@@ -116,7 +116,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("callId trong file khac callId dang phan tich -> canh bao (ca kiem thu F03)")
+    @DisplayName("callId trong file khác callId đang phân tích -> cảnh báo (ca kiểm thử F03)")
     void mismatchedCallIdIsFlagged() {
         ParseResult result = parser.parse(List.of(H1,
                 "1\t1789700842873\tinfo\tU1\tCALL-KHAC\tios\tcallee\tINIT"), context);
@@ -128,7 +128,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("ban ghi #H2 co onIceConnectionChange duoc phan loai la ICE_EVENT")
+    @DisplayName("bản ghi #H2 có onIceConnectionChange được phân loại là ICE_EVENT")
     void iceMessagesAreTyped() {
         ParseResult result = parser.parse(List.of(H2,
                 "2\t1789700849767\tlog_detail\tonIceConnectionChange: CHECKING\tANSWERED\twebrtc"), context);
@@ -139,7 +139,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("input rac / rong / dong cuc dai khong lam crash parser")
+    @DisplayName("input rác / rỗng / dòng cực dài không làm crash parser")
     void invalidInputNeverThrows() {
         assertThatCode(() -> {
             assertThat(parser.parse(List.of(), context).events()).isEmpty();
@@ -152,13 +152,13 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("ket qua tat dinh: cung input cho ra cung danh sach eventId")
+    @DisplayName("kết quả tất định: cùng input cho ra cùng danh sách eventId")
     void parsingIsDeterministic() {
         List<String> lines = List.of(H1, H2,
                 "1\t1789700842873\tinfo\tU1\tCALL-1\tios\tcallee\tINIT",
                 "2\t1789700842905\tlog_detail\tmsg\tANSWERED\temit");
 
-        // hai dong dau la dac ta #H1/#H2, nen ban ghi du lieu nam o dong 3 va 4
+        // hai dòng đầu là đặc tả #H1/#H2, nên bản ghi dữ liệu nằm ở dòng 3 và 4
         assertThat(parser.parse(lines, context).events().stream().map(CanonicalEvent::eventId).toList())
                 .isEqualTo(parser.parse(lines, context).events().stream().map(CanonicalEvent::eventId).toList())
                 .containsExactly("callee_endcall.log#3", "callee_endcall.log#4");

@@ -7,22 +7,23 @@ target/
 *.iml
 .vscode/
 
-# Data mau cua mentor — KHONG commit: chua IP cong cong that va log production
+# Data mẫu của mentor — KHÔNG commit: chứa IP công cộng thật và log production
 /data/
 ai20k_sample/
 *.log
 
-# Moi truong
+# Môi trường
 .env
 
-# Ghi chu lam viec ca nhan — khong dua vao repo
+# Ghi chú làm việc cá nhân — không đưa vào repo
 *.md
 .claude/
 
-# Ngoai tru: DELIVERABLE cua Sprint 1 (MVP muc 5.3), mentor phai doc duoc
+# Ngoại trừ: DELIVERABLE của Sprint 1 (MVP mục 5.3), mentor phải đọc được
 !README.md
 !docs/architecture-v1.md
 !docs/ai-provider-proposal.md
 !docs/design-decisions.md
 !docs/demo-sprint-1.md
 !docs/kiem-thu-tay.md
+!docs/ket-qua-demo-sprint-1.md

@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Demo cuoi cung cua Sprint 1: phan tich mot cuoc goi va in report theo mau muc 4.5.
+ * Demo cuối cùng của Sprint 1: phân tích một cuộc gọi và in report theo mẫu mục 4.5.
  *
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--analyze=../ai20k_sample/fail/2D9057AA-..."
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--analyze-all=../ai20k_sample"
@@ -65,50 +65,53 @@ public class AnalyzeCommand implements ApplicationRunner {
                 folder.getFileName().toString(), reader.readAll(folder));
         CallReport r = analysis.report();
 
-        log.info("# Bao cao phan tich cuoc goi");
+        log.info("# Báo cáo phân tích cuộc gọi");
         log.info("Call-ID: {}", r.callId());
-        log.info("Ket luan: {}", r.verdict());
-        log.info("Co chat luong: {}", r.qualityFlag()
-                ? "Co - " + r.issueCategory()
-                : (r.issueCategory() == null ? "Khong" : "Khong (nguyen nhan: " + r.issueCategory() + ")"));
-        log.info("Do tin cay: {}", r.confidenceLevel());
-        log.info("Tom tat: {}", r.summary());
+        log.info("Kết luận: {}", r.verdict());
+        log.info("Cờ chất lượng: {}", r.qualityFlag()
+                ? "Có - " + r.issueCategory()
+                : (r.issueCategory() == null ? "Không" : "Không (nguyên nhân: " + r.issueCategory() + ")"));
+        log.info("Độ tin cậy: {}", r.confidenceLevel());
+        log.info("Tóm tắt: {}", r.summary());
 
         log.info("");
-        log.info("## Evidence chinh ({})", r.evidence().size());
-        r.evidence().forEach(e -> log.info("  [{}][{}] {}", e.id(), e.sourceRef(), e.description()));
+        log.info("## Evidence chính");
+        int[] no = {0};
+        r.evidence().forEach(e -> log.info("{}. [{}][{}] {}",
+                ++no[0], e.id(), e.sourceRef(), e.description()));
 
         log.info("");
-        log.info("## Chi so cuoc goi");
-        r.metrics().forEach(m -> log.info("  {}", String.format("%-34s %-28s %s",
+        log.info("## Chỉ số cuộc gọi");
+        log.info("{}", String.format("| %-40s | %-52s | %-9s |", "Chỉ số", "Giá trị", "Nguồn"));
+        r.metrics().forEach(m -> log.info("{}", String.format("| %-40s | %-52s | %-9s |",
                 m.name(),
                 m.value() == null ? "N/A (" + m.naReason() + ")"
                         : m.value() + (m.unit() == null || m.unit().isBlank() ? "" : " " + m.unit()),
                 m.source())));
 
         log.info("");
-        log.info("## Van de chat luong / nguyen nhan kha di");
-        log.info("  Chinh: {}", r.possibleCauses().primary() == null ? "khong xac dinh"
+        log.info("## Vấn đề chất lượng / nguyên nhân khả dĩ");
+        log.info("- Chính: {}", r.possibleCauses().primary() == null ? "không xác định"
                 : r.possibleCauses().primary());
-        r.possibleCauses().alternatives().forEach(a -> log.info("  Khac : {}", a));
+        r.possibleCauses().alternatives().forEach(a -> log.info("- Khả dĩ khác: {}", a));
 
         log.info("");
-        log.info("## De xuat");
-        r.suggestions().forEach(s -> log.info("  - {}", s));
+        log.info("## Đề xuất");
+        r.suggestions().forEach(s -> log.info("- {}", s));
 
         log.info("");
-        log.info("## Gioi han du lieu ({})", r.dataLimitations().size());
-        r.dataLimitations().forEach(d -> log.info("  - {}", d));
+        log.info("## Giới hạn dữ liệu");
+        r.dataLimitations().forEach(d -> log.info("- {}", d));
 
         ReportSchemaValidator.Result result = validator.validate(r);
         log.info("");
-        log.info("Report hop le theo schema v1: {}", result.valid() ? "CO" : "KHONG");
+        log.info("Report hợp lệ theo schema v1: {}", result.valid() ? "CÓ" : "KHÔNG");
         result.errors().forEach(e -> log.warn("   {}", e));
     }
 
     private void printSummaryTable(Path root) throws IOException {
         log.info("{}", String.format("%-10s %-10s %-9s %-9s %-8s %-20s %-8s %-5s %s",
-                "NHOM", "CALL-ID", "VERDICT", "GR.TRUTH", "KHOP", "ISSUE", "TIN CAY", "EV", "SCHEMA"));
+                "NHÓM", "CALL-ID", "KẾT LUẬN", "GR.TRUTH", "KHỚP", "VẤN ĐỀ", "TIN CẬY", "EV", "SCHEMA"));
         log.info("{}", "-".repeat(100));
 
         int valid = 0;
@@ -128,8 +131,8 @@ public class AnalyzeCommand implements ApplicationRunner {
                 check.errors().forEach(e -> log.warn("   {} -> {}", r.callId().substring(0, 8), e));
             }
 
-            // Ground truth lay tu ten thu muc cha: fail/ va success/. Thu muc for_test/
-            // khong co nhan nen khong tinh vao accuracy.
+            // Ground truth lấy từ tên thư mục cha: fail/ và success/. Thư mục for_test/
+            // không có nhãn nên không tính vào accuracy.
             String group = folder.getParent().getFileName().toString();
             Verdict expected = groundTruthOf(group);
             String match = "-";
@@ -146,23 +149,23 @@ public class AnalyzeCommand implements ApplicationRunner {
                     group,
                     r.callId().substring(0, 8),
                     r.verdict(),
-                    expected == null ? "(khong)" : expected,
+                    expected == null ? "(không)" : expected,
                     match,
                     r.issueCategory() == null ? "-" : r.issueCategory(),
                     r.confidenceLevel(),
                     r.evidence().size(),
-                    check.valid() ? "OK" : "LOI"));
+                    check.valid() ? "OK" : "LỖI"));
         }
 
         log.info("{}", "-".repeat(100));
-        log.info("Verdict Accuracy         : {}/{} = {}%  (chi tinh cuoc goi co nhan)",
+        log.info("Verdict Accuracy         : {}/{} = {}%  (chỉ tính cuộc gọi có nhãn)",
                 correct, labelled,
                 labelled == 0 ? "-" : String.format("%.1f", 100.0 * correct / labelled));
-        log.info("Report hop le theo schema: {}/{}", valid, total);
-        log.info("Cuoc goi khong co nhan   : {}", total - labelled);
+        log.info("Report hợp lệ theo schema: {}/{}", valid, total);
+        log.info("Cuộc gọi không có nhãn   : {}", total - labelled);
     }
 
-    /** Ground truth duy nhat co trong data mau la ten thu muc fail/ va success/. */
+    /** Ground truth duy nhất có trong data mẫu là tên thư mục fail/ và success/. */
     private static Verdict groundTruthOf(String folderName) {
         return switch (folderName) {
             case "fail" -> Verdict.FAIL;

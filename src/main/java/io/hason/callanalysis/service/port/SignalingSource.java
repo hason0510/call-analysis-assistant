@@ -3,9 +3,9 @@ package io.hason.callanalysis.service.port;
 import io.hason.callanalysis.domain.signaling.SignalingFetch;
 
 /**
- * Cong ra phia nguon signaling. Tang domain chi biet interface nay, khong biet
- * Elasticsearch ton tai — nho vay parser, timeline va metrics test duoc ma khong
- * can dung container nao.
+ * Cổng ra phía nguồn signaling. Tầng domain chỉ biết interface này, không biết
+ * Elasticsearch tồn tại — nhờ vậy parser, timeline và metrics test được mà không
+ * cần dựng container nào.
  */
 public interface SignalingSource {
 

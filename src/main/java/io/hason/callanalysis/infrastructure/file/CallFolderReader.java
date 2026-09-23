@@ -15,10 +15,10 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Doc cac file log cua mot cuoc goi tu dia.
+ * Đọc các file log của một cuộc gọi từ đĩa.
  *
- * Day la I/O nen thuoc tang infrastructure. Parser o tang domain chi nhan List&lt;String&gt;,
- * nho vay chung test duoc bang chuoi viet thang trong test.
+ * Đây là I/O nên thuộc tầng infrastructure. Parser ở tầng domain chỉ nhận List&lt;String&gt;,
+ * nhờ vậy chúng test được bằng chuỗi viết thẳng trong test.
  */
 @Component
 public class CallFolderReader {
@@ -31,14 +31,14 @@ public class CallFolderReader {
                     .forEach(p -> result.put(p.getFileName().toString(), readLines(p)));
             return result;
         } catch (IOException e) {
-            throw new UncheckedIOException("Khong doc duoc thu muc " + folder, e);
+            throw new UncheckedIOException("Không đọc được thư mục " + folder, e);
         }
     }
 
     /**
-     * Log chua tieng Viet ("Loa ngoai", "Micro cua iPhone") nen bat buoc doc UTF-8.
-     * File khong phai UTF-8 hop le van doc duoc, ky tu hong bi thay the thay vi nem loi —
-     * parser khong duoc crash vi input xau (MVP muc 3.3).
+     * Log chứa tiếng Việt ("Loa ngoài", "Micro của iPhone") nên bắt buộc đọc UTF-8.
+     * File không phải UTF-8 hợp lệ vẫn đọc được, ký tự hỏng bị thay thế thay vì ném lỗi —
+     * parser không được crash vì input xấu (MVP mục 3.3).
      */
     public List<String> readLines(Path file) {
         try {
@@ -46,7 +46,7 @@ public class CallFolderReader {
         } catch (MalformedInputException e) {
             return decodeLenient(file);
         } catch (IOException e) {
-            throw new UncheckedIOException("Khong doc duoc file " + file, e);
+            throw new UncheckedIOException("Không đọc được file " + file, e);
         }
     }
 
@@ -55,7 +55,7 @@ public class CallFolderReader {
             byte[] bytes = Files.readAllBytes(file);
             return List.of(new String(bytes, StandardCharsets.UTF_8).split("\n", -1));
         } catch (IOException e) {
-            throw new UncheckedIOException("Khong doc duoc file " + file, e);
+            throw new UncheckedIOException("Không đọc được file " + file, e);
         }
     }
 }

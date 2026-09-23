@@ -7,23 +7,23 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Anh xa appUserId sang leg.
+ * Ánh xạ appUserId sang leg.
  *
- * signaling.json KHONG co truong leg — chi co appUserId. Trong data mau moi cuoc goi
- * co dung hai appUserId khac nhau, va ben gui INIT_CALL dau tien la caller.
+ * signaling.json KHÔNG có trường leg — chỉ có appUserId. Trong data mẫu mỗi cuộc gọi
+ * có đúng hai appUserId khác nhau, và bên gửi INIT_CALL đầu tiên là caller.
  *
- * Nguon suy ra duoc ghi lai vi do tin cay khac nhau: cot `role` cua ban ghi #H1 trong
- * end call log la chac chan, con suy tu INIT_CALL thi la suy luan — Confidence Design
- * o Sprint 3 can phan biet hai truong hop nay.
+ * Nguồn suy ra được ghi lại vì độ tin cậy khác nhau: cột `role` của bản ghi #H1 trong
+ * end call log là chắc chắn, còn suy từ INIT_CALL thì là suy luận — Confidence Design
+ * ở Sprint 3 cần phân biệt hai trường hợp này.
  */
 public record LegAssignment(Map<String, Leg> byAppUserId, Source derivedFrom) {
 
     public enum Source {
-        /** Cot `role` cua ban ghi #H1 trong end call log — chac chan. */
+        /** Cột `role` của bản ghi #H1 trong end call log — chắc chắn. */
         ENDCALL_ROLE,
-        /** appUserId cua INIT_CALL dau tien la caller — suy luan. */
+        /** appUserId của INIT_CALL đầu tiên là caller — suy luận. */
         FIRST_INIT_CALL,
-        /** Khong du du lieu de suy ra. */
+        /** Không đủ dữ liệu để suy ra. */
         NONE
     }
 
@@ -37,8 +37,8 @@ public record LegAssignment(Map<String, Leg> byAppUserId, Source derivedFrom) {
     }
 
     /**
-     * Suy ra tu chinh signaling: ben gui INIT_CALL dau tien la caller, ben con lai la callee.
-     * Cuoc goi chet som (chi co INIT_CALL cua mot ben) se chi xac dinh duoc caller.
+     * Suy ra từ chính signaling: bên gửi INIT_CALL đầu tiên là caller, bên còn lại là callee.
+     * Cuộc gọi chết sớm (chỉ có INIT_CALL của một bên) sẽ chỉ xác định được caller.
      */
     public static LegAssignment fromFirstInitCall(List<RawSignalingRecord> records) {
         if (records == null || records.isEmpty()) {

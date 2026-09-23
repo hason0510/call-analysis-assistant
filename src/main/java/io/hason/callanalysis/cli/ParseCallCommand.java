@@ -24,7 +24,7 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * Parse log cua mot hoac nhieu cuoc goi va in tom tat.
+ * Parse log của một hoặc nhiều cuộc gọi và in tóm tắt.
  *
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--parse-call=../ai20k_sample/fail/2D9057AA-..."
  *   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--parse-all=../ai20k_sample"
@@ -66,23 +66,23 @@ public class ParseCallCommand implements ApplicationRunner {
 
         log.info("Call-ID: {}", outcome.callId());
         log.info("");
-        printSection("signaling (tu Elasticsearch)", outcome.signaling());
+        printSection("signaling (từ Elasticsearch)", outcome.signaling());
         for (FileOutcome file : outcome.files()) {
-            printSection(String.format("%s  [%s, leg=%s, %d dong]",
+            printSection(String.format("%s  [%s, leg=%s, %d dòng]",
                     file.fileName(), file.detectedType(), file.leg(), file.lineCount()), file.result());
         }
 
         ParseResult combined = outcome.combined();
         log.info("");
-        log.info("=== TONG: {} event, {} canh bao ===", combined.events().size(), combined.warnings().size());
+        log.info("=== TỔNG: {} event, {} cảnh báo ===", combined.events().size(), combined.warnings().size());
         combined.warnings().stream().limit(10).forEach(w -> log.info("   {}", w.describe()));
     }
 
     private void parseAll(Path root) throws IOException {
         List<Path> calls = findCallFolders(root);
-        log.info("Tim thay {} cuoc goi duoi {}", calls.size(), root);
+        log.info("Tìm thấy {} cuộc gọi dưới {}", calls.size(), root);
         log.info("");
-        log.info("{}", String.format("%-10s %-26s %7s %7s %9s %9s", "NHOM", "CALL-ID", "DONG", "EVENT", "CANH BAO", "KHONG NB"));
+        log.info("{}", String.format("%-10s %-26s %7s %7s %9s %9s", "NHÓM", "CALL-ID", "DÒNG", "EVENT", "CẢNH BÁO", "KHÔNG NB"));
         log.info("{}", "-".repeat(76));
 
         int totalLines = 0;
@@ -111,10 +111,10 @@ public class ParseCallCommand implements ApplicationRunner {
         }
 
         log.info("{}", "-".repeat(76));
-        log.info("Tong dong file dinh kem : {}", totalLines);
-        log.info("Tong event sinh ra      : {}", totalEvents);
-        log.info("Tong canh bao           : {}", totalWarnings);
-        log.info("File khong nhan dien duoc: {}", totalUnrecognised);
+        log.info("Tổng dòng file đính kèm  : {}", totalLines);
+        log.info("Tổng event sinh ra       : {}", totalEvents);
+        log.info("Tổng cảnh báo            : {}", totalWarnings);
+        log.info("File không nhận diện được: {}", totalUnrecognised);
     }
 
     private List<Path> findCallFolders(Path root) throws IOException {
@@ -128,7 +128,7 @@ public class ParseCallCommand implements ApplicationRunner {
 
     private void printSection(String label, ParseResult result) {
         log.info("--- {} ---", label);
-        log.info("    {} event, {} canh bao", result.events().size(), result.warnings().size());
+        log.info("    {} event, {} cảnh báo", result.events().size(), result.warnings().size());
         Map<String, Integer> byType = new TreeMap<>();
         for (CanonicalEvent e : result.events()) {
             byType.merge(e.type().name(), 1, Integer::sum);

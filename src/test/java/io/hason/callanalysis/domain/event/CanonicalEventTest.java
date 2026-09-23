@@ -23,7 +23,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("attributes duoc sao chep phong thu, sua map goc khong anh huong event")
+    @DisplayName("attributes được sao chép phòng thủ, sửa map gốc không ảnh hưởng event")
     void attributesAreDefensivelyCopied() {
         Map<String, String> mutable = new HashMap<>();
         mutable.put("cmd", "INVITE");
@@ -37,7 +37,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("attributes giu nguyen thu tu chen — thu tu doi la mat tinh tat dinh")
+    @DisplayName("attributes giữ nguyên thứ tự chèn — thứ tự đổi là mất tính tất định")
     void attributesPreserveInsertionOrder() {
         Map<String, String> ordered = new java.util.LinkedHashMap<>();
         ordered.put("z", "1");
@@ -48,7 +48,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("truong bat buoc thieu thi bao loi ngay, khong am tham bo qua")
+    @DisplayName("trường bắt buộc thiếu thì báo lỗi ngay, không âm thầm bỏ qua")
     void requiredFieldsAreEnforced() {
         assertThatThrownBy(() -> new CanonicalEvent(
                 "EV01", "CALL-1", Leg.CALLER, LogSource.SIGNALING,
@@ -60,7 +60,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("gia tri tuy chon vang mat thi dung mac dinh an toan, attributes khong bao gio null")
+    @DisplayName("giá trị tuỳ chọn vắng mặt thì dùng mặc định an toàn, attributes không bao giờ null")
     void optionalFieldsFallBackSafely() {
         CanonicalEvent e = new CanonicalEvent(
                 "EV01", "CALL-1", null, LogSource.WEBRTC,
@@ -76,7 +76,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("event tuyet doi luon sap truoc event tuong doi")
+    @DisplayName("event tuyệt đối luôn sắp trước event tương đối")
     void absoluteTimeSortsBeforeRelativeTime() {
         EventTime absolute = EventTime.absolute(Instant.parse("1970-01-01T00:00:00Z"), ClockDomain.SERVER);
         EventTime relative = EventTime.relative(Duration.ofSeconds(6652));
@@ -88,7 +88,7 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("SourceRef dung dinh dang trich dan cua mau report muc 4.5")
+    @DisplayName("SourceRef đúng định dạng trích dẫn của mẫu report mục 4.5")
     void sourceRefCitation() {
         assertThat(new SourceRef("callee_endcall.log", 142, "...").citation())
                 .isEqualTo("callee_endcall.log:142");

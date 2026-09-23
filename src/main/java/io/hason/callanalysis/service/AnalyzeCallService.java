@@ -18,11 +18,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Chay toan bo pipeline phan tich cua Sprint 1: chuan hoa -> timeline -> chi so
- * -> tin hieu -> verdict theo rule -> evidence -> report.
+ * Chạy toàn bộ pipeline phân tích của Sprint 1: chuẩn hoá -> timeline -> chỉ số
+ * -> tín hiệu -> verdict theo rule -> evidence -> report.
  *
- * Sprint 2 se chen them Sanitizer, AI Analysis va Guardrails vao giua buoc evidence
- * va buoc dung report; bo cuc report giu nguyen.
+ * Sprint 2 sẽ chèn thêm Sanitizer, AI Analysis và Guardrails vào giữa bước evidence
+ * và bước dựng report; bố cục report giữ nguyên.
  */
 @Service
 public class AnalyzeCallService {

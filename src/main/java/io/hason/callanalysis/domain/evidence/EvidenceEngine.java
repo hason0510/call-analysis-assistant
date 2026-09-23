@@ -13,18 +13,18 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Chon ra cac su kien dang lam bang chung va gan ID on dinh.
+ * Chọn ra các sự kiện đáng làm bằng chứng và gán ID ổn định.
  *
- * Phai LOC MANH: mot cuoc goi sinh toi 28 000 su kien, trong do chi khoang mot chuc
- * dong thuc su co y nghia. MVP muc 3.3 cung yeu cau LLM chi nhan timeline, evidence va
- * chi so da chuan hoa, khong nhan raw log.
+ * Phải LỌC MẠNH: một cuộc gọi sinh tới 28 000 sự kiện, trong đó chỉ khoảng một chục
+ * dòng thực sự có ý nghĩa. MVP mục 3.3 cũng yêu cầu LLM chỉ nhận timeline, evidence và
+ * chỉ số đã chuẩn hoá, không nhận raw log.
  *
- * ID duoc gan sau khi sap xep tat dinh; thu tu doi giua cac lan chay se lam Evidence ID
- * nhay va pha tinh nhat quan do o Sprint 2.
+ * ID được gán sau khi sắp xếp tất định; thứ tự đổi giữa các lần chạy sẽ làm Evidence ID
+ * nhảy và phá tính nhất quán đo ở Sprint 2.
  */
 public class EvidenceEngine {
 
-    /** Lenh signaling danh dau moc cua cuoc goi — chi lay lan XUAT HIEN DAU. */
+    /** Lệnh signaling đánh dấu mốc của cuộc gọi — chỉ lấy lần XUẤT HIỆN ĐẦU. */
     private static final List<String> MILESTONE_COMMANDS = List.of(
             "INIT_CALL", "INVITE", "TRYING", "RINGING", "OK", "OK_ACK_OK",
             "BYE", "CANCEL", "FAIL_HARD");
@@ -46,13 +46,13 @@ public class EvidenceEngine {
                 .filter(e -> e.type() == EventType.CALL_SUMMARY)
                 .forEach(selected::add);
 
-        // Ban ghi chi so CUOI cung cua moi file — mang gia tri ket thuc cua cuoc goi
+        // Bản ghi chỉ số CUỐI cùng của mỗi file — mang giá trị kết thúc của cuộc gọi
         timeline.allEvents().stream()
                 .filter(e -> e.type() == EventType.MEDIA_STATS)
                 .collect(java.util.stream.Collectors.groupingBy(e -> e.sourceRef().fileName()))
                 .forEach((file, events) -> selected.add(events.getLast()));
 
-        // Dong ket thuc cuoc goi phia client: mang codeReason va failReason bang tieng Viet
+        // Dòng kết thúc cuộc gọi phía client: mang codeReason và failReason bằng tiếng Việt
         timeline.allEvents().stream()
                 .filter(e -> e.source() == LogSource.ENDCALL)
                 .filter(e -> {
@@ -83,14 +83,14 @@ public class EvidenceEngine {
     private static String timeLabel(CanonicalEvent event) {
         return switch (event.time()) {
             case EventTime.Absolute a -> a.instant().toString();
-            case EventTime.Relative r -> "+" + r.sinceLogStart().toMillis() + "ms (tuong doi)";
+            case EventTime.Relative r -> "+" + r.sinceLogStart().toMillis() + "ms (tương đối)";
         };
     }
 
     private static String describe(CanonicalEvent event) {
         String iceTo = event.attribute("iceStateTo");
         if (iceTo != null) {
-            return "ICE chuyen " + event.attribute("iceStateFrom") + " => " + iceTo;
+            return "ICE chuyển " + event.attribute("iceStateFrom") + " => " + iceTo;
         }
         if (event.type() == EventType.CALL_SUMMARY) {
             return "Call summary " + event.leg().name().toLowerCase()
@@ -100,7 +100,7 @@ public class EvidenceEngine {
                     + ", bytesRecv=" + orDash(event.attribute("audio.bytesReceived"));
         }
         if (event.type() == EventType.MEDIA_STATS) {
-            return "Chi so media " + event.leg().name().toLowerCase()
+            return "Chỉ số media " + event.leg().name().toLowerCase()
                     + ": MOS=" + orDash(event.attribute("audio.audioMos"))
                     + ", loss=" + orDash(event.attribute("audio.packetLostPercent")) + "%"
                     + ", mediaFail=" + orDash(event.attribute("transport.hasMediaFail"))
@@ -108,12 +108,12 @@ public class EvidenceEngine {
         }
         String msg = event.attribute("msg");
         if (msg != null && msg.startsWith("_emitBye")) {
-            return "Ket thuc phia client: " + msg;
+            return "Kết thúc phía client: " + msg;
         }
         if (event.source() == LogSource.SIGNALING) {
             return "Signaling " + event.name()
                     + (event.leg() != io.hason.callanalysis.domain.event.Leg.UNKNOWN
-                    ? " tu " + event.leg().name().toLowerCase() : "");
+                    ? " từ " + event.leg().name().toLowerCase() : "");
         }
         return event.name();
     }
@@ -122,7 +122,7 @@ public class EvidenceEngine {
         return value == null || value.isBlank() ? "-" : value;
     }
 
-    /** Su kien co gio tuyet doi truoc, roi den su kien tuong doi; tie-break den so dong. */
+    /** Sự kiện có giờ tuyệt đối trước, rồi đến sự kiện tương đối; tie-break đến số dòng. */
     private static final Comparator<CanonicalEvent> EVIDENCE_ORDER =
             Comparator.comparingInt((CanonicalEvent e) ->
                             e.time() instanceof EventTime.Absolute ? 0 : 1)

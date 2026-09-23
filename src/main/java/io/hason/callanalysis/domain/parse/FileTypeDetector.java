@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Nhan dien loai file theo NOI DUNG, khong theo ten file.
+ * Nhận diện loại file theo NỘI DUNG, không theo tên file.
  *
- * Yeu cau nay khong phai gia dinh: data mau co file `calleer_webrtc.log` (thua chu 'e'),
- * va MVP muc 6.1 T3 co han test case F02 "Ten file khong khop noi dung".
+ * Yêu cầu này không phải giả định: data mẫu có file `calleer_webrtc.log` (thừa chữ 'e'),
+ * và MVP mục 6.1 T3 có hẳn test case F02 "Tên file không khớp nội dung".
  */
 public class FileTypeDetector {
 
@@ -19,11 +19,11 @@ public class FileTypeDetector {
     static final Pattern WEBRTC_ANDROID_LINE =
             Pattern.compile("^[\\w.]+\\.(?:cc|mm|h):\\s*\\[\\d+:\\d{3}]\\[\\d+]\\s");
 
-    /** Dong dau tien cua end call log luon la dac ta format cua ban ghi loai 1. */
+    /** Dòng đầu tiên của end call log luôn là đặc tả format của bản ghi loại 1. */
     private static final Pattern ENDCALL_HEADER =
             Pattern.compile("^#H\\d+\\t#ts\\t#tag(\\t|$)");
 
-    /** So dong dau doc de cham diem. Du de vuot qua vai dong noi tiep dau file. */
+    /** Số dòng đầu đọc để chấm điểm. Đủ để vượt qua vài dòng nối tiếp đầu file. */
     private static final int SCAN_LINES = 60;
 
     public DetectedLogType detect(List<String> lines) {

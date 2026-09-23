@@ -1,9 +1,9 @@
 package io.hason.callanalysis.domain.event;
 
 /**
- * signaling.json KHONG co truong leg. Phai suy ra:
- *  - Uu tien 1: cot role cua ban ghi #H1 trong end call log (chac chan).
- *  - Uu tien 2: appUserId cua INIT_CALL dau tien la caller (do tin cay thap hon).
+ * signaling.json KHÔNG có trường leg. Phải suy ra:
+ *  - Ưu tiên 1: cột role của bản ghi #H1 trong end call log (chắc chắn).
+ *  - Ưu tiên 2: appUserId của INIT_CALL đầu tiên là caller (độ tin cậy thấp hơn).
  */
 public enum Leg {
     CALLER,

@@ -11,7 +11,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
 /**
- * Doc nhanh signaling cua mot cuoc goi tu Elasticsearch local.
+ * Đọc nhanh signaling của một cuộc gọi từ Elasticsearch local.
  *
  *   mvn spring-boot:run -Dspring-boot.run.arguments="--fetch-call=DE7DD314-F432-45CB-BCB4-AE9103CC0919"
  */
@@ -38,15 +38,15 @@ public class FetchCallCommand implements ApplicationRunner {
         SignalingFetch fetch = signalingSource.fetchByCallId(callId);
 
         log.info("Call-ID   : {}", fetch.callId());
-        log.info("So event  : {}", fetch.records().size());
-        log.info("truncated : {} (returned {}/{}, thieu {})",
+        log.info("Số event  : {}", fetch.records().size());
+        log.info("Bị cắt bớt: {} (trả về {}/{}, thiếu {})",
                 fetch.truncated(), fetch.returned(), fetch.totalMatching(), fetch.missingCount());
 
         fetch.records().stream().limit(8).forEach(r -> log.info(
                 "  #{} {} {} {} user={} isp={} latencyMs={}",
                 r.ordinal(), r.timestamp(), r.level(), r.cmd(), r.appUserId(), r.isp(), r.latencyMs()));
         if (fetch.records().size() > 8) {
-            log.info("  ... con {} event nua", fetch.records().size() - 8);
+            log.info("  ... còn {} event nữa", fetch.records().size() - 8);
         }
 
         System.exit(SpringApplication.exit(context, () -> 0));
