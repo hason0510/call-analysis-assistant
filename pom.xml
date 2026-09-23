@@ -22,6 +22,22 @@
     <testcontainers.version>1.20.1</testcontainers.version>
   </properties>
 
+  <dependencyManagement>
+    <dependencies>
+      <!--
+        Testcontainers 1.20.x keo theo commons-compress 1.24.0, dinh CVE-2024-25710
+        va CVE-2024-26308. Chi anh huong scope test (dung de dong goi build-context
+        cho Docker) nen rui ro thuc te thap, nhung ghim ban da va cho sach canh bao.
+        Cac ban testcontainers 1.x deu con 1.24.0; chi 2.x moi len 1.28.0.
+      -->
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>1.28.0</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
