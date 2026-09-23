@@ -1,0 +1,163 @@
+# Verdict & Issue Taxonomy (T5)
+#
+# De o dang du lieu chu khong hard-code trong Java vi ba ly do:
+#   - Mentor review duoc ma khong can doc code.
+#   - Sprint 2 nap thang vao prompt cho AI.
+#   - Doi nguong khong phai build lai.
+#
+# Truong `calibration` ghi ro dieu kien phat hien da duoc kiem chung tren data hay chua.
+# Tap data mau chi phu 2/6 category, nen 4 category con lai dang o muc phong doan va
+# phai duoc ghi vao Known Limitations.
+
+categories:
+
+  - id: SIGNALING_FAILURE
+    definition: >-
+      Cuoc goi khong thiet lap duoc o tang signaling: server chua tung goi toi callee,
+      hoac phien bi huy/tu choi truoc khi hai ben bat tay xong.
+    symptoms:
+      - "Chi co INIT_CALL, khong bao gio co INVITE"
+      - "Xuat hien FAIL_HARD"
+      - "INVITE gui lai nhieu lan roi ket thuc bang FAIL_HARD"
+      - "Co CANCEL truoc khi dat OK_ACK_OK"
+    requiredEvidence:
+      - source: SIGNALING
+        field: cmd
+    detectionConditions:
+      - "khong ton tai cmd=INVITE"
+      - "ton tai cmd=FAIL_HARD"
+      - "ton tai cmd=CANCEL va khong ton tai cmd=OK_ACK_OK"
+    knownAmbiguity: >-
+      CANCEL chua ro la nguoi dung chu dong huy hay he thong timeout roi tu huy.
+      Neu la nguoi dung huy thi day khong phai loi he thong. Can hoi mentor.
+    calibration:
+      status: VALIDATED
+      evidence: >-
+        3 ca chac chan trong data co nhan: 2 ca chi co INIT_CALL (1B009D42, D114749E),
+        1 ca co FAIL_HARD (0EC7B700). Them 7 ca CANCEL nhung mo ho.
+
+  - id: ICE_FAILURE
+    definition: >-
+      Signaling bat tay xong nhung duong truyen media khong thiet lap duoc:
+      ICE chuyen sang failed va khong bao gio dat connected.
+    symptoms:
+      - "IceConnectionState chuyen checking => failed"
+      - "Gui STUN BINDING request lien tuc ma khong nhan duoc response nao"
+      - "Khong co dong 'Switching selected connection'"
+      - "audio.bytesReceived = 0 va audio.bytesSent = 0"
+      - "transport.hasMediaFail = 1"
+    requiredEvidence:
+      - source: WEBRTC
+        field: iceStateTo
+      - source: ENDCALL
+        field: transport.hasMediaFail
+    detectionConditions:
+      - "iceStateTo=failed va khong ton tai iceStateTo=connected"
+      - "transport.hasMediaFail=1"
+      - "audio.bytesReceived=0 sau khi da dat OK_ACK_OK"
+    knownAmbiguity: >-
+      Timeout ICE mac dinh khoang 15 giay; cuoc goi bi cup may truoc moc do se khong
+      kip sinh trang thai failed du media that su khong chay.
+    calibration:
+      status: VALIDATED
+      evidence: >-
+        1 ca co nhan: 2D9057AA. Signaling hoan hao (OK_ACK_OK + BYE + PAIR_PING deu 33 giay)
+        nhung ICE checking => failed sau 15,6 giay, 0 byte audio, codeReason=419
+        "Vui long kiem tra ket noi mang", originator=2 (he thong tu ngat).
+
+  - id: TURN_FAILURE
+    definition: >-
+      Khong cap phat duoc relay tren TURN server, nen khong co duong du phong khi
+      ket noi truc tiep that bai.
+    symptoms:
+      - "TURN allocate that bai lien tuc tren MOI cong"
+      - "Khong co dong 'TURN allocate requested successfully' nao"
+      - "Khong sinh duoc candidate loai relay"
+    requiredEvidence:
+      - source: WEBRTC
+        field: message
+    detectionConditions:
+      - "co 'Received TURN allocate error response' ma KHONG co 'TURN allocate requested successfully' tren cung mot Port"
+    knownAmbiguity: >-
+      TUYET DOI khong duoc dem rieng dong loi. "Received TURN allocate error response
+      code=401" la buoc bat tay xac thuc chuan cua TURN (RFC 5766): request dau khong kem
+      credential, server tra 401 kem nonce, client gui lai roi moi duoc cap.
+      Tren toan bo data mau co 73 dong error va DUNG 73 dong allocate thanh cong,
+      khong cong nao that bai han. Dem dong loi se bao nham 17/20 cuoc goi,
+      trong do 7 thuoc nhom success.
+    calibration:
+      status: UNVALIDATED
+      evidence: >-
+        KHONG co ca mau nao trong data. Dieu kien phat hien viet theo suy luan tu
+        vong doi TURN, chua kiem chung duoc.
+
+  - id: NETWORK_PACKET_LOSS
+    definition: >-
+      Cuoc goi thiet lap va chay duoc nhung mat goi du lam giam chat luong thoai.
+    symptoms:
+      - "audio.packetLostPercent cao keo dai"
+      - "audio.audioMos tut"
+      - "transport.hasMediaPoor = 1"
+    requiredEvidence:
+      - source: ENDCALL
+        field: audio.packetLostPercent
+      - source: ENDCALL
+        field: audio.audioMos
+    detectionConditions:
+      - "audio.packetLostPercent > 5.0 keo dai tren nhieu mau lien tiep"
+      - "audio.audioMos < 3.5"
+      - "transport.hasMediaPoor=1 hoac transport.countMediaPoor > 0"
+    knownAmbiguity: >-
+      Mat goi thoang qua la binh thuong. Phai xet CHUOI mau #H7 chu khong chi doc
+      ban ghi #H9 cuoi cung — DE7DD314 co loss cuoi = 0 nhung tung len 2,0% giua cuoc goi.
+    calibration:
+      status: UNVALIDATED
+      evidence: >-
+        KHONG co ca mau chat luong kem. Duong nen do duoc tren 399 mau stats cua cac
+        cuoc goi khoe manh: loss cao nhat 3,704%, MOS thap nhat 4,335.
+        Nguong canh bao vi vay phai dat CAO HON 3,7% va MOS THAP HON 4,3,
+        neu khong se gan co nham cho cuoc goi tot. Con so 5.0 / 3.5 la phong doan.
+
+  - id: NETWORK_DELAY_JITTER
+    definition: >-
+      Do tre hoac do rung goi cao lam thoai bi ngat quang du khong mat goi dang ke.
+    symptoms:
+      - "transport.currentRttMs cao keo dai"
+      - "audio.jitter cao"
+    requiredEvidence:
+      - source: ENDCALL
+        field: transport.currentRttMs
+      - source: ENDCALL
+        field: audio.jitter
+    detectionConditions:
+      - "transport.currentRttMs > 300 keo dai tren nhieu mau lien tiep"
+      - "audio.jitter > 0.050 (giay)"
+    knownAmbiguity: >-
+      Rat de trung trieu chung voi NETWORK_PACKET_LOSS. Khi ca hai dieu kien cung dung,
+      uu tien category co bang chung manh hon.
+      Luu y transport.rttMs la gia tri TICH LUY, khong dung de so voi nguong.
+    calibration:
+      status: UNVALIDATED
+      evidence: >-
+        KHONG co ca mau. Duong nen do duoc: RTT cao nhat 181 ms (0/399 mau vuot 200 ms),
+        jitter cao nhat 26 ms. Nguong 300 ms / 50 ms la phong doan, chi biet chac
+        phai cao hon duong nen nay.
+
+  - id: UNKNOWN
+    definition: >-
+      Khong du bang chung de ket luan nguyen nhan.
+    symptoms:
+      - "Thieu file log cua mot hoac ca hai ben"
+      - "Bang chung tu cac nguon mau thuan nhau"
+      - "Ban export signaling bi cat bot"
+    requiredEvidence: []
+    detectionConditions:
+      - "khong xac dinh duoc bat ky category nao khac"
+      - "thieu nguon log thiet yeu de kiem chung"
+    knownAmbiguity: >-
+      Tra UNKNOWN khi thieu du lieu la dung; doan bua khi khong co can cu moi la loi nang.
+    calibration:
+      status: VALIDATED
+      evidence: >-
+        Rat nhieu ca trong data: 9B556E56 chi co signaling + caller_webrtc, khong co
+        end call log nao.
