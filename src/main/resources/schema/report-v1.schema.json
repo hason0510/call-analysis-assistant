@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hason.io/call-analysis/report-v1.schema.json",
+  "title": "Call Analysis Report v1",
+  "description": "Cau truc report theo mau MVP muc 4.5. Sprint 2: AI chi duoc dien field theo schema nay, khong tu dung bo cuc.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "callId", "verdict", "qualityFlag", "confidenceLevel", "summary",
+    "evidence", "metrics", "possibleCauses", "suggestions", "dataLimitations", "degraded"
+  ],
+
+  "properties": {
+    "callId": { "type": "string", "minLength": 1 },
+
+    "verdict": { "enum": ["SUCCESS", "FAIL", "UNKNOWN"] },
+
+    "qualityFlag": {
+      "type": "boolean",
+      "description": "SUCCESS van co the kem co chat luong kem (MVP muc 4.1)."
+    },
+
+    "issueCategory": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "enum": [
+            "NETWORK_PACKET_LOSS", "NETWORK_DELAY_JITTER", "ICE_FAILURE",
+            "TURN_FAILURE", "SIGNALING_FAILURE", "UNKNOWN"
+          ]
+        }
+      ]
+    },
+
+    "confidenceLevel": {
+      "enum": ["HIGH", "MEDIUM", "LOW"],
+      "description": "Suy bang logic tat dinh, khong de AI sinh so (MVP muc 7.2)."
+    },
+
+    "summary": { "type": "string", "minLength": 1 },
+
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "timestamp", "description", "sourceRef"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EV[0-9]{2,}$" },
+          "source": { "enum": ["SIGNALING", "ENDCALL", "WEBRTC"] },
+          "timestamp": { "type": "string" },
+          "description": { "type": "string", "minLength": 1 },
+          "sourceRef": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Ten file kem so dong — MVP muc 8.2 yeu cau trace ve dong log goc."
+          }
+        }
+      }
+    },
+
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "source"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "value": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] },
+          "naReason": { "type": ["string", "null"] },
+          "source": { "enum": ["SIGNALING", "ENDCALL", "WEBRTC"] }
+        },
+        "oneOf": [
+          {
+            "description": "Co gia tri: value bat buoc, naReason phai vang.",
+            "properties": {
+              "value": { "type": "string", "minLength": 1 },
+              "naReason": { "type": "null" }
+            },
+            "required": ["value"]
+          },
+          {
+            "description": "Khong co gia tri: BAT BUOC co ly do. MVP muc 4.3 cam mac dinh ve 0.",
+            "properties": {
+              "value": { "type": "null" },
+              "naReason": { "type": "string", "minLength": 1 }
+            },
+            "required": ["naReason"]
+          }
+        ]
+      }
+    },
+
+    "possibleCauses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alternatives"],
+      "properties": {
+        "primary": { "type": ["string", "null"] },
+        "alternatives": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "suggestions": { "type": "array", "items": { "type": "string" } },
+
+    "dataLimitations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Thieu file, thieu chi so, ban export bi cat bot (MVP muc 3.3)."
+    },
+
+    "degraded": {
+      "type": "boolean",
+      "description": "Sprint 2: dat true khi phai lui ve rule verdict do AI loi."
+    }
+  }
+}
