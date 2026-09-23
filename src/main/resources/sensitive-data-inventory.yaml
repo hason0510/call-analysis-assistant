@@ -1,0 +1,147 @@
+# Sensitive Data Inventory (T9) — MVP muc 5.2
+#
+# De o dang du lieu chu khong phai tai lieu, vi Sprint 2 (T7 Sanitizer) se nap thang
+# file nay lam Policy Engine. Danh sach goc cua MVP duoc giu nguyen, phan BO SUNG la
+# ket qua ra soat data mau ai20k_sample.
+#
+# classification: PUBLIC | INTERNAL | SENSITIVE | SECRET
+# policy        : ALLOW | MINIMIZE | MASK | PSEUDONYMIZE | DROP
+
+fields:
+
+  # ---------- Tu danh sach goc cua MVP muc 5.2 ----------
+
+  - id: call-quality-metrics
+    match: ["audio.audioMos", "audio.packetLostPercent", "audio.jitter",
+            "transport.currentRttMs", "transport.rttMs", "endCall.duration"]
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: "Chi so chat luong, khong dinh danh ai. La du lieu chinh de phan tich."
+    origin: MVP_5_2
+
+  - id: network-context
+    match: ["isp", "asn", "countryCode"]
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: "Ngu canh mang o muc nha mang/quoc gia, khong dinh danh ca nhan."
+    origin: MVP_5_2
+
+  - id: phone-and-email
+    match: ["phone", "phoneNumber", "email"]
+    pattern: "(\\+?84|0)\\d{9,10}|[\\w.+-]+@[\\w-]+\\.[\\w.]+"
+    classification: SENSITIVE
+    policy: MASK
+    rationale: "Dinh danh truc tiep nguoi dung."
+    origin: MVP_5_2
+
+  - id: client-ip
+    match: ["ip", "address", "resolveIp", "transport.localCandidate.ip",
+            "transport.remoteCandidate.ip"]
+    pattern: "\\b\\d{1,3}(\\.\\d{1,3}){3}\\b"
+    classification: SENSITIVE
+    policy: MASK
+    rationale: "Dia chi IP client dinh danh duoc vi tri va thue bao."
+    origin: MVP_5_2
+
+  - id: user-and-device-id
+    match: ["appUserId", "callUserId", "partnerAppUserId", "partnerCallUserId",
+            "userId", "deviceId"]
+    classification: SENSITIVE
+    policy: PSEUDONYMIZE
+    rationale: "Dinh danh noi bo. Van can giu tinh nhat quan de correlate giua cac nguon."
+    origin: MVP_5_2
+
+  - id: session-id
+    match: ["sessionId", "csid", "callSessionId", "fromTag", "toTag"]
+    classification: SENSITIVE
+    policy: PSEUDONYMIZE
+    rationale: "Can giu tinh nhat quan vi dung de ghep su kien giua ba nguon log."
+    origin: MVP_5_2
+
+  - id: credentials
+    match: ["authorization", "token", "apiKey", "jwt", "password"]
+    pattern: "(?i)bearer\\s+[\\w.-]+|eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+"
+    classification: SECRET
+    policy: DROP
+    rationale: "Bi mat xac thuc. Khong duoc gui sang AI, khong duoc ghi ra log."
+    origin: MVP_5_2
+
+  - id: infrastructure-detail
+    match: ["service", "podName", "hostName"]
+    classification: INTERNAL
+    policy: MINIMIZE
+    rationale: "Lo cau truc he thong noi bo. Giu du de debug, khong gui chi tiet sang AI."
+    origin: MVP_5_2
+
+  # ---------- BO SUNG sau khi ra soat data mau ai20k_sample ----------
+
+  - id: ice-candidate-string
+    match: ["sdpCandidate", "candidate"]
+    pattern: "candidate:\\d+ \\d+ \\w+ \\d+ [\\da-fA-F:.]+ \\d+ typ \\w+"
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      Chuoi ICE candidate chua IP cong cong that cua ca hai ben. Trong data mau tim thay
+      IPv4 (14.238.62.98) va IPv6 (2402:9d80:456:a046:...) chua bi che.
+    origin: SAMPLE_REVIEW
+
+  - id: relay-real-address
+    match: ["raddr", "rport"]
+    pattern: "raddr [\\da-fA-F:.]+ rport \\d+"
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      raddr la dia chi THAT cua client dang sau TURN relay — che relay ma khong che raddr
+      thi coi nhu khong che gi.
+    origin: SAMPLE_REVIEW
+
+  - id: turn-server-endpoint
+    match: ["turnServer", "Remote"]
+    pattern: "\\b\\d{1,3}(\\.\\d{1,3}){3}:3478\\b"
+    classification: INTERNAL
+    policy: MINIMIZE
+    rationale: >-
+      Dia chi TURN server cua he thong (14.238.152.70:3478, 116.103.111.243:3478...)
+      lo ha tang noi bo. Trong data mau chung xuat hien day du, khong bi che.
+    origin: SAMPLE_REVIEW
+
+  - id: ice-credentials
+    match: ["ufrag", "pwd", "ice-ufrag", "ice-pwd"]
+    pattern: "ufrag [\\w+/]+|u/p=[\\w+/]+"
+    classification: SECRET
+    policy: DROP
+    rationale: "Thong tin xac thuc phien ICE, co the dung de chen vao phien dang chay."
+    origin: SAMPLE_REVIEW
+
+  - id: local-network-address
+    match: ["Net", "networkType"]
+    pattern: "\\b(192\\.168|10\\.|172\\.(1[6-9]|2\\d|3[01])|29\\.)\\d+"
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      Dia chi mang noi bo cua thiet bi nguoi dung. Data mau da che mot phan
+      (192.168.26.x) nhung khong duoc dua vao viec do — pipeline phai tu che.
+    origin: SAMPLE_REVIEW
+
+  - id: user-facing-fail-reason
+    match: ["failReason", "codeReason"]
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: >-
+      Thong bao tieng Viet hien cho nguoi dung ("Vui long kiem tra ket noi mang").
+      Khong dinh danh ai va la bang chung co gia tri cho ket luan.
+    origin: SAMPLE_REVIEW
+
+  - id: request-correlation-id
+    match: ["requestId"]
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: >-
+      UUID sinh ngau nhien cho tung request, khong dinh danh nguoi dung, va can de
+      phan biet nhieu dong log cua cung mot lan gui voi cac lan gui lai.
+    origin: SAMPLE_REVIEW
+
+# Ghi chu ve data mau:
+# appUserId va service trong ai20k_sample TRONG NHU da duoc pseudonymize san
+# (US43EGOIN7G, SCYZPESAVDK). Khong duoc dua vao dieu do — pipeline van phai tu xu ly,
+# vi tap held-out co the khac.
