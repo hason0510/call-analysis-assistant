@@ -48,6 +48,34 @@ class WebRtcLogParserTest {
     }
 
     @Test
+    @DisplayName("iOS: log C++ goc thi ngoac dau tien da la nguon that")
+    void iosNativeLogUsesFirstParenthesis() {
+        ParseResult result = parser.parse(List.of(
+                "[6661:424][259] (connection.cc:1824): Conn[8dcc6e10CRWS]: Sent STUN BINDING request"), context);
+
+        CanonicalEvent e = result.events().getFirst();
+        assertThat(e.attribute("module")).isEqualTo("connection.cc");
+        assertThat(e.attribute("sourceLine")).isEqualTo("1824");
+        assertThat(e.attribute("message")).startsWith("Conn[");
+    }
+
+    @Test
+    @DisplayName("iOS: log Objective-C di qua wrapper -> lay nguon o ngoac THU HAI")
+    void iosWrappedLogUsesNestedOrigin() {
+        // 691 dong trong data mau di qua RTCLogging.mm:34 — hang so khong mang thong tin.
+        ParseResult result = parser.parse(List.of(
+                "[4712:147][260115] (RTCLogging.mm:34): (RTCAudioSession.mm:680 "
+                        + "-[RTCAudioSession incrementActivationCount]): Incrementing activation count."),
+                context);
+
+        CanonicalEvent e = result.events().getFirst();
+        assertThat(e.attribute("module")).isEqualTo("RTCAudioSession.mm");
+        assertThat(e.attribute("sourceLine")).isEqualTo("680");
+        assertThat(e.attribute("method")).isEqualTo("-[RTCAudioSession incrementActivationCount]");
+        assertThat(e.attribute("message")).isEqualTo("Incrementing activation count.");
+    }
+
+    @Test
     @DisplayName("moc thoi gian la TUONG DOI, khong phai gio tuyet doi")
     void timeIsRelativeNotAbsolute() {
         ParseResult result = parser.parse(List.of(

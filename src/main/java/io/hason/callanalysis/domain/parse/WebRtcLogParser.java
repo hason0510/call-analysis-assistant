@@ -44,6 +44,16 @@ public class WebRtcLogParser {
     private static final Pattern ICE_STATE = Pattern.compile(
             "IceConnectionState\\s+(\\w+)\\s*=>\\s*(\\w+)");
 
+    /** Wrapper log cua iOS: ngoac dau tien luon la hang so nay, khong mang thong tin. */
+    private static final String RTC_LOGGING_WRAPPER = "RTCLogging.mm";
+
+    /** Ngoac thu hai cua dong iOS di qua wrapper — moi la nguon that. */
+    private static final Pattern NESTED_ORIGIN = Pattern.compile("^\\(([^)]*)\\):\\s*");
+
+    /** "connection.cc:1824" hoac "RTCAudioSession.mm:680 -[RTCAudioSession handleRoute:]" */
+    private static final Pattern ORIGIN_WITH_LINE =
+            Pattern.compile("^([\\w.+-]+):(\\d+)(?:\\s+(.*))?$");
+
     public ParseResult parse(List<String> lines, ParseContext context) {
         if (lines == null || lines.isEmpty()) {
             return ParseResult.empty();
@@ -103,15 +113,43 @@ public class WebRtcLogParser {
         if (ios.find()) {
             Duration offset = offset(ios.group(1), ios.group(2));
             Map<String, String> attributes = new LinkedHashMap<>();
+
             String origin = ios.group("origin");
-            if (origin != null && !origin.isBlank()) {
-                attributes.put("module", origin);
+            String message = ios.group("message");
+
+            // Log Objective-C di qua wrapper RTCLogging, khien ngoac dau tien luon la
+            // hang so "RTCLogging.mm:34" con nguon that nam o ngoac thu hai cua message.
+            // Log C++ goc thi ngoac dau tien da la nguon that.
+            if (origin != null && origin.startsWith(RTC_LOGGING_WRAPPER)) {
+                Matcher nested = NESTED_ORIGIN.matcher(message);
+                if (nested.find()) {
+                    origin = nested.group(1);
+                    message = message.substring(nested.end()).stripLeading();
+                }
             }
+            putOrigin(attributes, origin);
             attributes.put("thread", ios.group(3));
             attributes.put("platform", "ios");
-            return new PendingRecord(lineNumber, line, offset, ios.group("message"), attributes);
+            return new PendingRecord(lineNumber, line, offset, message, attributes);
         }
         return null;
+    }
+
+    /** Tach "connection.cc:1824" thanh module + so dong, thong nhat voi Format 2. */
+    private static void putOrigin(Map<String, String> attributes, String origin) {
+        if (origin == null || origin.isBlank()) {
+            return;
+        }
+        Matcher m = ORIGIN_WITH_LINE.matcher(origin);
+        if (m.matches()) {
+            attributes.put("module", m.group(1));
+            attributes.put("sourceLine", m.group(2));
+            if (m.group(3) != null && !m.group(3).isBlank()) {
+                attributes.put("method", m.group(3).strip());
+            }
+        } else {
+            attributes.put("module", origin);
+        }
     }
 
     private static Duration offset(String seconds, String millis) {
