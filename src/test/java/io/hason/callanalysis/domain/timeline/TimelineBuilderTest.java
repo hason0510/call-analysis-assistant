@@ -26,10 +26,10 @@ class TimelineBuilderTest {
     private final TimelineBuilder builder = new TimelineBuilder();
 
     private static CanonicalEvent signaling(int ordinal, String isoTime, String cmd, Leg leg) {
-        return new CanonicalEvent("signaling.json#" + ordinal, "CALL-1", leg, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + ordinal, "CALL-1", leg, LogSource.SIGNALING,
                 EventTime.absolute(Instant.parse(isoTime), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd, Map.of(), Severity.INFO,
-                new SourceRef("signaling.json", ordinal + 1, isoTime + " " + cmd));
+                new SourceRef(SourceRef.SIGNALING, ordinal + 1, isoTime + " " + cmd));
     }
 
     private static CanonicalEvent endCall(String file, int line, long epochMillis,
@@ -168,6 +168,79 @@ class TimelineBuilderTest {
         assertThat(track.leg()).isEqualTo(Leg.CALLER);
         assertThat(track.legConfidence()).isEqualTo(RelativeTrack.LegConfidence.MATCHED_BY_PLATFORM);
         assertThat(track.events().getFirst().leg()).isEqualTo(Leg.CALLER);
+    }
+
+    private static RelativeTrack trackOf(CallTimeline timeline, String fileName) {
+        return timeline.relativeTracks().stream()
+                .filter(t -> t.fileName().equals(fileName)).findFirst().orElseThrow();
+    }
+
+    @Test
+    @DisplayName("C8CF631E: chỉ caller có end call log, cả hai bên iOS -> vai lấy từ SDP, không gán cả hai cho caller")
+    void sdpRoleBeatsPlatformWhenOnlyOneEndCallLog() {
+        // Luật so nền tảng từng gán cả hai file iOS cho leg duy nhất có end call log iOS.
+        // callee_webrtc.log có "DoSetLocalDescription: answer" nên chắc chắn là callee.
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                metadata("caller_endcall.log", "caller", "ios"),
+                webRtc("caller_webrtc.log", 519, 100, "DoSetLocalDescription: offer", "ios"),
+                webRtc("callee_webrtc.log", 366, 200, "DoSetLocalDescription: answer", "ios")),
+                LegAssignment.unknown());
+
+        assertThat(trackOf(timeline, "caller_webrtc.log").leg()).isEqualTo(Leg.CALLER);
+        assertThat(trackOf(timeline, "callee_webrtc.log").leg()).isEqualTo(Leg.CALLEE);
+        assertThat(trackOf(timeline, "callee_webrtc.log").legConfidence())
+                .isEqualTo(RelativeTrack.LegConfidence.MATCHED_BY_SDP_ROLE);
+    }
+
+    @Test
+    @DisplayName("0EC7B700: file có offer là caller; file không có SDP mới dùng luật nền tảng")
+    void fileWithoutSdpFallsBackToPlatform() {
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                metadata("callee_endcall.log", "callee", "ios"),
+                webRtc("caller_webrtc.log", 10, 100, "DoSetLocalDescription: offer", "ios"),
+                webRtc("callee_webrtc.log", 10, 100, "Audio route changed", "ios")),
+                LegAssignment.unknown());
+
+        assertThat(trackOf(timeline, "caller_webrtc.log").leg()).isEqualTo(Leg.CALLER);
+        assertThat(trackOf(timeline, "callee_webrtc.log").leg()).isEqualTo(Leg.CALLEE);
+        assertThat(trackOf(timeline, "callee_webrtc.log").legConfidence())
+                .isEqualTo(RelativeTrack.LegConfidence.MATCHED_BY_PLATFORM);
+    }
+
+    @Test
+    @DisplayName("D114749E: file tên callee_webrtc.log không có SDP nhưng do máy caller ghi -> vẫn là CALLER")
+    void misnamedFileWithoutSdpKeepsPlatformMatch() {
+        // Chứng minh trên data: cùng deviceId với cuộc 1B009D42 của cùng người gọi, hai lần gọi
+        // cách nhau 8,085 s ở đồng hồ tuyệt đối và 8,087 s ở đồng hồ tương đối của log.
+        // Đổi sang "tin tên file" ở đây là làm sai một ca đang đúng.
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                metadata("caller_endcall.log", "caller", "ios"),
+                webRtc("callee_webrtc.log", 1, 100, "Incrementing activation count.", "ios")),
+                LegAssignment.unknown());
+
+        assertThat(trackOf(timeline, "callee_webrtc.log").leg()).isEqualTo(Leg.CALLER);
+    }
+
+    @Test
+    @DisplayName("đàm phán lại giữa cuộc gọi: vai lấy theo DoSetLocalDescription ĐẦU TIÊN")
+    void firstLocalDescriptionDecidesRole() {
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                webRtc("x_webrtc.log", 900, 9000, "DoSetLocalDescription: offer", "android"),
+                webRtc("x_webrtc.log", 50, 500, "DoSetLocalDescription: answer", "android")),
+                LegAssignment.unknown());
+
+        assertThat(trackOf(timeline, "x_webrtc.log").leg()).isEqualTo(Leg.CALLEE);
+    }
+
+    @Test
+    @DisplayName("leg xác định bằng SDP thì không bị ghi là 'chưa đối chiếu được chủ sở hữu'")
+    void sdpResolvedTrackIsNotReportedAsUncertain() {
+        CallTimeline timeline = builder.build("CALL-1", List.of(
+                webRtc("caller_webrtc.log", 1, 100, "DoSetLocalDescription: offer", "ios")),
+                LegAssignment.unknown());
+
+        assertThat(timeline.notes())
+                .noneMatch(n -> n.message().contains("chưa đối chiếu được chủ sở hữu"));
     }
 
     @Test

@@ -123,7 +123,7 @@ public class TimelineBuilder {
             notes.add(TimelineNote.of(TimelineNote.Kind.RELATIVE_TRACK,
                     fileName + ": " + events.size() + " sự kiện dùng mốc thời gian tương đối,"
                             + " chưa đồng bộ được với timeline signaling"));
-            if (confidence != RelativeTrack.LegConfidence.MATCHED_BY_PLATFORM) {
+            if (!confidence.resolvedByContent()) {
                 notes.add(TimelineNote.of(TimelineNote.Kind.LEG_UNCERTAIN,
                         fileName + ": chưa đối chiếu được chủ sở hữu theo nội dung ("
                                 + confidence + ")"));

@@ -56,4 +56,38 @@ class EvidenceEngineTest {
         assertThat(evidence).singleElement().satisfies(e -> assertThat(e.description())
                 .contains("MOS=4.42201").contains("RTT=63ms"));
     }
+
+    @Test
+    @DisplayName("dòng căn cứ TURN vào evidence nhưng bỏ địa chỉ TURN server và IP mạng nội bộ")
+    void turnBasisIsCitedWithoutAddresses() {
+        CanonicalEvent turn = new CanonicalEvent("caller_webrtc.log#208", "CALL-1", Leg.CALLER,
+                LogSource.WEBRTC, EventTime.relative(java.time.Duration.ofMillis(209)),
+                EventType.TURN_EVENT, "TurnPort",
+                Map.of("message", "TurnPort(Port[3b034600:0:1:0:relay:Net[wlan0:192.168.26.x/24:Wifi:id=3]]"
+                        + "-Remote[203.0.113.227:3478/udp]: Failed to create TURN client socket"),
+                Severity.INFO, new SourceRef("caller_webrtc.log", 208, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(turn), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).isEmpty();   // không phải căn cứ thì không tự vào
+        assertThat(engine.collect(timeline, List.of(turn))).singleElement().satisfies(e -> {
+            assertThat(e.citation()).isEqualTo("[EV01][caller_webrtc.log:208]");
+            assertThat(e.description()).isEqualTo("TURN: Failed to create TURN client socket");
+        });
+    }
+
+    @Test
+    @DisplayName("dòng _emitFailed (mã và lý do thất bại do app ghi) luôn vào evidence như _emitBye")
+    void emitFailedLineIsEvidence() {
+        CanonicalEvent failed = new CanonicalEvent("caller_endcall.log#28", "CALL-1", Leg.CALLER,
+                LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:01:00Z"), ClockDomain.CLIENT_CALLER),
+                EventType.LOG_MESSAGE, "_emitFailed",
+                Map.of("msg", "_emitFailed with originator: 0 reason: call.outgoing.error.network_check"
+                        + " endReason: 0 code: 421 open:true"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 28, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(failed), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).singleElement().satisfies(e -> assertThat(e.description())
+                .startsWith("Thất bại phía client:").contains("code: 421"));
+    }
 }

@@ -19,11 +19,21 @@ public record RelativeTrack(String fileName, Leg leg, String platform,
     }
 
     public enum LegConfidence {
-        /** Đối chiếu platform của log với cột platform/role của bản ghi #H1 — chắc chắn. */
+        /**
+         * Chính log cho biết vai: `DoSetLocalDescription: offer` là caller, `answer` là callee.
+         * Mạnh nhất vì không cần tới tên file hay end call log.
+         */
+        MATCHED_BY_SDP_ROLE,
+        /** Đối chiếu platform của log với cột platform/role của bản ghi `info` trong end call log. */
         MATCHED_BY_PLATFORM,
         /** Chỉ suy từ tên file — data mẫu có file đặt tên sai. */
         FILE_NAME_ONLY,
         /** Không xác định được. */
-        UNRESOLVED
+        UNRESOLVED;
+
+        /** Leg được xác định bằng nội dung log, không phải đoán từ tên file. */
+        public boolean resolvedByContent() {
+            return this == MATCHED_BY_SDP_ROLE || this == MATCHED_BY_PLATFORM;
+        }
     }
 }

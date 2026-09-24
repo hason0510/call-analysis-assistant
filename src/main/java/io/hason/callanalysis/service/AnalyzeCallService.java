@@ -50,7 +50,7 @@ public class AnalyzeCallService {
         CallMetrics metrics = metricsCalculator.calculate(timeline);
         RuleSignals signals = signalExtractor.extract(timeline);
         RuleVerdict verdict = verdictEngine.decide(signals);
-        List<Evidence> evidence = evidenceEngine.collect(timeline);
+        List<Evidence> evidence = evidenceEngine.collect(timeline, signalExtractor.basis(timeline));
         CallReport report = reportBuilder.build(timeline, metrics, evidence, verdict,
                 taxonomyLoader.load());
 

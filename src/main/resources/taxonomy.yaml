@@ -31,9 +31,12 @@ categories:
     knownAmbiguity: >-
       Mã 428 privacy_restricted là server TỪ CHỐI theo chính sách của người nhận, không
       phải lỗi mạng; taxonomy MVP mục 4.2 không có category riêng nên xếp tạm vào đây —
-      cần mentor xác nhận. CANCEL trong data là app TỰ huỷ khi hết 6 giây chờ candidate
-      (`_waitingCandidateTimer with error`, mã 421); nếu TURN không cấp phát được thì
-      xếp TURN_FAILURE, còn TURN tốt mà vẫn hết giờ thì lỗi nằm ở phía client.
+      cần mentor xác nhận. Với CANCEL: 703100CF (cuộc CANCEL duy nhất của tập có nhãn có
+      end call log) ghi `_waitingCandidateTimer with error` rồi `_emitFailed ... code: 421`,
+      tức app TỰ huỷ khi hết `waitingCandidateTimeout` (6000 ms trong config của app);
+      7B56D7AD và E9D6C112 không có end call log nên chưa thấy trực tiếp lý do huỷ. Nếu
+      TURN không cấp phát được thì xếp TURN_FAILURE, còn TURN tốt mà vẫn hết giờ thì lỗi
+      nằm ở phía client.
     calibration:
       status: VALIDATED
       evidence: >-

@@ -7,7 +7,8 @@ import java.util.regex.Pattern;
  * Nhận diện loại file theo NỘI DUNG, không theo tên file.
  *
  * Yêu cầu này không phải giả định: data mẫu có file `calleer_webrtc.log` (thừa chữ 'e'),
- * và MVP mục 6.1 T3 có hẳn test case F02 "Tên file không khớp nội dung".
+ * MVP mục 5.1 T3 yêu cầu "nhận diện loại file theo nội dung", và mục 6.4 có ca kiểm thử
+ * F02 "Tên file không khớp nội dung".
  */
 public class FileTypeDetector {
 

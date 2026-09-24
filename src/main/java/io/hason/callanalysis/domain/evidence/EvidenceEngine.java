@@ -4,6 +4,7 @@ import io.hason.callanalysis.domain.event.CanonicalEvent;
 import io.hason.callanalysis.domain.event.EventTime;
 import io.hason.callanalysis.domain.event.EventType;
 import io.hason.callanalysis.domain.event.LogSource;
+import io.hason.callanalysis.domain.rule.SignalExtractor;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 
 import java.util.ArrayList;
@@ -15,12 +16,18 @@ import java.util.Set;
 /**
  * Chọn ra các sự kiện đáng làm bằng chứng và gán ID ổn định.
  *
- * Phải LỌC MẠNH: một cuộc gọi sinh tới 28 000 sự kiện, trong đó chỉ khoảng một chục
- * dòng thực sự có ý nghĩa. MVP mục 3.3 cũng yêu cầu LLM chỉ nhận timeline, evidence và
+ * Phải LỌC MẠNH: một cuộc gọi sinh tới gần 7 000 sự kiện (DE7DD314: 6 680; cả 20 cuộc
+ * gọi mẫu là 28 522), trong khi report chỉ giữ vài chục dòng (nhiều nhất 21). MVP mục 3.3 cũng yêu cầu LLM chỉ nhận timeline, evidence và
  * chỉ số đã chuẩn hoá, không nhận raw log.
  *
  * ID được gán sau khi sắp xếp tất định; thứ tự đổi giữa các lần chạy sẽ làm Evidence ID
  * nhảy và phá tính nhất quán đo ở Sprint 2.
+ *
+ * Ngoài năm loại sự kiện chọn cố định, report còn nhận các dòng CĂN CỨ của tín hiệu lỗi
+ * (SignalExtractor.basis): ACK INIT_CALL mang mã lỗi, `_waitingCandidateTimer`, dòng TURN
+ * của file không cấp phát được relay, bản ghi stats vượt ngưỡng. Thiếu chúng thì kết luận
+ * như "TURN_FAILURE" hay "server từ chối (428)" không trỏ được về dòng log nào, trái
+ * MVP mục 3.3: "Mọi kết luận phải trace được về evidence".
  */
 public class EvidenceEngine {
 
@@ -32,6 +39,11 @@ public class EvidenceEngine {
     private static final int MAX_EVIDENCE = 40;
 
     public List<Evidence> collect(CallTimeline timeline) {
+        return collect(timeline, List.of());
+    }
+
+    /** @param basis dòng căn cứ của các tín hiệu lỗi, từ SignalExtractor.basis */
+    public List<Evidence> collect(CallTimeline timeline, List<CanonicalEvent> basis) {
         Set<CanonicalEvent> selected = new LinkedHashSet<>();
 
         for (String command : MILESTONE_COMMANDS) {
@@ -52,14 +64,17 @@ public class EvidenceEngine {
                 .collect(java.util.stream.Collectors.groupingBy(e -> e.sourceRef().fileName()))
                 .forEach((file, events) -> selected.add(events.getLast()));
 
-        // Dòng kết thúc cuộc gọi phía client: mang codeReason và failReason bằng tiếng Việt
+        // Dòng kết thúc cuộc gọi phía client: `_emitBye` mang codeReason / failReason,
+        // `_emitFailed` mang reason / code khi cuộc gọi thất bại trước khi thiết lập xong.
         timeline.allEvents().stream()
                 .filter(e -> e.source() == LogSource.ENDCALL)
                 .filter(e -> {
                     String msg = e.attribute("msg");
-                    return msg != null && msg.startsWith("_emitBye");
+                    return msg != null && (msg.startsWith("_emitBye") || msg.startsWith("_emitFailed"));
                 })
                 .forEach(selected::add);
+
+        selected.addAll(basis);
 
         List<CanonicalEvent> ordered = new ArrayList<>(selected);
         ordered.sort(EVIDENCE_ORDER);
@@ -121,6 +136,21 @@ public class EvidenceEngine {
         if (msg != null && msg.startsWith("_emitBye")) {
             return "Kết thúc phía client: " + msg;
         }
+        if (msg != null && msg.startsWith("_emitFailed")) {
+            return "Thất bại phía client: " + msg;
+        }
+        if (event.type() == EventType.SIGNALING_COMMAND && event.source() == LogSource.ENDCALL
+                && "INIT_CALL".equals(event.attribute("ackCmd"))) {
+            return SignalExtractor.describeCallError(event.attribute("payload"))
+                    .map(code -> "Server trả ACK cho INIT_CALL kèm callErrorCode: " + code)
+                    .orElse("Server trả ACK cho INIT_CALL");
+        }
+        if (event.type() == EventType.TURN_EVENT) {
+            return "TURN: " + turnMessage(event.attribute("message"));
+        }
+        if (msg != null && event.source() == LogSource.ENDCALL) {
+            return "Log phía client: " + msg;
+        }
         if (event.source() == LogSource.SIGNALING) {
             return "Signaling " + event.name()
                     + (event.leg() != io.hason.callanalysis.domain.event.Leg.UNKNOWN
@@ -128,6 +158,27 @@ public class EvidenceEngine {
         }
         return event.name();
     }
+
+    /**
+     * Bỏ phần `TurnPort(Port[...Net[...]]-Remote[IP:3478/udp]: ` ở đầu và che IPv4 còn sót:
+     * địa chỉ TURN server là INTERNAL, địa chỉ mạng nội bộ là SENSITIVE
+     * (resources/sensitive-data-inventory.yaml). Dòng gốc vẫn tra được qua [file:dòng].
+     */
+    private static String turnMessage(String message) {
+        if (message == null) {
+            return "-";
+        }
+        String text = message.lines().findFirst().orElse("");
+        int remote = text.indexOf("-Remote[");
+        int cut = remote < 0 ? -1 : text.indexOf("]: ", remote);
+        if (cut >= 0) {
+            text = text.substring(cut + 3);
+        }
+        return IPV4.matcher(text).replaceAll("<ip>").strip();
+    }
+
+    private static final java.util.regex.Pattern IPV4 =
+            java.util.regex.Pattern.compile("\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.(?:\\d{1,3}|x)\\b");
 
     private static String orDash(String value) {
         return value == null || value.isBlank() ? "-" : value;

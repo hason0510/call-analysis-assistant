@@ -128,6 +128,94 @@ class CallLogNormalizationServiceTest {
         assertThat(s.candidateTimeout()).isFalse();
     }
 
+    private List<io.hason.callanalysis.domain.event.CanonicalEvent> basisFrom(Map<String, List<String>> files) {
+        return extractor.basis(new CallLogNormalizationService(
+                new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
+                .buildTimeline("CALL-1", files));
+    }
+
+    @Test
+    @DisplayName("mã lỗi đọc NGUYÊN VĂN từ dòng _emitFailed, kể cả mã lạ như 480 (0EC7B700)")
+    void clientFailureIsReadVerbatimFromEmitFailed() {
+        RuleSignals s = signalsFrom(Map.of("callee_endcall.log", List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "1\t1789700842905\tinfo\tCALL-1\tcallee\tios",
+                "#H2\t#ts\t#tag\tmsg\tstatus\ttype",
+                "2\t1789700843000\tlog_detail\t_emitFailed with originator: 0 reason: "
+                        + "call.outgoing.error.canceled endReason: 750 code: 480 open:true\tTERMINATED\temit")));
+
+        assertThat(s.clientFailure()).isEqualTo("480 call.outgoing.error.canceled");
+    }
+
+    @Test
+    @DisplayName("không có dòng _emitFailed -> clientFailure null, không suy ra mã từ loại lỗi")
+    void noEmitFailedMeansNoClientFailureCode() {
+        RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
+                "#H2\t#ts\t#tag\tmsg\tstatus\ttype",
+                "2\t1789135028111\tlog_detail\t_waitingCandidateTimer with error\tTERMINATED\twebrtc")));
+
+        assertThat(s.candidateTimeout()).isTrue();
+        assertThat(s.clientFailure()).isNull();
+    }
+
+    @Test
+    @DisplayName("căn cứ của TURN hỏng là dòng TURN báo lỗi đầu tiên của file, bỏ qua dòng 401 bắt tay")
+    void turnBasisIsFirstErrorLineOfFailedFile() {
+        List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("caller_webrtc.log", List.of(
+                turnLine("039:588", "Trying to connect to TURN server via udp @ 203.0.113.x:3478"),
+                turnLine("039:590", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
+                turnLine("039:600", "Failed to send TURN message, error: 65 id=WCzPDo17Noyy, type=TURN ALLOCATE request"),
+                turnLine("039:839", "TURN probe request 57437a50446 timeout"))));
+
+        assertThat(basis).singleElement().satisfies(e -> {
+            assertThat(e.sourceRef().lineNumber()).isEqualTo(3);
+            assertThat(e.attribute("message")).contains("Failed to send TURN message, error: 65");
+        });
+    }
+
+    @Test
+    @DisplayName("TURN có lỗi 401 rồi thành công -> KHÔNG trích dòng TURN nào làm căn cứ lỗi")
+    void healthyTurnGivesNoBasis() {
+        assertThat(basisFrom(Map.of("caller_webrtc.log", List.of(
+                turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
+                turnLine("000:102", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
+                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65")))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("căn cứ của 428 và của hẹn giờ candidate là đúng dòng ACK và dòng timer trong end call log")
+    void rejectionAndTimerLinesAreBasis() {
+        List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("caller_endcall.log", List.of(
+                "#H2\t#ts\t#tag\tmsg\tstatus\ttype",
+                "#H3\t#ts\t#tag\tackCmd\tcmd\tcseq\tfromTag\tpayload\tseq\ttoTag\tts\ttsRecv",
+                "3\t1789980269044\trecv_cmd\tINIT_CALL\tACK\t1\tCALL-1-F\t"
+                        + "{\"callResp\":{\"callErrorCode\":428,\"callErrorMsg\":{"
+                        + "\"key\":\"call.outgoing.error.privacy_restricted\"}}}"
+                        + "\t5\t\t1789980268990000000\t0",
+                "2\t1789980275000\tlog_detail\t_waitingCandidateTimer with error\tTERMINATED\twebrtc")));
+
+        assertThat(basis).extracting(e -> e.sourceRef().lineNumber()).containsExactly(3, 4);
+    }
+
+    @Test
+    @DisplayName("cờ chất lượng trích bản ghi mất gói NẶNG NHẤT, không phải bản ghi cuối đã hồi về 0% (271D1FAF)")
+    void qualityBasisIsWorstRecordNotLast() {
+        List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("caller_endcall.log", List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "1\t1789700842905\tinfo\tCALL-1\tcaller\tios",
+                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
+                "6\t1789700850000\tstats\t0\t4.4\t100",
+                "6\t1789700851000\tstats\t7.5\t4.1\t150",
+                "6\t1789700852000\tstats\t12.0\t3.9\t190",
+                "6\t1789700853000\tstats\t0\t4.3\t240")));
+
+        assertThat(basis).singleElement().satisfies(e -> {
+            assertThat(e.attribute("audio.packetLostPercent")).isEqualTo("12.0");
+            assertThat(e.sourceRef().lineNumber()).isEqualTo(6);
+        });
+    }
+
     private CallTimeline timelineFrom(SignalingFetch fetch) {
         return new CallLogNormalizationService(new StubSource(fetch))
                 .buildTimeline("CALL-1", Map.of());
@@ -144,6 +232,32 @@ class CallLogNormalizationServiceTest {
                 .singleElement()
                 .satisfies(n -> assertThat(n.message())
                         .contains("200/201").contains("thiếu 1"));
+    }
+
+    @Test
+    @DisplayName("sự kiện signaling có timestamp hỏng -> bị bỏ VÀ được nêu ở giới hạn dữ liệu")
+    void signalingParseWarningReachesLimitations() {
+        List<RawSignalingRecord> records = new java.util.ArrayList<>(healthyCall());
+        records.add(record(4, "không-phải-thời-gian", "BYE", "U-CALLEE"));
+        CallTimeline timeline = timelineFrom(new SignalingFetch("CALL-1", records, false, 5, 5));
+
+        assertThat(timeline.notes())
+                .filteredOn(n -> n.kind() == TimelineNote.Kind.DATA_LIMITATION)
+                .singleElement()
+                .satisfies(n -> assertThat(n.message())
+                        .startsWith("signaling: 1 sự kiện không đọc được")
+                        .contains("signaling#5").contains("timestamp"));
+    }
+
+    @Test
+    @DisplayName("bản export bị cắt chỉ nêu MỘT lần (ghi chú có kiểu), không lặp lại dưới dạng cảnh báo parse")
+    void truncationIsNotReportedTwice() {
+        CallTimeline timeline = timelineFrom(
+                new SignalingFetch("CALL-1", healthyCall(), true, 200, 201));
+
+        assertThat(timeline.notes()).extracting(TimelineNote::message)
+                .filteredOn(m -> m.contains("200/201"))
+                .hasSize(1);
     }
 
     @Test

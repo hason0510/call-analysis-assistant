@@ -16,17 +16,30 @@ import java.util.Optional;
  * Tên file không đáng tin: data mẫu có `calleer_webrtc.log` (thừa chữ 'e') mà thực chất
  * là log của CALLER. Cách xác định đúng là đối chiếu nội dung:
  *
- *   1. End call log tự khai báo — bản ghi #H1 có cột `role` (caller/callee) và `platform`.
- *   2. WebRTC log không có `role`, nhưng format của nó cho biết nền tảng
- *      (Format 1 = iOS, Format 2 = Android). Ghép platform đó với platform của end call log
- *      là ra chủ sở hữu.
- *   3. Hai bên cùng nền tảng thì không phân biệt được — lúc đó mới quay về gợi ý từ tên file,
- *      và đánh dấu độ tin cậy thấp hơn.
+ *   1. End call log tự khai báo — bản ghi `info` có cột `role` (caller/callee) và `platform`.
+ *   2. WebRTC log tự cho biết VAI qua SDP: caller tạo offer, callee tạo answer, nên dòng
+ *      `DoSetLocalDescription: offer` / `answer` đầu tiên quyết định leg. Trên data mẫu,
+ *      22/27 file có dòng này và nó khớp 100% với vai DTLS (offer ↔ server, answer ↔ client).
+ *   3. File không có SDP (cuộc gọi dừng trước khi tạo offer/answer): ghép nền tảng của log
+ *      (Format 1 = iOS, Format 2 = Android) với nền tảng của end call log. Chỉ dùng khi có
+ *      ĐÚNG MỘT end call log cùng nền tảng.
+ *   4. Không cách nào ở trên dùng được thì quay về gợi ý từ tên file, độ tin cậy thấp hơn.
+ *
+ * Luật 2 phải đứng TRƯỚC luật 3. Luật 3 giả định leg kia khác nền tảng, nhưng nếu leg kia
+ * không có end call log thì không biết nền tảng của nó: C8CF631E chỉ có end call log của
+ * caller (iOS) trong khi cả hai file WebRTC đều iOS, và luật 3 từng gán nhầm cả hai file
+ * cho caller. Luật 3 vẫn được giữ làm dự phòng vì trên data nó đúng ở mọi file không có
+ * SDP — kể cả D114749E, nơi file tên `callee_webrtc.log` thật ra do máy caller ghi ra
+ * (cùng deviceId với cuộc 1B009D42, hai lần gọi cách nhau 8,085 s ở cả đồng hồ tuyệt đối
+ * lẫn đồng hồ tương đối của log).
  */
 public class LegCorrelator {
 
     private static final String ROLE = "role";
     private static final String PLATFORM = "platform";
+    private static final String MESSAGE = "message";
+    private static final String LOCAL_OFFER = "DoSetLocalDescription: offer";
+    private static final String LOCAL_ANSWER = "DoSetLocalDescription: answer";
 
     /** Kết quả: leg của từng file, và độ tin cậy của kết luận đó. */
     public record FileLeg(String fileName, Leg leg, String platform,
@@ -35,13 +48,49 @@ public class LegCorrelator {
     public Map<String, FileLeg> correlate(List<CanonicalEvent> events) {
         Map<String, FileLeg> endCallFiles = legsFromEndCallMetadata(events);
         Map<String, FileLeg> result = new LinkedHashMap<>(endCallFiles);
+        Map<String, Leg> sdpRoles = webRtcSdpRoleByFile(events);
 
         for (Map.Entry<String, String> entry : webRtcPlatformByFile(events).entrySet()) {
             String fileName = entry.getKey();
             String platform = entry.getValue();
-            result.put(fileName, resolveWebRtcFile(fileName, platform, endCallFiles));
+            Leg sdpRole = sdpRoles.get(fileName);
+            result.put(fileName, sdpRole != null
+                    ? new FileLeg(fileName, sdpRole, platform, RelativeTrack.LegConfidence.MATCHED_BY_SDP_ROLE)
+                    : resolveWebRtcFile(fileName, platform, endCallFiles));
         }
         return Map.copyOf(result);
+    }
+
+    /**
+     * Vai của từng file WebRTC theo dòng `DoSetLocalDescription` ĐẦU TIÊN (số dòng nhỏ nhất):
+     * offer → caller, answer → callee. Lấy dòng đầu tiên vì nếu có đàm phán lại giữa cuộc
+     * gọi thì bên nào cũng có thể tạo offer mới; vai ban đầu mới phản ánh ai là người gọi.
+     */
+    private Map<String, Leg> webRtcSdpRoleByFile(List<CanonicalEvent> events) {
+        Map<String, CanonicalEvent> firstByFile = new LinkedHashMap<>();
+        for (CanonicalEvent e : events) {
+            if (e.source() != LogSource.WEBRTC || sdpRoleOf(e.attribute(MESSAGE)) == Leg.UNKNOWN) {
+                continue;
+            }
+            firstByFile.merge(e.sourceRef().fileName(), e, (a, b) ->
+                    a.sourceRef().lineNumber() <= b.sourceRef().lineNumber() ? a : b);
+        }
+        Map<String, Leg> roles = new LinkedHashMap<>();
+        firstByFile.forEach((file, e) -> roles.put(file, sdpRoleOf(e.attribute(MESSAGE))));
+        return roles;
+    }
+
+    private static Leg sdpRoleOf(String message) {
+        if (message == null) {
+            return Leg.UNKNOWN;
+        }
+        if (message.contains(LOCAL_OFFER)) {
+            return Leg.CALLER;
+        }
+        if (message.contains(LOCAL_ANSWER)) {
+            return Leg.CALLEE;
+        }
+        return Leg.UNKNOWN;
     }
 
     private FileLeg resolveWebRtcFile(String fileName, String platform,

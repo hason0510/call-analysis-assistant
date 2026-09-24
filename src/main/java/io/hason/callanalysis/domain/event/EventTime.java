@@ -26,7 +26,13 @@ public sealed interface EventTime {
         return new Relative(sinceLogStart);
     }
 
-    /** Khoá sắp xếp ổn định: event tuyệt đối luôn đứng trước event tương đối. */
+    /**
+     * Khoá sắp xếp ổn định. Event tương đối có khoá Long.MIN_VALUE + nano, tức NHỎ HƠN mọi
+     * event tuyệt đối, nên hai loại không bao giờ xen kẽ nhau khi sắp tăng dần (tương đối
+     * đứng trước). Trên thực tế không nơi nào trộn hai loại trong một lần sắp: TimelineBuilder
+     * tách main track (tuyệt đối) khỏi các track tương đối, còn EvidenceEngine tự xếp event
+     * tuyệt đối lên trước bằng một tiêu chí đặt trước khoá này.
+     */
     default long sortKeyNanos() {
         return switch (this) {
             case Absolute a -> a.instant().getEpochSecond() * 1_000_000_000L + a.instant().getNano();

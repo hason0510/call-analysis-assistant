@@ -19,7 +19,7 @@ class CanonicalEventTest {
                 "EV01", "CALL-1", Leg.CALLER, LogSource.SIGNALING,
                 EventTime.absolute(Instant.parse("2026-09-21T08:44:28.953756952Z"), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, "INVITE", attributes, Severity.INFO,
-                new SourceRef("signaling.json", 12, "{}"));
+                new SourceRef(SourceRef.SIGNALING, 12, "{}"));
     }
 
     @Test
@@ -76,8 +76,8 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("event tuyệt đối luôn sắp trước event tương đối")
-    void absoluteTimeSortsBeforeRelativeTime() {
+    @DisplayName("khoá sắp xếp của event tương đối nhỏ hơn mọi event tuyệt đối — hai loại không xen kẽ")
+    void relativeKeyIsBelowEveryAbsoluteKey() {
         EventTime absolute = EventTime.absolute(Instant.parse("1970-01-01T00:00:00Z"), ClockDomain.SERVER);
         EventTime relative = EventTime.relative(Duration.ofSeconds(6652));
 
@@ -92,7 +92,15 @@ class CanonicalEventTest {
     void sourceRefCitation() {
         assertThat(new SourceRef("callee_endcall.log", 142, "...").citation())
                 .isEqualTo("callee_endcall.log:142");
-        assertThat(new SourceRef("signaling.json", 0, "...").citation())
-                .isEqualTo("signaling.json");
+        assertThat(new SourceRef(SourceRef.SIGNALING, 0, "...").citation())
+                .isEqualTo("signaling");
+    }
+
+    @Test
+    @DisplayName("signaling trích dẫn bằng THỨ TỰ sự kiện (signaling#87), không giả làm số dòng của file")
+    void signalingCitationIsEventOrderNotFileLine() {
+        assertThat(new SourceRef(SourceRef.SIGNALING, 87, "...").citation()).isEqualTo("signaling#87");
+        // file log đính kèm vẫn giữ dạng tên file : số dòng
+        assertThat(new SourceRef("caller_webrtc.log", 208, "...").citation()).isEqualTo("caller_webrtc.log:208");
     }
 }

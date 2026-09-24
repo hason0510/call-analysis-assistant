@@ -198,9 +198,10 @@ public class EndCallLogParser {
         }
 
         /**
-         * Bản ghi #H2 (`log_detail`) cho phần lớn nội dung. Nhận dạng nhẹ các dòng
-         * ICE để T7 lấy evidence dễ hơn; còn lại giữ nguyên là LOG_MESSAGE và để
-         * Timeline Builder tự phát hiện chuyển trạng thái từ cột `status`.
+         * Bản ghi `log_detail` cho phần lớn nội dung. Nhận dạng nhẹ các dòng ICE / kết nối
+         * để lọc theo loại khi cần; còn lại giữ nguyên là LOG_MESSAGE. Cột `status` được giữ
+         * trong attributes, hiện chưa bước nào dùng tới. Chuyển trạng thái ICE mà các tầng
+         * sau dùng (iceStateTo) lấy từ WebRTC log, không từ đây.
          */
         static RecordShape fromLogDetail(Map<String, String> row) {
             String msg = orDefault(row.get("msg"), "");

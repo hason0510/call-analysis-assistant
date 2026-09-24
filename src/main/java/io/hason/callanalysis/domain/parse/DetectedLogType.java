@@ -5,9 +5,9 @@ import io.hason.callanalysis.domain.event.LogSource;
 /**
  * Loại file nhận diện được TỪ NỘI DUNG, không theo tên file.
  *
- * Data mẫu có file tên `calleer_webrtc.log` (thừa chữ 'e') — đối chiếu format của nó
- * (Android) với cột platform trong bản ghi #H1 của end call log cho thấy đó là log
- * của CALLER bị gõ sai tên.
+ * Data mẫu có file tên `calleer_webrtc.log` (thừa chữ 'e') mà nội dung là log của CALLER,
+ * và file tên `caller_webrtc.log` (9B556E56) mà nội dung là end call log. Loại file do
+ * FileTypeDetector quyết định; leg của file do LegCorrelator quyết định.
  */
 public enum DetectedLogType {
 
@@ -15,7 +15,7 @@ public enum DetectedLogType {
     ENDCALL_LOG(LogSource.ENDCALL),
     /** Format 1 — tiền tố [giây:mili][thread] đứng đầu dòng. */
     WEBRTC_IOS(LogSource.WEBRTC),
-    /** Format 2 — ten file .cc dung truoc khoi [giay:mili][thread]. */
+    /** Format 2 — tên file .cc đứng trước khối [giây:mili][thread]. */
     WEBRTC_ANDROID(LogSource.WEBRTC),
     UNKNOWN(null);
 

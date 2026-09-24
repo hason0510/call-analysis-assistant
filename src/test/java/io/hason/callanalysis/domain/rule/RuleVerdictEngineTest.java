@@ -40,13 +40,14 @@ class RuleVerdictEngineTest {
         boolean turnAllocationFailed = false;
         boolean candidateTimeout = false;
         String initCallRejection = null;
+        String clientFailure = null;
         Set<LogSource> sources = ALL_SOURCES;
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
                     qualityDegraded, signalingTruncated, turnAllocationFailed, candidateTimeout,
-                    initCallRejection, sources);
+                    initCallRejection, clientFailure, sources);
         }
     }
 
@@ -77,12 +78,13 @@ class RuleVerdictEngineTest {
             b.cancelled = true;
             b.turnAllocationFailed = true;
             b.candidateTimeout = true;
+            b.clientFailure = "421 call.outgoing.error.network_check";   // dòng _emitFailed thật
         }));
 
         assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
-        assertThat(v.reasoning()).contains("421");
+        assertThat(v.reasoning()).contains("421 call.outgoing.error.network_check");
     }
 
     @Test
@@ -110,10 +112,27 @@ class RuleVerdictEngineTest {
             b.terminatedNormally = false;
             b.cancelled = true;
             b.candidateTimeout = true;
+            b.clientFailure = "421 call.outgoing.error.network_check";
         }));
 
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.SIGNALING_FAILURE);
         assertThat(v.reasoning()).contains("421").contains("phía client");
+    }
+
+    @Test
+    @DisplayName("không có dòng _emitFailed thì lý do KHÔNG tự điền mã lỗi theo loại lỗi")
+    void errorCodeIsNeverFilledInWithoutEmitFailedLine() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.cancelled = true;
+            b.turnAllocationFailed = true;
+            b.candidateTimeout = true;
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
+        assertThat(v.reasoning()).contains("hết thời gian chờ candidate").doesNotContain("mã");
     }
 
     @Test

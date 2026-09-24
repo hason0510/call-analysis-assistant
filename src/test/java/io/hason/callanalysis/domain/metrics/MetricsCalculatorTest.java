@@ -31,46 +31,46 @@ class MetricsCalculatorTest {
 
     private CanonicalEvent sig(String isoTime, String cmd, Leg leg) {
         int n = ordinal++;
-        return new CanonicalEvent("signaling.json#" + n, "CALL-1", leg, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + n, "CALL-1", leg, LogSource.SIGNALING,
                 EventTime.absolute(Instant.parse(isoTime), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd, Map.of(), Severity.INFO,
-                new SourceRef("signaling.json", n + 1, cmd));
+                new SourceRef(SourceRef.SIGNALING, n + 1, cmd));
     }
 
     private CanonicalEvent sigAt(long millisFromT0, String cmd, Leg leg) {
         int n = ordinal++;
-        return new CanonicalEvent("signaling.json#" + n, "CALL-1", leg, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + n, "CALL-1", leg, LogSource.SIGNALING,
                 EventTime.absolute(T0.plusMillis(millisFromT0), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd, Map.of(), Severity.INFO,
-                new SourceRef("signaling.json", n + 1, cmd));
+                new SourceRef(SourceRef.SIGNALING, n + 1, cmd));
     }
 
     private CanonicalEvent sigWarn(long millis, String cmd, String service) {
         int n = ordinal++;
-        return new CanonicalEvent("signaling.json#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
                 EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd, Map.of("service", service),
                 io.hason.callanalysis.domain.event.Severity.WARN,
-                new SourceRef("signaling.json", n + 1, cmd));
+                new SourceRef(SourceRef.SIGNALING, n + 1, cmd));
     }
 
     private CanonicalEvent sigCtx(long millis, String cmd, Leg leg,
                                   String isp, String asn, String country) {
         int n = ordinal++;
-        return new CanonicalEvent("signaling.json#" + n, "CALL-1", leg, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + n, "CALL-1", leg, LogSource.SIGNALING,
                 EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd,
                 Map.of("isp", isp, "asn", asn, "countryCode", country), Severity.INFO,
-                new SourceRef("signaling.json", n + 1, cmd));
+                new SourceRef(SourceRef.SIGNALING, n + 1, cmd));
     }
 
     private CanonicalEvent sigLatency(long millis, int latencyMs) {
         int n = ordinal++;
-        return new CanonicalEvent("signaling.json#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+        return new CanonicalEvent("signaling#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
                 EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, "INIT_CALL",
                 Map.of("latencyMs", String.valueOf(latencyMs)), Severity.INFO,
-                new SourceRef("signaling.json", n + 1, "INIT_CALL"));
+                new SourceRef(SourceRef.SIGNALING, n + 1, "INIT_CALL"));
     }
 
     private static CanonicalEvent summary(Leg leg, Map<String, String> fields) {

@@ -24,10 +24,15 @@ public record RuleSignals(
         boolean signalingTruncated,
         /** Có file WebRTC đã thử TURN nhưng KHÔNG một lần allocate nào thành công. */
         boolean turnAllocationFailed,
-        /** App hết giờ chờ ICE candidate (`_waitingCandidateTimer with error`, mã 421). */
+        /** App hết giờ chờ ICE candidate (`_waitingCandidateTimer with error`). */
         boolean candidateTimeout,
         /** Server từ chối INIT_CALL, dạng "428 call.outgoing.error.privacy_restricted"; null nếu không. */
         String initCallRejection,
+        /**
+         * Mã và lý do thất bại app tự ghi ở dòng `_emitFailed` đầu tiên, đọc NGUYÊN VĂN,
+         * dạng "421 call.outgoing.error.network_check"; null nếu không có dòng này.
+         */
+        String clientFailure,
         Set<LogSource> availableSources
 ) {
 

@@ -12,8 +12,9 @@ import java.util.List;
  * Suy verdict từ tín hiệu thô.
  *
  * Thứ tự kiểm tra có chủ đích, và ca quan trọng nhất là ca thứ tự:
- * cuộc gọi 2D9057AA trong data mẫu có signaling HOÀN HẢO (OK_ACK_OK, BYE, PAIR_PING
- * đều đặn 33 giây) nhưng ground truth là FAIL vì ICE thất bại và 0 byte audio.
+ * cuộc gọi 2D9057AA trong data mẫu có signaling trông BÌNH THƯỜNG (đạt OK_ACK_OK, kết
+ * thúc bằng BYE, PAIR_PING phía callee đều tới sát lúc BYE) nhưng ground truth là FAIL
+ * vì ICE thất bại và 0 byte audio.
  * Rule chỉ xét signaling sẽ kết luận SUCCESS và sai ngay trên tập dev.
  */
 public class RuleVerdictEngine {
@@ -54,12 +55,13 @@ public class RuleVerdictEngine {
                         "Không cấp phát được relay trên TURN server nào (0 lần allocate thành công)"
                                 + " nên không có candidate để gửi INVITE"
                                 + (signals.candidateTimeout()
-                                ? "; app hết thời gian chờ candidate (mã 421)" : ""),
+                                ? "; app hết thời gian chờ candidate" + clientFailureNote(signals) : ""),
                         limitations);
             }
             if (signals.candidateTimeout()) {
                 return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),
-                        "App hết thời gian chờ candidate (mã 421) trước khi gửi được INVITE;"
+                        "App hết thời gian chờ candidate" + clientFailureNote(signals)
+                                + " trước khi gửi được INVITE;"
                                 + " TURN vẫn cấp phát được nên nguyên nhân nằm ở bước tạo offer"
                                 + " hoặc thu candidate phía client", limitations);
             }
@@ -119,6 +121,15 @@ public class RuleVerdictEngine {
                 "Đã đạt OK_ACK_OK, kết thúc bằng BYE, không có dấu hiệu lỗi media", limitations);
     }
 
+    /**
+     * Mã lỗi đọc NGUYÊN VĂN từ dòng `_emitFailed` của end call log, không tự điền theo
+     * loại lỗi: không có dòng đó thì câu lý do không nêu mã nào.
+     */
+    private static String clientFailureNote(RuleSignals signals) {
+        return signals.clientFailure() == null ? ""
+                : " (_emitFailed: mã " + signals.clientFailure() + ")";
+    }
+
     private static String mediaFailureReason(RuleSignals signals) {
         if (signals.iceEverFailed() && !signals.iceEverConnected()) {
             return "ICE chuyển sang failed và không bao giờ đạt connected";
@@ -159,7 +170,7 @@ public class RuleVerdictEngine {
     private static List<String> withUnvalidatedThresholdNote(List<String> limitations) {
         List<String> all = new ArrayList<>(limitations);
         all.add("Ngưỡng phát hiện chất lượng kém CHƯA kiểm chứng được:"
-                + " tập data mẫu không có cuộc gọi nào bị suy giảm chất lượng");
+                + " tập data có nhãn không có cuộc gọi nào bị suy giảm chất lượng");
         return all;
     }
 

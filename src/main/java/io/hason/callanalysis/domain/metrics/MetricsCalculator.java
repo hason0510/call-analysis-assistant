@@ -101,8 +101,12 @@ public class MetricsCalculator {
      *
      * Đây là chỉ số PROXY, không phải đo trực tiếp: PAIR_PING là nhịp tim của tầng
      * SIGNALING, nên khoảng trống lớn GỢI Ý đường signaling có vấn đề — nhưng KHÔNG
-     * chứng minh được media có vấn đề. Cuộc gọi 2D9057AA là ví dụ: PAIR_PING chạy đều
-     * suốt 33 giây trong khi media đã chết hẳn.
+     * chứng minh được media có vấn đề. Cuộc gọi 2D9057AA là ví dụ: PAIR_PING phía callee
+     * vẫn đều tới giây ~39,5 (sát lúc BYE) trong khi ICE phía callee đã failed.
+     *
+     * Hạn chế: chỉ đo khoảng trống GIỮA hai lần ping, không đo từ lần ping cuối tới lúc
+     * kết thúc. Cũng ở 2D9057AA, PAIR_PING phía caller ngừng hẳn từ giây ~24,8 tới lúc
+     * BYE (~40 s), nhưng chỉ số vẫn ra 1019 ms.
      */
     private MetricValue maxPairPingGap(CallTimeline timeline, Leg leg) {
         List<Instant> pings = timeline.mainTrack().stream()

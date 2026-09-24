@@ -25,11 +25,14 @@ import java.util.regex.Pattern;
  *      Android : peer_connection.cc: [6652:957][12108] (line 659): message
  *
  * 2. Mốc thời gian là TƯƠNG ĐỐI (giây:mili từ lúc log khởi tạo), không phải giờ tuyệt đối,
- *    và trường giây có độ rộng BIẾN THIÊN — quan sát từ [000:000] tới [6652:953].
+ *    và trường giây có độ rộng BIẾN THIÊN — quan sát từ [000:000] tới [12844:xxx].
  *    Viết regex \d{3} sẽ bỏ sót phần lớn dữ liệu.
  *
- * 3. 22% số dòng (5 966 / 26 712 trong data mẫu) là dòng NỐI TIẾP của bản ghi trước,
- *    chủ yếu khi iOS in mô tả audio route dài nhiều dòng. Bỏ qua chúng là mất 1/5 dữ liệu.
+ * 3. 6,2% số dòng (1 649 / 26 695 trong 27 file WebRTC mẫu) là dòng NỐI TIẾP của bản ghi
+ *    trước: 1 639 dòng ở iOS, chỉ 10 ở Android; khoảng một nửa là mô tả audio route của
+ *    RTCAudioSession in ra nhiều dòng. Bỏ qua chúng là mất dữ liệu.
+ *    Con số "22%" ghi trước đây đã được đếm bằng regex \d{3} nên coi nhầm mọi dòng có
+ *    trường giây >= 1000 là dòng nối tiếp — chính là lỗi ở điểm 2.
  */
 public class WebRtcLogParser {
 
@@ -40,7 +43,7 @@ public class WebRtcLogParser {
             "^(?<module>[\\w.]+\\.(?:cc|mm|h)):\\s*\\[(\\d+):(\\d{3})]\\[(\\d+)]"
                     + "\\s*\\(line (?<line>\\d+)\\):\\s*(?<message>.*)$");
 
-    /** Chuyen trang thai ICE — tin hieu manh nhat trong toan bo file. */
+    /** Chuyển trạng thái ICE — tín hiệu mạnh nhất trong toàn bộ file. */
     private static final Pattern ICE_STATE = Pattern.compile(
             "IceConnectionState\\s+(\\w+)\\s*=>\\s*(\\w+)");
 

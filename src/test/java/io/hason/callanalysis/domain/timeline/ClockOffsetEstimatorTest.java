@@ -24,11 +24,11 @@ class ClockOffsetEstimatorTest {
     private static final Instant BASE = Instant.parse("2026-09-21T08:00:00Z");
 
     private static CanonicalEvent serverEvent(long millisFromBase, String cmd) {
-        return new CanonicalEvent("signaling.json#" + millisFromBase, "CALL-1", Leg.SERVER,
+        return new CanonicalEvent("signaling#" + millisFromBase, "CALL-1", Leg.SERVER,
                 LogSource.SIGNALING,
                 EventTime.absolute(BASE.plusMillis(millisFromBase), ClockDomain.SERVER),
                 EventType.SIGNALING_COMMAND, cmd, Map.of(), Severity.INFO,
-                new SourceRef("signaling.json", 1, cmd));
+                new SourceRef(SourceRef.SIGNALING, 1, cmd));
     }
 
     private static CanonicalEvent clientSend(long millisFromBase, String cmd, Leg leg) {

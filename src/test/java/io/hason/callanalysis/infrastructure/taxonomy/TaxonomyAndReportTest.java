@@ -118,7 +118,7 @@ class TaxonomyAndReportTest {
                 Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS, ConfidenceLevel.MEDIUM,
                 "Cuộc gọi thiết lập thành công nhưng có dấu hiệu suy giảm chất lượng.",
                 List.of(new CallReport.EvidenceEntry("EV01", "SIGNALING",
-                        "2026-09-21T08:44:28.953756952Z", "Signaling INIT_CALL", "signaling.json:1")),
+                        "2026-09-21T08:44:28.953756952Z", "Signaling INIT_CALL", "signaling#1")),
                 List.of(
                         new CallReport.MetricEntry("Thời gian thiết lập", "6774", "ms", null, "SIGNALING"),
                         new CallReport.MetricEntry("MOS (caller)", null, null,

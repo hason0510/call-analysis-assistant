@@ -42,6 +42,28 @@ class SignalingNormalizerTest {
     }
 
     @Test
+    @DisplayName("sự kiện thứ N của bản export (ordinal N - 1) trích dẫn là signaling#N")
+    void citationIsOrdinalPlusOne() {
+        ParseResult result = normalizer.normalize(fetch(List.of(
+                record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U-CALLER", "INFO"),
+                record(86, "2026-09-21T08:45:08.000000000Z", "BYE", "U-CALLEE", "INFO"))));
+
+        assertThat(result.events()).extracting(e -> e.sourceRef().citation())
+                .containsExactly("signaling#1", "signaling#87");
+    }
+
+    @Test
+    @DisplayName("cảnh báo bản export bị cắt nêu nguồn signaling, không nêu số dòng giả")
+    void truncationWarningNamesSourceWithoutFakeLine() {
+        ParseResult result = normalizer.normalize(new SignalingFetch("CALL-1", List.of(
+                record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U-CALLER", "INFO")),
+                true, 200, 201));
+
+        assertThat(result.warnings()).singleElement().satisfies(w -> assertThat(w.describe())
+                .startsWith("signaling — ").contains("200/201"));
+    }
+
+    @Test
     @DisplayName("leg suy ra từ appUserId của INIT_CALL đầu tiên — signaling không có trường leg")
     void legDerivedFromFirstInitCall() {
         ParseResult result = normalizer.normalize(fetch(List.of(

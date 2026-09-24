@@ -13,7 +13,12 @@ public record TimelineNote(Kind kind, String message) {
         CLOCK_OFFSET,
         /** Track dùng mốc thời gian tương đối, không ghép được vào timeline chính. */
         RELATIVE_TRACK,
-        /** Không xác định chắc chắn được leg của một file. */
+        /**
+         * Leg của một file KHÔNG khớp với điều tên file gợi ý, gồm hai trường hợp: file đã
+         * được gán lại leg theo nội dung (tên file sai, ví dụ calleer_webrtc.log), hoặc chưa
+         * đối chiếu được chủ sở hữu theo nội dung. Cả hai đều phải nêu ở "Giới hạn dữ liệu"
+         * để người đọc không tin nhầm vào tên file.
+         */
         LEG_UNCERTAIN,
         /**
          * Bản export signaling bị cắt bớt: nguồn trả về ít event hơn số thực có.

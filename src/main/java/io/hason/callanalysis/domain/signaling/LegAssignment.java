@@ -19,7 +19,10 @@ import java.util.Optional;
 public record LegAssignment(Map<String, Leg> byAppUserId, Source derivedFrom) {
 
     public enum Source {
-        /** Cột `role` của bản ghi #H1 trong end call log — chắc chắn. */
+        /**
+         * Cột `role` của bản ghi `info` trong end call log — chắc chắn. Khai báo cho
+         * Confidence Design (Sprint 3); hiện chưa nơi nào tạo LegAssignment theo nguồn này.
+         */
         ENDCALL_ROLE,
         /** appUserId của INIT_CALL đầu tiên là caller — suy luận. */
         FIRST_INIT_CALL,

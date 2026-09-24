@@ -25,8 +25,13 @@ import java.util.Map;
  */
 public class SignalingNormalizer {
 
-    /** Tên file ảo dùng cho SourceRef — signaling không đến từ file người dùng đính kèm. */
-    private static final String VIRTUAL_FILE = "signaling.json";
+    /**
+     * Nguồn trong SourceRef của event signaling. Signaling không đến từ file người dùng đính
+     * kèm mà từ Elasticsearch, nên vị trí là thứ tự sự kiện, trích dẫn dạng `signaling#87`
+     * (xem SourceRef.SIGNALING). Không dùng tên `signaling.json`: người đọc sẽ mở file đó
+     * và tìm nhầm ở dòng 87.
+     */
+    private static final String SOURCE = SourceRef.SIGNALING;
 
     public ParseResult normalize(SignalingFetch fetch) {
         if (fetch == null) {
@@ -46,7 +51,7 @@ public class SignalingNormalizer {
         for (RawSignalingRecord record : fetch.records()) {
             Instant instant = parseTimestamp(record.timestamp());
             if (instant == null) {
-                warnings.add(new ParseWarning(VIRTUAL_FILE, record.ordinal() + 1,
+                warnings.add(new ParseWarning(SOURCE, record.ordinal() + 1,
                         "timestamp không đọc được: " + record.timestamp()));
                 continue;
             }
@@ -54,7 +59,7 @@ public class SignalingNormalizer {
         }
 
         if (fetch.truncated()) {
-            warnings.add(new ParseWarning(VIRTUAL_FILE, 0,
+            warnings.add(new ParseWarning(SOURCE, 0,
                     "bản export signaling bị cắt bớt: trả về " + fetch.returned()
                             + "/" + fetch.totalMatching() + " event, thiếu " + fetch.missingCount()));
         }
@@ -78,7 +83,7 @@ public class SignalingNormalizer {
         }
 
         return new CanonicalEvent(
-                VIRTUAL_FILE + "#" + r.ordinal(),
+                SOURCE + "#" + (r.ordinal() + 1),
                 callId,
                 legs.legOf(r.appUserId()),
                 LogSource.SIGNALING,
@@ -87,8 +92,9 @@ public class SignalingNormalizer {
                 r.cmd() == null ? "UNKNOWN" : r.cmd(),
                 attributes,
                 severityOf(r.level()),
-                // ordinal + 1 để số dòng bắt đầu từ 1, thống nhất với các parser file
-                new SourceRef(VIRTUAL_FILE, r.ordinal() + 1, r.timestamp() + " " + r.cmd()));
+                // Vị trí = ordinal + 1: sự kiện thứ N (đếm từ 1) trong mảng `events` của bản
+                // export, cũng là ordinal N - 1 trong index signaling-events.
+                new SourceRef(SOURCE, r.ordinal() + 1, r.timestamp() + " " + r.cmd()));
     }
 
     private static void put(Map<String, String> target, String key, String value) {

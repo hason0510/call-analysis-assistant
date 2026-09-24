@@ -70,6 +70,7 @@ public class CallLogNormalizationService {
                 fetch == null ? List.of() : fetch.records());
 
         seedNotes.addAll(truncationNotes(fetch));
+        seedNotes.addAll(signalingWarningNotes(outcome.signaling()));
         seedNotes.addAll(attachedFileWarningNotes(outcome));
 
         return timelineBuilder.build(callId, outcome.combined().events(), legs, seedNotes);
@@ -132,6 +133,33 @@ public class CallLogNormalizationService {
                             + samples + more));
         }
         return notes;
+    }
+
+    /**
+     * Tóm tắt cảnh báo khi chuẩn hoá signaling (ví dụ timestamp không đọc được, bản ghi đó bị
+     * bỏ) thành ghi chú giới hạn dữ liệu, cùng khuôn với attachedFileWarningNotes.
+     *
+     * Bỏ qua cảnh báo không gắn với sự kiện nào (vị trí 0): đó là cảnh báo bản export bị cắt,
+     * đã đi tới report dưới dạng ghi chú CÓ KIỂU SIGNALING_TRUNCATED (truncationNotes), nêu lại
+     * ở đây thì report nói hai lần một điều.
+     */
+    private static List<TimelineNote> signalingWarningNotes(ParseResult signaling) {
+        List<ParseWarning> warnings = signaling.warnings().stream()
+                .filter(w -> w.lineNumber() > 0)
+                .toList();
+        if (warnings.isEmpty()) {
+            return List.of();
+        }
+        String samples = warnings.stream()
+                .limit(WARNING_SAMPLE_SIZE)
+                .map(ParseWarning::describe)
+                .collect(java.util.stream.Collectors.joining("; "));
+        String more = warnings.size() > WARNING_SAMPLE_SIZE
+                ? " (và " + (warnings.size() - WARNING_SAMPLE_SIZE) + " cảnh báo khác)"
+                : "";
+        return List.of(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
+                "signaling: " + warnings.size() + " sự kiện không đọc được, đã bỏ qua — "
+                        + samples + more));
     }
 
     /**
