@@ -167,6 +167,39 @@ class CallLogNormalizationServiceTest {
     }
 
     @Test
+    @DisplayName("Elasticsearch lỗi -> vẫn dựng timeline từ log đính kèm, nêu lý do ở giới hạn dữ liệu")
+    void signalingSourceFailureDoesNotCrash() {
+        SignalingSource down = callId -> {
+            throw new java.io.UncheckedIOException("Connection refused",
+                    new java.net.ConnectException("Connection refused"));
+        };
+
+        CallTimeline timeline = new CallLogNormalizationService(down)
+                .buildTimeline("CALL-1", Map.of("caller_endcall.log", endCallLog("CALL-1")));
+
+        assertThat(timeline.mainTrack()).isNotEmpty();
+        assertThat(timeline.notes())
+                .filteredOn(n -> n.kind() == TimelineNote.Kind.DATA_LIMITATION)
+                .anyMatch(n -> n.message().contains("Không truy vấn được signaling"));
+    }
+
+    @Test
+    @DisplayName("ca F02/F04: file không nhận diện được phải được nêu tên, không bị bỏ im lặng")
+    void unrecognizedFileIsReported() {
+        CallTimeline timeline = new CallLogNormalizationService(
+                new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
+                .buildTimeline("CALL-1", Map.of(
+                        "caller_webrtc.log", List.of("day khong phai log", "@@@"),
+                        "callee_endcall.log", List.of()));
+
+        assertThat(timeline.notes())
+                .filteredOn(n -> n.kind() == TimelineNote.Kind.DATA_LIMITATION)
+                .extracting(TimelineNote::message)
+                .anyMatch(m -> m.contains("caller_webrtc.log") && m.contains("không nhận diện được"))
+                .anyMatch(m -> m.contains("callee_endcall.log") && m.contains("file rỗng"));
+    }
+
+    @Test
     @DisplayName("timeline rỗng là THIẾU DỮ LIỆU, không phải bản export bị cắt bớt")
     void emptyTimelineIsNotTruncation() {
         CallTimeline timeline = timelineFrom(

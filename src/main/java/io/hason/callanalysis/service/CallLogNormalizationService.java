@@ -63,15 +63,33 @@ public class CallLogNormalizationService {
     public CallTimeline buildTimeline(String callId, Map<String, List<String>> attachedFiles) {
         // Truy vấn MỘT lần rồi dùng lại: trước đây hàm này gọi fetchByCallId hai lượt,
         // một lượt cho normalize và một lượt cho leg, tức hai vòng tới Elasticsearch.
-        SignalingFetch fetch = signalingSource.fetchByCallId(callId);
+        List<TimelineNote> seedNotes = new ArrayList<>();
+        SignalingFetch fetch = fetchSafely(callId, seedNotes);
         CallOutcome outcome = normalize(callId, attachedFiles, fetch);
         LegAssignment legs = LegAssignment.fromFirstInitCall(
                 fetch == null ? List.of() : fetch.records());
 
-        List<TimelineNote> seedNotes = new ArrayList<>(truncationNotes(fetch));
+        seedNotes.addAll(truncationNotes(fetch));
         seedNotes.addAll(attachedFileWarningNotes(outcome));
 
         return timelineBuilder.build(callId, outcome.combined().events(), legs, seedNotes);
+    }
+
+    /**
+     * Nguồn signaling lỗi (ES tắt, chưa import index, timeout) thì phân tích tiếp
+     * bằng log đính kèm và ghi vào "Giới hạn dữ liệu", không làm sập pipeline
+     * (MVP mục 3.3). Bắt RuntimeException vì adapter bọc IOException thành
+     * UncheckedIOException, còn ES client ném ElasticsearchException cho lỗi phía server.
+     */
+    private SignalingFetch fetchSafely(String callId, List<TimelineNote> notes) {
+        try {
+            return signalingSource.fetchByCallId(callId);
+        } catch (RuntimeException e) {
+            notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
+                    "Không truy vấn được signaling (" + e.getClass().getSimpleName()
+                            + ") — kết luận chỉ dựa trên log đính kèm"));
+            return null;
+        }
     }
 
     /** Nhiều nhất chừng này dòng cảnh báo được nêu tên; phần còn lại chỉ đếm. */
@@ -90,6 +108,14 @@ public class CallLogNormalizationService {
     private static List<TimelineNote> attachedFileWarningNotes(CallOutcome outcome) {
         List<TimelineNote> notes = new ArrayList<>();
         for (FileOutcome file : outcome.files()) {
+            // File không nhận diện được bị bỏ qua hoàn toàn; không báo thì người dùng
+            // tưởng file đó đã được phân tích (MVP mục 6.4, ca F02 / F04).
+            if (file.detectedType() == DetectedLogType.UNKNOWN) {
+                notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
+                        file.fileName() + ": " + (file.lineCount() == 0 ? "file rỗng" : "không nhận diện được loại log")
+                                + " (không phải end call log hay WebRTC log), đã bỏ qua"));
+                continue;
+            }
             List<ParseWarning> warnings = file.result().warnings();
             if (warnings.isEmpty()) {
                 continue;

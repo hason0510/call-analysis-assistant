@@ -70,7 +70,21 @@ public class WebRtcLogParser {
                 continue;
             }
 
-            PendingRecord started = startRecord(line, lineNumber, context);
+            PendingRecord started;
+            try {
+                started = startRecord(line, lineNumber, context);
+            } catch (RuntimeException e) {
+                // Khớp format nhưng mốc thời gian không đọc được (ví dụ trường giây
+                // vượt quá long). Đóng bản ghi đang gom lại: các dòng nối tiếp phía sau
+                // thuộc về dòng hỏng này, gắn vào bản ghi trước là sai.
+                warnings.add(new ParseWarning(context.fileName(), lineNumber,
+                        "mốc thời gian không đọc được: " + e.getMessage()));
+                if (pending != null) {
+                    events.add(pending.toEvent(context));
+                    pending = null;
+                }
+                continue;
+            }
             if (started != null) {
                 if (pending != null) {
                     events.add(pending.toEvent(context));

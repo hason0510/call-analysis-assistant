@@ -29,7 +29,12 @@ categories:
       - "tồn tại cmd=CANCEL và không tồn tại cmd=OK_ACK_OK"
     knownAmbiguity: >-
       CANCEL chưa rõ là người dùng chủ động huỷ hay hệ thống timeout rồi tự huỷ.
-      Nếu là người dùng huỷ thì đây không phải lỗi hệ thống. Cần hỏi mentor.
+      Đo trên data: cả 7 cuộc có CANCEL đều KHÔNG có INVITE nào, và caller huỷ sau
+      6,2-8,4 giây, trong khi cuộc gọi bình thường gửi INVITE sau 0,41-0,64 giây.
+      Nên dù người dùng là bên bấm huỷ, nguyên nhân gốc vẫn là server chưa gửi được
+      INVITE; ground truth của 3 ca cùng kiểu trong fail/ đều là FAIL, thống nhất với
+      cách hiểu đó. Vẫn cần mentor xác nhận, vì giao thức này KHÔNG phải SIP nên không
+      thể dựa vào luật SIP để nói INIT_CALL rồi CANCEL mà chưa có INVITE là bất thường.
     calibration:
       status: VALIDATED
       evidence: >-

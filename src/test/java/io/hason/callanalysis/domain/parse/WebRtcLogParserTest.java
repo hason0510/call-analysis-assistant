@@ -36,6 +36,22 @@ class WebRtcLogParserTest {
     }
 
     @Test
+    @DisplayName("mốc thời gian tràn số -> cảnh báo, không throw, bản ghi khác vẫn giữ")
+    void overflowingTimestampIsWarnedNotThrown() {
+        ParseResult result = parser.parse(List.of(
+                "[1:000][1] (connection.cc:1): truoc",
+                "[99999999999999999999:000][1] (connection.cc:1): hong",
+                "dong noi tiep cua ban ghi hong",
+                "[2:000][1] (connection.cc:1): sau"), context);
+
+        assertThat(result.events()).extracting(e -> e.attribute("message"))
+                .containsExactly("truoc", "sau");
+        assertThat(result.warnings()).hasSize(2);
+        assertThat(result.warnings().getFirst().lineNumber()).isEqualTo(2);
+        assertThat(result.warnings().get(1).reason()).contains("mồ côi");
+    }
+
+    @Test
     @DisplayName("Format 1 (iOS): khối thời gian đứng đầu dòng")
     void parsesIosFormat() {
         ParseResult result = parser.parse(List.of(
