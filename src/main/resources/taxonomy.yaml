@@ -28,18 +28,22 @@ categories:
       - "tồn tại cmd=FAIL_HARD"
       - "tồn tại cmd=CANCEL và không tồn tại cmd=OK_ACK_OK"
     knownAmbiguity: >-
-      CANCEL chưa rõ là người dùng chủ động huỷ hay hệ thống timeout rồi tự huỷ.
-      Đo trên data: cả 7 cuộc có CANCEL đều KHÔNG có INVITE nào, và caller huỷ sau
-      6,2-8,4 giây, trong khi cuộc gọi bình thường gửi INVITE sau 0,41-0,64 giây.
-      Nên dù người dùng là bên bấm huỷ, nguyên nhân gốc vẫn là server chưa gửi được
-      INVITE; ground truth của 3 ca cùng kiểu trong fail/ đều là FAIL, thống nhất với
-      cách hiểu đó. Vẫn cần mentor xác nhận, vì giao thức này KHÔNG phải SIP nên không
-      thể dựa vào luật SIP để nói INIT_CALL rồi CANCEL mà chưa có INVITE là bất thường.
+      CANCEL chưa rõ là người dùng chủ động huỷ hay hệ thống timeout rồi tự huỷ;
+      cần mentor xác nhận.
     calibration:
       status: VALIDATED
       evidence: >-
-        3 ca chắc chắn trong data có nhãn: 2 ca chỉ có INIT_CALL (1B009D42, D114749E),
-        1 ca có FAIL_HARD (0EC7B700). Thêm 7 ca CANCEL nhưng mơ hồ.
+        Chỉ rút từ tập CÓ NHÃN (fail/ + success/); tập for_test/ không được dùng để
+        hiệu chỉnh (MVP mục 6.3).
+        5 ca trong fail/: 2 ca chỉ có INIT_CALL rồi im lặng (1B009D42, D114749E) và
+        3 ca có CANCEL mà chưa từng có INVITE (703100CF, 7B56D7AD, E9D6C112).
+        Với 3 ca CANCEL đó, caller huỷ sau 6,25-8,07 giây, trong khi 7 cuộc gọi có nhãn
+        khác gửi INVITE sau 0,52-0,64 giây (ca chậm nhất mà vẫn SUCCESS là EE129C8F,
+        5,67 giây) — nên dù người dùng là bên bấm huỷ, nguyên nhân gốc vẫn là server
+        chưa gửi được INVITE. Ground truth của cả 3 ca đều là FAIL, thống nhất với cách
+        hiểu đó. Lưu ý giao thức này KHÔNG phải SIP, nên không dựa được vào luật SIP để
+        khẳng định CANCEL trước INVITE là bất thường.
+        KHÔNG có ca FAIL_HARD nào trong tập có nhãn, nên nhánh đó chưa kiểm chứng được.
 
   - id: ICE_FAILURE
     definition: >-
@@ -63,18 +67,17 @@ categories:
     knownAmbiguity: >-
       Timeout ICE mặc định khoảng 15 giây; cuộc gọi bị cúp máy trước mốc đó sẽ không
       kịp sinh trạng thái failed dù media thật sự không chạy.
-      Theo RFC 8445, một cặp candidate hỏng KHÔNG có nghĩa phiên ICE hỏng, nên rule
-      chỉ kết luận khi có failed mà CHƯA BAO GIỜ đạt connected.
-      Giới hạn đã biết: tín hiệu iceEverConnected/iceEverFailed đang gộp chung cả hai
-      leg của cuộc gọi. Nếu một bên đạt connected còn bên kia failed thì bất thường đó
-      bị che. Data mẫu không có ca nào như vậy (2 dòng failed đều thuộc cùng một leg
-      của 2D9057AA) nên chưa kiểm chứng được cách xử lý đúng.
     calibration:
       status: VALIDATED
       evidence: >-
         1 ca có nhãn: 2D9057AA. Signaling hoàn hảo (OK_ACK_OK + BYE + PAIR_PING đều 33 giây)
         nhưng ICE checking => failed sau 15,6 giây, 0 byte audio, codeReason=419
         "Vui lòng kiểm tra kết nối mạng", originator=2 (hệ thống tự ngắt).
+        Theo RFC 8445, một cặp candidate hỏng KHÔNG có nghĩa phiên ICE hỏng, nên rule chỉ
+        kết luận khi có failed mà CHƯA BAO GIỜ đạt connected.
+        Giới hạn đã biết: iceEverConnected/iceEverFailed gộp chung cả hai leg; nếu một bên
+        đạt connected còn bên kia failed thì bất thường đó bị che. Data mẫu không có ca nào
+        như vậy (2 dòng failed đều cùng một leg của 2D9057AA) nên chưa kiểm chứng được.
 
   - id: TURN_FAILURE
     definition: >-
@@ -90,17 +93,15 @@ categories:
     detectionConditions:
       - "có 'Received TURN allocate error response' mà KHÔNG có 'TURN allocate requested successfully' trên cùng một Port"
     knownAmbiguity: >-
-      TUYỆT ĐỐI không được đếm riêng dòng lỗi. "Received TURN allocate error response
-      code=401" là bước bắt tay xác thực chuẩn của TURN (RFC 8656): request đầu không kèm
-      credential, server trả 401 kèm nonce, client gửi lại rồi mới được cấp.
-      Trên toàn bộ data mẫu có 73 dòng error và ĐÚNG 73 dòng allocate thành công,
-      không cổng nào thất bại hẳn. Đếm dòng lỗi sẽ báo nhầm 17/20 cuộc gọi,
-      trong đó 7 thuộc nhóm success.
+      Không được đếm riêng dòng lỗi allocate: "TURN allocate error response code=401"
+      là bước bắt tay xác thực chuẩn của TURN (RFC 8656), không phải lỗi.
     calibration:
       status: UNVALIDATED
       evidence: >-
         KHÔNG có ca mẫu nào trong data. Điều kiện phát hiện viết theo suy luận từ
-        vòng đời TURN, chưa kiểm chứng được.
+        vòng đời TURN, chưa kiểm chứng được. Toàn bộ data mẫu có 73 dòng error và ĐÚNG
+        73 dòng allocate thành công, không cổng nào thất bại hẳn — đếm dòng lỗi sẽ báo
+        nhầm 17/20 cuộc gọi, trong đó 7 thuộc nhóm success.
 
   - id: NETWORK_PACKET_LOSS
     definition: >-

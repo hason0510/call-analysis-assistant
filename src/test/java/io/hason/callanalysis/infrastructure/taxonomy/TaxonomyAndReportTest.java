@@ -58,8 +58,13 @@ class TaxonomyAndReportTest {
     @Test
     @DisplayName("TURN_FAILURE ghi rõ cấm đếm riêng dòng lỗi allocate")
     void turnFailureWarnsAgainstCountingErrorLines() {
-        String ambiguity = taxonomy.find(IssueCategory.TURN_FAILURE).orElseThrow().knownAmbiguity();
-        assertThat(ambiguity).contains("401").contains("73");
+        var turn = taxonomy.find(IssueCategory.TURN_FAILURE).orElseThrow();
+
+        // knownAmbiguity in ra MỌI report nên phải ngắn: chỉ nêu cảnh báo.
+        assertThat(turn.knownAmbiguity()).contains("401").hasSizeLessThan(250);
+
+        // Con số chứng minh nằm ở calibration, chỗ dành cho chi tiết.
+        assertThat(turn.calibration().evidence()).contains("73").contains("17/20");
     }
 
     @Test
