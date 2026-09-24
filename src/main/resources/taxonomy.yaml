@@ -6,8 +6,8 @@
 #   - Đổi ngưỡng không phải build lại.
 #
 # Trường `calibration` ghi rõ điều kiện phát hiện đã được kiểm chứng trên data hay chưa.
-# Tập data mẫu chỉ phủ 2/6 category, nên 4 category còn lại đang ở mức phỏng đoán và
-# phải được ghi vào Known Limitations.
+# Tập data có nhãn phủ 3/6 category (SIGNALING_FAILURE, ICE_FAILURE, TURN_FAILURE); các
+# category còn lại đang ở mức phỏng đoán và phải được ghi vào Known Limitations.
 
 categories:
 
@@ -17,6 +17,7 @@ categories:
       hoặc phiên bị huỷ/từ chối trước khi hai bên bắt tay xong.
     symptoms:
       - "Chỉ có INIT_CALL, không bao giờ có INVITE"
+      - "ACK của INIT_CALL mang callErrorCode (vd. 428 call.outgoing.error.privacy_restricted)"
       - "Xuất hiện FAIL_HARD"
       - "INVITE gửi lại nhiều lần rồi kết thúc bằng FAIL_HARD"
       - "Có CANCEL trước khi đạt OK_ACK_OK"
@@ -28,21 +29,22 @@ categories:
       - "tồn tại cmd=FAIL_HARD"
       - "tồn tại cmd=CANCEL và không tồn tại cmd=OK_ACK_OK"
     knownAmbiguity: >-
-      CANCEL chưa rõ là người dùng chủ động huỷ hay hệ thống timeout rồi tự huỷ;
-      cần mentor xác nhận.
+      Mã 428 privacy_restricted là server TỪ CHỐI theo chính sách của người nhận, không
+      phải lỗi mạng; taxonomy MVP mục 4.2 không có category riêng nên xếp tạm vào đây —
+      cần mentor xác nhận. CANCEL trong data là app TỰ huỷ khi hết 6 giây chờ candidate
+      (`_waitingCandidateTimer with error`, mã 421); nếu TURN không cấp phát được thì
+      xếp TURN_FAILURE, còn TURN tốt mà vẫn hết giờ thì lỗi nằm ở phía client.
     calibration:
       status: VALIDATED
       evidence: >-
-        Chỉ rút từ tập CÓ NHÃN (fail/ + success/); tập for_test/ không được dùng để
-        hiệu chỉnh (MVP mục 6.3).
-        5 ca trong fail/: 2 ca chỉ có INIT_CALL rồi im lặng (1B009D42, D114749E) và
-        3 ca có CANCEL mà chưa từng có INVITE (703100CF, 7B56D7AD, E9D6C112).
-        Với 3 ca CANCEL đó, caller huỷ sau 6,25-8,07 giây, trong khi 7 cuộc gọi có nhãn
-        khác gửi INVITE sau 0,52-0,64 giây (ca chậm nhất mà vẫn SUCCESS là EE129C8F,
-        5,67 giây) — nên dù người dùng là bên bấm huỷ, nguyên nhân gốc vẫn là server
-        chưa gửi được INVITE. Ground truth của cả 3 ca đều là FAIL, thống nhất với cách
-        hiểu đó. Lưu ý giao thức này KHÔNG phải SIP, nên không dựa được vào luật SIP để
-        khẳng định CANCEL trước INVITE là bất thường.
+        Chỉ rút từ tập CÓ NHÃN (fail/ + success/). Tập for_test/ không dùng để hiệu
+        chỉnh: đây là quy ước của dự án, áp dụng cùng tinh thần với MVP mục 6.3 (vốn chỉ
+        cấm dùng kết quả held-out để tinh chỉnh) — for_test/ không có nhãn và dùng để đo mù.
+        2 ca trong fail/: 1B009D42 và D114749E chỉ có INIT_CALL rồi im lặng. End call
+        log của caller cho thấy lý do: ACK của INIT_CALL trả callErrorCode 428,
+        key call.outgoing.error.privacy_restricted ("Người này hiện chưa thể nhận cuộc gọi").
+        3 ca CANCEL trong fail/ (703100CF, 7B56D7AD, E9D6C112) trước đây xếp ở đây, nay
+        chuyển sang TURN_FAILURE vì WebRTC log cho thấy TURN không cấp phát được.
         KHÔNG có ca FAIL_HARD nào trong tập có nhãn, nên nhánh đó chưa kiểm chứng được.
 
   - id: ICE_FAILURE
@@ -81,27 +83,36 @@ categories:
 
   - id: TURN_FAILURE
     definition: >-
-      Không cấp phát được relay trên TURN server, nên không có đường dự phòng khi
-      kết nối trực tiếp thất bại.
+      Không cấp phát được relay trên TURN server nào. Trong hệ thống này relay là đường
+      MẶC ĐỊNH (iceTransportPolicy NOHOST), nên không có relay thì không có candidate để
+      gói vào INVITE và cuộc gọi không bắt đầu được.
     symptoms:
-      - "TURN allocate thất bại liên tục trên MỌI cổng"
-      - "Không có dòng 'TURN allocate requested successfully' nào"
-      - "Không sinh được candidate loại relay"
+      - "Không có dòng 'TURN allocate requested successfully' nào trong file WebRTC"
+      - "Failed to create TURN client socket / Failed to send TURN message, error: 65 / TURN probe timeout liên tục"
+      - "End call log: _waitingCandidateTimer with error, _emitFailed code 421 network_check"
+      - "Signaling: INIT_CALL rồi CANCEL, không bao giờ có INVITE"
     requiredEvidence:
       - source: WEBRTC
         field: message
     detectionConditions:
-      - "có 'Received TURN allocate error response' mà KHÔNG có 'TURN allocate requested successfully' trên cùng một Port"
+      - "một file WebRTC có sự kiện TURN nhưng KHÔNG có 'TURN allocate requested successfully' nào, và cuộc gọi chưa từng có INVITE"
     knownAmbiguity: >-
       Không được đếm riêng dòng lỗi allocate: "TURN allocate error response code=401"
       là bước bắt tay xác thực chuẩn của TURN (RFC 8656), không phải lỗi.
     calibration:
-      status: UNVALIDATED
+      status: VALIDATED
       evidence: >-
-        KHÔNG có ca mẫu nào trong data. Điều kiện phát hiện viết theo suy luận từ
-        vòng đời TURN, chưa kiểm chứng được. Toàn bộ data mẫu có 73 dòng error và ĐÚNG
-        73 dòng allocate thành công, không cổng nào thất bại hẳn — đếm dòng lỗi sẽ báo
-        nhầm 17/20 cuộc gọi, trong đó 7 thuộc nhóm success.
+        Chỉ rút từ tập CÓ NHÃN. 3 ca trong fail/ thoả điều kiện: 703100CF (8 lần
+        'Failed to create TURN client socket', máy có giao diện VPN tun0), 7B56D7AD
+        (40 lần 'Failed to send TURN message, error: 65'), E9D6C112 (40 lần TURN probe
+        timeout); cả 3 đều 0 lần allocate thành công, WebRTC log chỉ dài khoảng 6 giây,
+        signaling INIT_CALL rồi CANCEL. 703100CF có end call log xác nhận mã 421.
+        0/13 file WebRTC của success/ và 0/1 file của 2D9057AA thoả điều kiện: mọi file
+        đó đều có ít nhất 2 lần allocate thành công.
+        Không được đếm dòng lỗi riêng lẻ: 'Received TURN allocate error response' (401)
+        là bắt tay chuẩn (73 error, đúng 73 thành công ở các file TURN chạy được); đếm
+        dòng này sẽ báo nhầm 11/20 cuộc gọi, gồm cả 7/7 cuộc thành công. Probe timeout lẻ
+        tẻ cũng có ở cuộc gọi thành công.
 
   - id: NETWORK_PACKET_LOSS
     definition: >-
@@ -120,13 +131,13 @@ categories:
       - "audio.audioMos < 3.5"
       - "transport.hasMediaPoor=1 hoặc transport.countMediaPoor > 0"
     knownAmbiguity: >-
-      Mất gói thoáng qua là bình thường. Phải xét CHUỖI mẫu #H7 chứ không chỉ đọc
-      bản ghi #H9 cuối cùng — DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
+      Mất gói thoáng qua là bình thường. Phải xét CHUỖI bản ghi stats chứ không chỉ đọc
+      bản ghi summary (endcall) cuối cùng — DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHÔNG có ca mẫu chất lượng kém. Đường nền đo được trên 399 mẫu stats của các
-        cuộc gọi khoẻ mạnh: loss cao nhất 3,704%, MOS thấp nhất 4,335.
+        KHÔNG có ca mẫu chất lượng kém trong tập có nhãn. Đường nền đo được trên 844 mẫu stats của 6 leg thuộc success/:
+        loss cao nhất 3,704%, MOS thấp nhất 4,335.
         Ngưỡng cảnh báo vì vậy phải đặt CAO HƠN 3,7% và MOS THẤP HƠN 4,3,
         nếu không sẽ gắn cờ nhầm cho cuộc gọi tốt. Con số 5.0 / 3.5 là phỏng đoán.
 
@@ -151,8 +162,8 @@ categories:
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHÔNG có ca mẫu. Đường nền đo được: RTT cao nhất 181 ms (0/399 mẫu vượt 200 ms),
-        jitter cao nhất 26 ms. Ngưỡng 300 ms / 50 ms là phỏng đoán, chỉ biết chắc
+        KHÔNG có ca mẫu. Đường nền đo được trên 844 mẫu stats của 6 leg thuộc success/: RTT cao nhất 266 ms
+        (2/844 mẫu vượt 200 ms, đều ở callee 70A1F889), jitter cao nhất 28 ms. Ngưỡng 300 ms / 50 ms là phỏng đoán, chỉ biết chắc
         phải cao hơn đường nền này.
 
   - id: UNKNOWN

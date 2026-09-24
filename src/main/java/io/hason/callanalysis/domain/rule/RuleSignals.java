@@ -22,6 +22,12 @@ public record RuleSignals(
         boolean noMediaBytes,
         boolean qualityDegraded,
         boolean signalingTruncated,
+        /** Có file WebRTC đã thử TURN nhưng KHÔNG một lần allocate nào thành công. */
+        boolean turnAllocationFailed,
+        /** App hết giờ chờ ICE candidate (`_waitingCandidateTimer with error`, mã 421). */
+        boolean candidateTimeout,
+        /** Server từ chối INIT_CALL, dạng "428 call.outgoing.error.privacy_restricted"; null nếu không. */
+        String initCallRejection,
         Set<LogSource> availableSources
 ) {
 

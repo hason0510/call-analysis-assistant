@@ -61,7 +61,71 @@ class CallLogNormalizationServiceTest {
     private static List<String> endCallLog(String callIdInFile) {
         return List.of(
                 "#H1\t#ts\t#tag\tcallId\trole\tplatform",
-                "1\t1789700842905\tcall_info\t" + callIdInFile + "\tcaller\tios");
+                "1\t1789700842905\tinfo\t" + callIdInFile + "\tcaller\tios");
+    }
+
+    /** Dòng TURN theo format iOS thật; IP thay bằng dải tài liệu 203.0.113.0/24. */
+    private static String turnLine(String time, String message) {
+        return "[" + time + "][5507] (turn_port.cc:1108): TurnPort(Port[57498000:0:1:0:relay:"
+                + "Net[en0:192.168.0.x/24:Wifi:id=1]]-Remote[203.0.113.10:3478/udp]: " + message;
+    }
+
+    private RuleSignals signalsFrom(Map<String, List<String>> files) {
+        return extractor.extract(new CallLogNormalizationService(
+                new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
+                .buildTimeline("CALL-1", files));
+    }
+
+    @Test
+    @DisplayName("TURN chỉ có lỗi, không một lần allocate thành công (7B56D7AD) -> turnAllocationFailed")
+    void turnWithoutAnySuccessIsFlagged() {
+        RuleSignals s = signalsFrom(Map.of("caller_webrtc.log", List.of(
+                turnLine("039:588", "Trying to connect to TURN server via udp @ 203.0.113.x:3478"),
+                turnLine("039:588", "Failed to send TURN message, error: 65 id=WCzPDo17Noyy, type=TURN ALLOCATE request"),
+                turnLine("039:839", "TURN probe request 57437a50446 timeout"))));
+
+        assertThat(s.turnAllocationFailed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("401 rồi allocate thành công là bắt tay chuẩn -> KHÔNG gắn cờ TURN hỏng")
+    void turnErrorThenSuccessIsNotFlagged() {
+        RuleSignals s = signalsFrom(Map.of("caller_webrtc.log", List.of(
+                turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
+                turnLine("000:102", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
+                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65"))));
+
+        assertThat(s.turnAllocationFailed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("ACK của INIT_CALL mang callErrorCode (1B009D42) và hẹn giờ candidate lỗi được rút ra")
+    void initCallRejectionAndCandidateTimeoutAreExtracted() {
+        RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
+                "#H2\t#ts\t#tag\tmsg\tstatus\ttype",
+                "#H3\t#ts\t#tag\tackCmd\tcmd\tcseq\tfromTag\tpayload\tseq\ttoTag\tts\ttsRecv",
+                "3\t1789980269044\trecv_cmd\tINIT_CALL\tACK\t1\tCALL-1-F\t"
+                        + "{\"callResp\":{\"callError\":\"Người này hiện chưa thể nhận cuộc gọi\","
+                        + "\"callErrorCode\":428,\"callErrorMsg\":{\"defVal\":\"x\","
+                        + "\"key\":\"call.outgoing.error.privacy_restricted\"}}}"
+                        + "\t5\t\t1789980268990000000\t0",
+                "2\t1789980275000\tlog_detail\t_waitingCandidateTimer with error\tTERMINATED\twebrtc")));
+
+        assertThat(s.initCallRejection()).isEqualTo("428 call.outgoing.error.privacy_restricted");
+        assertThat(s.candidateTimeout()).isTrue();
+    }
+
+    @Test
+    @DisplayName("ACK INIT_CALL thành công (callError \"0\", không có callErrorCode) -> không coi là bị từ chối")
+    void successfulInitCallAckIsNotRejection() {
+        RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
+                "#H3\t#ts\t#tag\tackCmd\tcmd\tcseq\tfromTag\tpayload\tseq\ttoTag\tts\ttsRecv",
+                "3\t1789700841553\trecv_cmd\tINIT_CALL\tACK\t1\tCALL-1-F\t"
+                        + "{\"callResp\":{\"callError\":\"0\",\"callId\":\"CALL-1\"},\"ok\":true}"
+                        + "\t5\t\t1789700841489080369\t0")));
+
+        assertThat(s.initCallRejection()).isNull();
+        assertThat(s.candidateTimeout()).isFalse();
     }
 
     private CallTimeline timelineFrom(SignalingFetch fetch) {

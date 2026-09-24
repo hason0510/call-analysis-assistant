@@ -92,6 +92,17 @@ public class EvidenceEngine {
         if (iceTo != null) {
             return "ICE chuyển " + event.attribute("iceStateFrom") + " => " + iceTo;
         }
+        // Leg chưa nhận được gói audio nào: MOS/loss/RTT trong log là số 0 điền vào chỗ
+        // trống, in ra "MOS=0" sẽ mâu thuẫn với bảng chỉ số (N/A, MVP mục 4.3).
+        if ((event.type() == EventType.CALL_SUMMARY || event.type() == EventType.MEDIA_STATS)
+                && "0".equals(event.attribute("audio.packetsReceived"))) {
+            return (event.type() == EventType.CALL_SUMMARY ? "Call summary " : "Chỉ số media ")
+                    + event.leg().name().toLowerCase()
+                    + ": không nhận được gói audio nào (packetsReceived=0, bytesRecv="
+                    + orDash(event.attribute("audio.bytesReceived"))
+                    + "), mediaFail=" + orDash(event.attribute("transport.hasMediaFail"))
+                    + " — MOS/loss/RTT không đo được";
+        }
         if (event.type() == EventType.CALL_SUMMARY) {
             return "Call summary " + event.leg().name().toLowerCase()
                     + ": MOS=" + orDash(event.attribute("audio.audioMos"))

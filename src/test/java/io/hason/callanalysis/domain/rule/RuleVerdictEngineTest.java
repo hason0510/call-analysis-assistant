@@ -37,13 +37,83 @@ class RuleVerdictEngineTest {
         boolean noMediaBytes = false;
         boolean qualityDegraded = false;
         boolean signalingTruncated = false;
+        boolean turnAllocationFailed = false;
+        boolean candidateTimeout = false;
+        String initCallRejection = null;
         Set<LogSource> sources = ALL_SOURCES;
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
-                    qualityDegraded, signalingTruncated, sources);
+                    qualityDegraded, signalingTruncated, turnAllocationFailed, candidateTimeout,
+                    initCallRejection, sources);
         }
+    }
+
+    @Test
+    @DisplayName("server từ chối INIT_CALL (1B009D42) -> FAIL, lý do nêu đúng mã, không đổ cho mạng")
+    void initCallRejectionIsReportedAsPolicyNotNetwork() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.initCallRejection = "428 call.outgoing.error.privacy_restricted";
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.SIGNALING_FAILURE);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.reasoning()).contains("428").contains("từ chối");
+        assertThat(v.dataLimitations()).anyMatch(l -> l.contains("không phải lỗi mạng"));
+    }
+
+    @Test
+    @DisplayName("TURN không cấp phát được + hết giờ chờ candidate (703100CF) -> TURN_FAILURE, HIGH")
+    void turnFailureWithCandidateTimeoutIsTurnFailure() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.cancelled = true;
+            b.turnAllocationFailed = true;
+            b.candidateTimeout = true;
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.reasoning()).contains("421");
+    }
+
+    @Test
+    @DisplayName("TURN không cấp phát được nhưng thiếu end call log (7B56D7AD) -> TURN_FAILURE, MEDIUM")
+    void turnFailureWithoutEndCallLogIsMedium() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.cancelled = true;
+            b.turnAllocationFailed = true;
+            b.sources = Set.of(LogSource.SIGNALING, LogSource.WEBRTC);
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+    }
+
+    @Test
+    @DisplayName("hết giờ chờ candidate mà TURN vẫn tốt (311A9B6A) -> KHÔNG gán TURN_FAILURE")
+    void candidateTimeoutWithHealthyTurnIsNotTurnFailure() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.cancelled = true;
+            b.candidateTimeout = true;
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.SIGNALING_FAILURE);
+        assertThat(v.reasoning()).contains("421").contains("phía client");
     }
 
     @Test

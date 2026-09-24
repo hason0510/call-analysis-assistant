@@ -32,8 +32,37 @@ public class RuleVerdictEngine {
             limitations.add("Không có end call log nên không kiểm chứng được chất lượng media");
         }
 
-        // 1. Chưa bao giờ gọi tới callee
+        // 1. Chưa bao giờ gọi tới callee. INVITE phải mang SDP offer + lô candidate đầu,
+        //    nên thiếu INVITE có ba nguyên nhân khác hẳn nhau; xét nguyên nhân có bằng
+        //    chứng DƯƠNG TÍNH trước, rồi mới rơi về kết luận dựa trên sự vắng mặt.
         if (!signals.sentInvite()) {
+            if (signals.initCallRejection() != null) {
+                // Taxonomy MVP mục 4.2 không có category riêng cho "bị chặn theo chính
+                // sách"; SIGNALING_FAILURE là gần nhất vì cuộc gọi dừng ở bước signaling.
+                limitations.add("Mã " + signals.initCallRejection() + " là server từ chối theo"
+                        + " chính sách, không phải lỗi mạng; taxonomy chưa có category riêng"
+                        + " nên xếp tạm vào SIGNALING_FAILURE");
+                return fail(IssueCategory.SIGNALING_FAILURE, ConfidenceLevel.HIGH,
+                        "Server từ chối INIT_CALL (mã " + signals.initCallRejection()
+                                + "): cuộc gọi bị chặn trước khi tới callee", limitations);
+            }
+            if (signals.turnAllocationFailed()) {
+                // relay là đường mặc định (iceTransportPolicy NOHOST): không cấp phát được
+                // TURN thì không có candidate nào để gói vào INVITE.
+                return fail(IssueCategory.TURN_FAILURE,
+                        signals.candidateTimeout() ? ConfidenceLevel.HIGH : ConfidenceLevel.MEDIUM,
+                        "Không cấp phát được relay trên TURN server nào (0 lần allocate thành công)"
+                                + " nên không có candidate để gửi INVITE"
+                                + (signals.candidateTimeout()
+                                ? "; app hết thời gian chờ candidate (mã 421)" : ""),
+                        limitations);
+            }
+            if (signals.candidateTimeout()) {
+                return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),
+                        "App hết thời gian chờ candidate (mã 421) trước khi gửi được INVITE;"
+                                + " TURN vẫn cấp phát được nên nguyên nhân nằm ở bước tạo offer"
+                                + " hoặc thu candidate phía client", limitations);
+            }
             // Kết luận này dựa vào việc KHÔNG THẤY một event. Bản export thiếu event
             // thì chính cái không thấy đó có thể chỉ là do bị cắt mất.
             return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),

@@ -72,7 +72,7 @@ public record CallTimeline(
                 .count();
     }
 
-    /** Bản ghi call summary (#H9) — chỉ tồn tại ở 2/16 file trong data mẫu. */
+    /** Bản ghi call summary (tag `endcall`) của một leg, nếu leg đó có end call log. */
     public Optional<CanonicalEvent> callSummary(Leg leg) {
         return allEvents().stream()
                 .filter(e -> e.type() == EventType.CALL_SUMMARY)

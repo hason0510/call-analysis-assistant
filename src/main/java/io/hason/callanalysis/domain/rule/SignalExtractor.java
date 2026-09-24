@@ -17,13 +17,20 @@ import java.util.Set;
 public class SignalExtractor {
 
     /**
-     * Đường nền đo trên 399 mẫu stats của các cuộc gọi khoẻ mạnh trong data mẫu:
-     * loss cao nhất 3,704%, MOS thấp nhất 4,335, RTT cao nhất 181 ms, jitter cao nhất 26 ms.
+     * Đường nền đo trên 844 mẫu stats của 6 leg thuộc success/ (tập có nhãn):
+     * loss cao nhất 3,704%, MOS thấp nhất 4,335, RTT cao nhất 266 ms, jitter cao nhất 28 ms.
      * Ngưỡng cảnh báo đặt CAO HƠN đường nền để không gắn cờ nhầm cho cuộc gọi tốt.
      * Đây vẫn là PHỎNG ĐOÁN vì không có ca mẫu chất lượng kém — xem taxonomy.yaml.
      */
     private static final BigDecimal LOSS_THRESHOLD_PERCENT = new BigDecimal("5.0");
     private static final BigDecimal MOS_THRESHOLD = new BigDecimal("3.5");
+
+    private static final String TURN_ALLOCATE_SUCCESS = "TURN allocate requested successfully";
+    private static final String CANDIDATE_TIMEOUT = "_waitingCandidateTimer with error";
+    private static final java.util.regex.Pattern CALL_ERROR_CODE =
+            java.util.regex.Pattern.compile("\"callErrorCode\"\\s*:\\s*(\\d+)");
+    private static final java.util.regex.Pattern CALL_ERROR_KEY =
+            java.util.regex.Pattern.compile("\"key\"\\s*:\\s*\"(call\\.[A-Za-z_.]+)\"");
 
     public RuleSignals extract(CallTimeline timeline) {
         Set<LogSource> sources = EnumSet.noneOf(LogSource.class);
@@ -50,7 +57,62 @@ public class SignalExtractor {
                 // "bản export bị cắt" cho một timeline rỗng là nói sai sự thật.
                 timeline.notes().stream().anyMatch(n ->
                         n.kind() == TimelineNote.Kind.SIGNALING_TRUNCATED),
+                turnAllocationFailed(timeline),
+                candidateTimeout(timeline),
+                initCallRejection(timeline).orElse(null),
                 sources);
+    }
+
+    /**
+     * TURN hỏng hẳn trên một file WebRTC: có hoạt động TURN nhưng KHÔNG một lần
+     * `TURN allocate requested successfully` nào.
+     *
+     * Xét theo vòng đời, không đếm dòng lỗi: `allocate error response` (401) là bước
+     * bắt tay chuẩn và có ở mọi cuộc gọi thành công, `probe timeout` lẻ tẻ cũng vậy.
+     * Trên data mẫu, 6 file thoả điều kiện này (không tạo được socket, error 65, probe
+     * timeout liên tục) và 0/19 file có TURN còn lại.
+     */
+    private boolean turnAllocationFailed(CallTimeline timeline) {
+        return timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.WEBRTC && e.type() == EventType.TURN_EVENT)
+                .collect(java.util.stream.Collectors.groupingBy(e -> e.sourceRef().fileName()))
+                .values().stream()
+                .anyMatch(events -> events.stream().noneMatch(e -> {
+                    String message = e.attribute("message");
+                    return message != null && message.contains(TURN_ALLOCATE_SUCCESS);
+                }));
+    }
+
+    private boolean candidateTimeout(CallTimeline timeline) {
+        return timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.ENDCALL)
+                .map(e -> e.attribute("msg"))
+                .anyMatch(msg -> msg != null && msg.startsWith(CANDIDATE_TIMEOUT));
+    }
+
+    /**
+     * Mã lỗi server trả trong ACK của INIT_CALL. Chỉ end call log phía caller mới thấy,
+     * signaling.json không có trường text nào để biết lý do.
+     */
+    private Optional<String> initCallRejection(CallTimeline timeline) {
+        return timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.ENDCALL && e.type() == EventType.SIGNALING_COMMAND)
+                .filter(e -> "INIT_CALL".equals(e.attribute("ackCmd")))
+                .map(e -> e.attribute("payload"))
+                .filter(java.util.Objects::nonNull)
+                .map(SignalExtractor::describeCallError)
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    /** `"callErrorCode":428 … "key":"call.outgoing.error.privacy_restricted"` -> "428 call.outgoing.error.privacy_restricted". */
+    private static Optional<String> describeCallError(String payload) {
+        java.util.regex.Matcher code = CALL_ERROR_CODE.matcher(payload);
+        if (!code.find()) {
+            return Optional.empty();
+        }
+        java.util.regex.Matcher key = CALL_ERROR_KEY.matcher(payload);
+        return Optional.of(key.find() ? code.group(1) + " " + key.group(1) : code.group(1));
     }
 
     private boolean hasFlag(CallTimeline timeline, String field) {

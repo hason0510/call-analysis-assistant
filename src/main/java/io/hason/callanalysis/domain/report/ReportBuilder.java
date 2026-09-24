@@ -116,7 +116,7 @@ public class ReportBuilder {
                     "Xác nhận cổng UDP 3478 không bị chặn từ phía mạng người dùng.");
             case NETWORK_PACKET_LOSS -> List.of(
                     "Kiểm tra chất lượng mạng của bên bị ảnh hưởng trong thời gian cuộc gọi.",
-                    "Đối chiếu chuỗi bản ghi #H7 để xem mất gói kéo dài hay chỉ thoáng qua.");
+                    "Đối chiếu chuỗi bản ghi stats theo từng giây để xem mất gói kéo dài hay chỉ thoáng qua.");
             case NETWORK_DELAY_JITTER -> List.of(
                     "Kiểm tra độ trễ và độ rung mạng của bên bị ảnh hưởng.",
                     "Đối chiếu transport.currentRttMs theo thời gian, không dùng transport.rttMs.");

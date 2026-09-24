@@ -46,11 +46,11 @@ class TaxonomyAndReportTest {
     }
 
     @Test
-    @DisplayName("ba category không có ca mẫu được đánh dấu UNVALIDATED")
+    @DisplayName("hai category không có ca mẫu có nhãn được đánh dấu UNVALIDATED")
     void categoriesWithoutSamplesAreMarkedUnvalidated() {
-        // Data mẫu chỉ phủ 2/6 category: SIGNALING_FAILURE và ICE_FAILURE.
+        // Data có nhãn phủ 3/6 category: SIGNALING_FAILURE, ICE_FAILURE, TURN_FAILURE
+        // (TURN: 3 ca CANCEL trong fail/ không cấp phát được relay nào).
         assertThat(taxonomy.unvalidatedCategories()).containsExactlyInAnyOrder(
-                IssueCategory.TURN_FAILURE,
                 IssueCategory.NETWORK_PACKET_LOSS,
                 IssueCategory.NETWORK_DELAY_JITTER);
     }
@@ -64,7 +64,7 @@ class TaxonomyAndReportTest {
         assertThat(turn.knownAmbiguity()).contains("401").hasSizeLessThan(250);
 
         // Con số chứng minh nằm ở calibration, chỗ dành cho chi tiết.
-        assertThat(turn.calibration().evidence()).contains("73").contains("17/20");
+        assertThat(turn.calibration().evidence()).contains("73").contains("11/20");
     }
 
     @Test

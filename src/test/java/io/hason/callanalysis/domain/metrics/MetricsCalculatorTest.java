@@ -164,6 +164,48 @@ class MetricsCalculatorTest {
     }
 
     @Test
+    @DisplayName("leg chưa từng có media (2D9057AA): số 0 trong summary là giá trị trống -> N/A kèm lý do")
+    void zerosOfNeverConnectedLegAreNotAvailable() {
+        // Giá trị thật của 2D9057AA callee: app ghi 0 cho mọi chỉ số vì chưa đo được gì.
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                summary(Leg.CALLEE, Map.of(
+                        "audio.audioMos", "0",
+                        "audio.packetLostPercent", "0",
+                        "transport.currentRttMs", "0",
+                        "audio.jitter", "0",
+                        "audio.packetsReceived", "0",
+                        "transport.localStunResponse", "0")))));
+
+        for (MetricKey key : List.of(MetricKey.MOS, MetricKey.PACKET_LOSS, MetricKey.JITTER)) {
+            assertThat(metrics.find(key, Leg.CALLEE)).get()
+                    .extracting(m -> m.value().display()).asString()
+                    .startsWith("N/A").contains("packetsReceived = 0");
+        }
+        assertThat(metrics.find(MetricKey.RTT, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).asString()
+                .startsWith("N/A").contains("localStunResponse = 0");
+    }
+
+    @Test
+    @DisplayName("leg có media mà mất 0% gói thật (DE7DD314) -> vẫn hiển thị 0 %, không bị đổi thành N/A")
+    void genuineZeroLossIsKept() {
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                summary(Leg.CALLEE, Map.of(
+                        "audio.audioMos", "4.42201",
+                        "audio.packetLostPercent", "0",
+                        "transport.currentRttMs", "63",
+                        "audio.packetsReceived", "17974",
+                        "transport.localStunResponse", "145")))));
+
+        assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("0 %");
+        assertThat(metrics.find(MetricKey.MOS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("4.42201");
+    }
+
+    @Test
     @DisplayName("RTT lấy currentRttMs, KHÔNG lấy rttMs vì đó là giá trị tích luỹ")
     void rttUsesCurrentNotCumulative() {
         // DE7DD314: rttMs = 8385 trong khi RTT thật là 63.

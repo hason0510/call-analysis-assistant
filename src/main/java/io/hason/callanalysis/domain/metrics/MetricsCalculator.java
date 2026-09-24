@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Tính bộ chỉ số Core theo MVP mục 4.3.
@@ -25,7 +26,7 @@ import java.util.Optional;
  * Ba chỉ số MVP yêu cầu nhưng data KHÔNG có, đều trả N/A kèm lý do:
  *   - "Số lần No sessions found": signaling không có trường text nào.
  *   - Lệnh mẫu 4.3 ghi OK_ACK, cmd thật trong data là OK_ACK_OK.
- *   - Chỉ số chất lượng: chỉ 2/20 cuộc gọi có bản ghi call summary (#H9).
+ *   - Chỉ số chất lượng: chỉ có khi cuộc gọi từng có media và leg đó có end call log.
  */
 public class MetricsCalculator {
 
@@ -36,6 +37,15 @@ public class MetricsCalculator {
     private static final String OK = "OK";
     private static final String OK_ACK = "OK_ACK_OK";
     private static final String BYE = "BYE";
+
+    private static final String PACKETS_RECEIVED = "audio.packetsReceived";
+    private static final String STUN_RESPONSES = "transport.localStunResponse";
+    private static final String NO_AUDIO_PACKETS =
+            "không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được;"
+                    + " số 0 trong log là giá trị trống, không phải kết quả đo";
+    private static final String NO_STUN_RESPONSE =
+            "chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT;"
+                    + " số 0 trong log là giá trị trống, không phải kết quả đo";
 
     public CallMetrics calculate(CallTimeline timeline) {
         List<CallMetric> metrics = new ArrayList<>();
@@ -58,15 +68,18 @@ public class MetricsCalculator {
 
         for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
             Optional<CanonicalEvent> quality = qualityRecord(timeline, leg);
-            metrics.add(CallMetric.of(MetricKey.MOS, leg,
-                    decimalFrom(quality, "audio.audioMos", "", timeline, leg)));
-            metrics.add(CallMetric.of(MetricKey.PACKET_LOSS, leg,
-                    decimalFrom(quality, "audio.packetLostPercent", "%", timeline, leg)));
-            metrics.add(CallMetric.of(MetricKey.RTT, leg,
+            metrics.add(CallMetric.of(MetricKey.MOS, leg, measuredOnly(quality, PACKETS_RECEIVED,
+                    NO_AUDIO_PACKETS, () -> decimalFrom(quality, "audio.audioMos", "", timeline, leg))));
+            metrics.add(CallMetric.of(MetricKey.PACKET_LOSS, leg, measuredOnly(quality, PACKETS_RECEIVED,
+                    NO_AUDIO_PACKETS,
+                    () -> decimalFrom(quality, "audio.packetLostPercent", "%", timeline, leg))));
+            metrics.add(CallMetric.of(MetricKey.RTT, leg, measuredOnly(quality, STUN_RESPONSES,
+                    NO_STUN_RESPONSE,
                     // transport.rttMs là giá trị TÍCH LUỸ (8385 khi RTT thật là 63),
                     // chỉ số đúng phải là currentRttMs.
-                    decimalFrom(quality, "transport.currentRttMs", "ms", timeline, leg)));
-            metrics.add(CallMetric.of(MetricKey.JITTER, leg, jitter(quality, timeline, leg)));
+                    () -> decimalFrom(quality, "transport.currentRttMs", "ms", timeline, leg))));
+            metrics.add(CallMetric.of(MetricKey.JITTER, leg, measuredOnly(quality, PACKETS_RECEIVED,
+                    NO_AUDIO_PACKETS, () -> jitter(quality, timeline, leg))));
             metrics.add(CallMetric.of(MetricKey.ICE_FINAL_STATE, leg, iceFinalState(timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.MAX_PAIR_PING_GAP, leg, maxPairPingGap(timeline, leg)));
             metrics.add(CallMetric.of(MetricKey.NETWORK_CONTEXT, leg, networkContext(timeline, leg)));
@@ -272,9 +285,9 @@ public class MetricsCalculator {
     }
 
     /**
-     * Ưu tiên bản ghi call summary (#H9); không có thì lấy bản ghi periodic stats (#H7)
-     * CUỐI CÙNG. Đọc #H9 đơn thuần sẽ bỏ sót diễn biến trong cuộc gọi, nhưng ở đây mục tiêu
-     * là giá trị kết thúc nên lấy bản ghi sau cùng là đúng.
+     * Ưu tiên bản ghi call summary (tag `endcall`); không có thì lấy bản ghi periodic stats
+     * (tag `stats`) CUỐI CÙNG. Đọc summary đơn thuần sẽ bỏ sót diễn biến trong cuộc gọi,
+     * nhưng ở đây mục tiêu là giá trị kết thúc nên lấy bản ghi sau cùng là đúng.
      */
     private Optional<CanonicalEvent> qualityRecord(CallTimeline timeline, Leg leg) {
         Optional<CanonicalEvent> summary = timeline.callSummary(leg);
@@ -284,6 +297,25 @@ public class MetricsCalculator {
         return timeline.allEvents().stream()
                 .filter(e -> e.type() == EventType.MEDIA_STATS && e.leg() == leg)
                 .reduce((first, second) -> second);
+    }
+
+    /**
+     * Chặn giá trị 0 mà app ghi vào chỗ CHƯA ĐO ĐƯỢC (MVP mục 4.3: không mặc định về 0).
+     *
+     * Leg chưa từng có media vẫn có bản ghi summary, nhưng MOS/loss/RTT/jitter đều là 0:
+     * MOS theo định nghĩa nằm trong 1-5 nên 0 không phải kết quả đo; loss% là 0/0 khi không
+     * có gói nào; RTT 0 ms chỉ có nghĩa là chưa có phản hồi STUN; jitter cần ít nhất 2 gói.
+     * Trên data mẫu, 33/33 dòng có MOS = 0 đều có packetsReceived = 0, và 7 leg có media thật
+     * đều có packetsReceived > 0 và localStunResponse > 0.
+     */
+    private static MetricValue measuredOnly(Optional<CanonicalEvent> record, String counterField,
+                                            String reason, Supplier<MetricValue> measured) {
+        boolean nothingToMeasure = record
+                .map(e -> e.attribute(counterField))
+                .flatMap(MetricsCalculator::parseDecimal)
+                .map(v -> v.signum() == 0)
+                .orElse(false);
+        return nothingToMeasure ? MetricValue.unavailable(reason) : measured.get();
     }
 
     private MetricValue decimalFrom(Optional<CanonicalEvent> record, String field,

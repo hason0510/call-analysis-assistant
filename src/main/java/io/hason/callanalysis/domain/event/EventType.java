@@ -9,17 +9,17 @@ public enum EventType {
     ICE_EVENT,
     TURN_EVENT,
     PEER_CONNECTION_EVENT,
-    /** end call log #H6: cặp candidate ICE. */
+    /** end call log, tag local_candidate / remote_candidate: candidate ICE lúc kết thúc. */
     ICE_CANDIDATE,
-    /** end call log #H7: periodic stats. */
+    /** end call log, tag stats: periodic stats, 1 giây một dòng. */
     MEDIA_STATS,
-    /** end call log #H9: call summary. */
+    /** end call log, tag endcall: call summary. */
     CALL_SUMMARY,
     /** end call log #H1: metadata cuộc gọi. */
     CALL_METADATA,
-    /** end call log #H4: qos GRPC/SOCKET. */
+    /** end call log, tag qos: GRPC/SOCKET. */
     QOS,
-    /** end call log #H5: hành vi người dùng. */
+    /** end call log, tag signal: hành vi người dùng và tín hiệu từ đối phương. */
     USER_ACTION,
     LOG_MESSAGE
 }

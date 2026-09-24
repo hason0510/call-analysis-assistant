@@ -70,7 +70,7 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("không có bản ghi #H9 vẫn parse bình thường — chỉ 2/16 file trong data mẫu có")
+    @DisplayName("file chỉ khai báo vài header vẫn parse bình thường")
     void missingHeadersAreFine() {
         ParseResult result = parser.parse(List.of(H1, H2,
                 "1\t1789700842873\tinfo\tU1\tCALL-1\tios\tcallee\tINIT",
@@ -78,6 +78,68 @@ class EndCallLogParserTest {
 
         assertThat(result.events()).hasSize(2);
         assertThat(result.warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("loại bản ghi suy ra từ #tag, KHÔNG từ số hiệu — bố cục thật của caller DE7DD314")
+    void recordTypeComesFromTagNotNumber() {
+        // Caller DE7DD314 không có bản ghi qos, nên mọi số hiệu từ H4 trở đi lùi một bậc
+        // so với callee: stats là H6, config là H7, summary là H8. Map cứng theo số từng
+        // biến 359 dòng stats thành ICE_CANDIDATE và coi dòng config là "chỉ số cuối".
+        ParseResult result = parser.parse(List.of(
+                "#H4\t#ts\t#tag\tmsg\toriginator\tsignal",
+                "#H5\t#ts\t#tag\taddress\tcandidateType\tip",
+                "#H6\t#ts\t#tag\taudio.audioMos\taudio.bytesReceived",
+                "#H7\t#ts\t#tag\tinitCallConfig\twebrtcConfig",
+                "#H8\t#ts\t#tag\taudio.audioMos\tendCall.duration",
+                "4\t1789700850297\tsignal\t\tremote\tunmuted",
+                "5\t1789700851306\tlocal_candidate\t\trelay\t14.238.62.98",
+                "6\t1789700851306\tstats\t4.42737\t2698",
+                "7\t1789701211075\tconfig\t{}\t{}",
+                "8\t1789701211078\tendcall\t4.42397\t360535"), context);
+
+        assertThat(result.warnings()).isEmpty();
+        assertThat(result.events()).extracting(CanonicalEvent::type).containsExactly(
+                EventType.USER_ACTION,
+                EventType.ICE_CANDIDATE,
+                EventType.MEDIA_STATS,
+                EventType.LOG_MESSAGE,
+                EventType.CALL_SUMMARY);
+        assertThat(result.events().get(2).attribute("audio.bytesReceived")).isEqualTo("2698");
+        assertThat(result.events().get(3).name()).isEqualTo("CONFIG");
+        assertThat(result.events().get(4).attribute("endCall.duration")).isEqualTo("360535");
+    }
+
+    @Test
+    @DisplayName("cùng tag nhưng khác số hiệu giữa hai file -> cùng loại event (callee 2D9057AA)")
+    void sameTagDifferentNumberGivesSameType() {
+        // Callee 2D9057AA: stats là H5, summary là H7 — ngược hẳn với cách đánh số của
+        // file khác, nơi H7 lại là stats.
+        ParseResult result = parser.parse(List.of(
+                "#H5\t#ts\t#tag\taudio.bytesReceived\ttransport.countMediaFail",
+                "#H7\t#ts\t#tag\taudio.bytesReceived\ttransport.hasMediaFail",
+                "5\t1789688596209\tstats\t0\t1",
+                "5\t1789688597209\tstats\t0\t2",
+                "7\t1789688621377\tendcall\t0\t1"), context);
+
+        assertThat(result.warnings()).isEmpty();
+        assertThat(result.events()).extracting(CanonicalEvent::type).containsExactly(
+                EventType.MEDIA_STATS, EventType.MEDIA_STATS, EventType.CALL_SUMMARY);
+    }
+
+    @Test
+    @DisplayName("tag lạ hoặc thiếu -> giữ lại dưới dạng LOG_MESSAGE, không throw")
+    void unknownOrMissingTagIsKept() {
+        ParseResult result = parser.parse(List.of(
+                "#H4\t#ts\t#tag\tvalue",
+                "#H5\t#ts\tvalue",
+                "4\t1789700850297\ttag_moi\tx",
+                "5\t1789700850298\ty"), context);
+
+        assertThat(result.events()).extracting(CanonicalEvent::type)
+                .containsExactly(EventType.LOG_MESSAGE, EventType.LOG_MESSAGE);
+        assertThat(result.events()).extracting(CanonicalEvent::name)
+                .containsExactly("RECORD_tag_moi", "RECORD_H5");
     }
 
     @Test
