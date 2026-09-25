@@ -7,6 +7,7 @@ import io.hason.callanalysis.domain.taxonomy.Verdict;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +38,7 @@ class RuleVerdictEngineTest {
         boolean noMediaBytes = false;
         boolean qualityDegraded = false;
         boolean signalingTruncated = false;
-        boolean turnAllocationFailed = false;
+        TurnFailure turnFailure = TurnFailure.NONE;
         boolean candidateTimeout = false;
         String initCallRejection = null;
         String clientFailure = null;
@@ -46,7 +47,7 @@ class RuleVerdictEngineTest {
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
-                    qualityDegraded, signalingTruncated, turnAllocationFailed, candidateTimeout,
+                    qualityDegraded, signalingTruncated, turnFailure, candidateTimeout,
                     initCallRejection, clientFailure, sources);
         }
     }
@@ -68,6 +69,10 @@ class RuleVerdictEngineTest {
         assertThat(v.dataLimitations()).anyMatch(l -> l.contains("không phải lỗi mạng"));
     }
 
+    private static TurnFailure turn(TurnFailure.Kind kind, int sent, int responses, String sendError) {
+        return new TurnFailure(kind, sent, responses, sendError, "3478/udp", null);
+    }
+
     @Test
     @DisplayName("TURN không cấp phát được + hết giờ chờ candidate (703100CF) -> TURN_FAILURE, HIGH")
     void turnFailureWithCandidateTimeoutIsTurnFailure() {
@@ -76,7 +81,7 @@ class RuleVerdictEngineTest {
             b.reachedConfirmed = false;
             b.terminatedNormally = false;
             b.cancelled = true;
-            b.turnAllocationFailed = true;
+            b.turnFailure = turn(TurnFailure.Kind.SOCKET_NOT_CREATED, 0, 0, null);
             b.candidateTimeout = true;
             b.clientFailure = "421 call.outgoing.error.network_check";   // dòng _emitFailed thật
         }));
@@ -84,7 +89,10 @@ class RuleVerdictEngineTest {
         assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
-        assertThat(v.reasoning()).contains("421 call.outgoing.error.network_check");
+        assertThat(v.reasoning()).contains("421 call.outgoing.error.network_check")
+                .contains("chưa gửi được request nào");
+        // kiểu TURN đi theo verdict để report chọn đề xuất đúng hướng
+        assertThat(v.turnFailure().kind()).isEqualTo(TurnFailure.Kind.SOCKET_NOT_CREATED);
     }
 
     @Test
@@ -95,12 +103,46 @@ class RuleVerdictEngineTest {
             b.reachedConfirmed = false;
             b.terminatedNormally = false;
             b.cancelled = true;
-            b.turnAllocationFailed = true;
+            b.turnFailure = turn(TurnFailure.Kind.SEND_FAILED_ON_DEVICE, 20, 0, "error: 65");
             b.sources = Set.of(LogSource.SIGNALING, LogSource.WEBRTC);
         }));
 
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+        // mã lỗi đọc nguyên văn, không diễn giải thành tên errno
+        assertThat(v.reasoning()).contains("lỗi ngay khi gửi trên thiết bị với error: 65");
+    }
+
+    @Test
+    @DisplayName("kiểu TURN hỏng chưa có ca mẫu có nhãn -> ghi rõ ở giới hạn dữ liệu là chưa kiểm chứng")
+    void unvalidatedTurnKindIsDisclosed() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.turnFailure = turn(TurnFailure.Kind.NOT_ALLOCATED_AFTER_RESPONSE, 3, 3, null);
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.TURN_FAILURE);
+        assertThat(v.reasoning()).contains("có phản hồi 3 lần nhưng không lần nào cấp phát");
+        assertThat(v.dataLimitations())
+                .anyMatch(l -> l.contains("NOT_ALLOCATED_AFTER_RESPONSE") && l.contains("chưa có ca mẫu"));
+    }
+
+    @Test
+    @DisplayName("ba kiểu đã có ca mẫu trong fail/ thì KHÔNG bị ghi là chưa kiểm chứng")
+    void validatedTurnKindsAreNotDisclosedAsUnvalidated() {
+        for (TurnFailure.Kind kind : List.of(TurnFailure.Kind.SOCKET_NOT_CREATED,
+                TurnFailure.Kind.SEND_FAILED_ON_DEVICE, TurnFailure.Kind.NO_RESPONSE)) {
+            RuleVerdict v = engine.decide(signals(b -> {
+                b.sentInvite = false;
+                b.reachedConfirmed = false;
+                b.terminatedNormally = false;
+                b.turnFailure = turn(kind, 1, 0, "error: 65");
+            }));
+
+            assertThat(v.dataLimitations()).as(kind.name()).noneMatch(l -> l.contains("chưa có ca mẫu"));
+        }
     }
 
     @Test
@@ -127,7 +169,7 @@ class RuleVerdictEngineTest {
             b.reachedConfirmed = false;
             b.terminatedNormally = false;
             b.cancelled = true;
-            b.turnAllocationFailed = true;
+            b.turnFailure = turn(TurnFailure.Kind.NO_RESPONSE, 40, 0, null);
             b.candidateTimeout = true;
         }));
 
@@ -144,6 +186,7 @@ class RuleVerdictEngineTest {
         assertThat(v.qualityFlag()).isFalse();
         assertThat(v.issueCategory()).isNull();
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.turnFailure()).isEqualTo(TurnFailure.NONE);
     }
 
     @Test
@@ -324,5 +367,20 @@ class RuleVerdictEngineTest {
 
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
         assertThat(v.dataLimitations()).anyMatch(s -> s.contains("end call log"));
+    }
+
+    @Test
+    @DisplayName("câu lý do TURN tách thành câu riêng, không nhét ngoặc dài giữa câu chính")
+    void turnReasoningIsSplitIntoSentences() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.turnFailure = turn(TurnFailure.Kind.SOCKET_NOT_CREATED, 0, 0, null);
+        }));
+
+        assertThat(v.reasoning()).isEqualTo("Không cấp phát được relay trên TURN server nào:"
+                + " không tạo được socket TURN nên chưa gửi được request nào."
+                + " Vì vậy không có candidate để gửi INVITE");
     }
 }

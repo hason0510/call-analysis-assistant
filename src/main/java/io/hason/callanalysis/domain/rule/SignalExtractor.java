@@ -46,6 +46,22 @@ public class SignalExtractor {
             Pattern.compile("fail|error|timeout", Pattern.CASE_INSENSITIVE);
     /** Server đòi credential (RFC 8656): bước bắt tay chuẩn, không phải lỗi. */
     private static final String TURN_AUTH_CHALLENGE = "code=401";
+    private static final String TURN_REQUEST_SENT = "TURN allocate request sent";
+    /** Mọi phản hồi lỗi của allocate, kể cả 401: có dòng này nghĩa là request đã tới server. */
+    private static final String TURN_RESPONSE = "allocate error response";
+    private static final String TURN_SOCKET_FAILED = "Failed to create TURN client socket";
+    private static final Pattern TURN_SEND_FAILED =
+            Pattern.compile("Failed to send TURN message, (error: -?\\d+)");
+    /** `-Remote[<địa chỉ server>:3478/udp]` — chỉ lấy cổng và giao thức, bỏ địa chỉ. */
+    private static final Pattern TURN_TRANSPORT =
+            Pattern.compile("-Remote\\[[^\\]]*:(\\d+/(?:udp|tcp|tls))]");
+    /**
+     * Giao diện VPN mà libwebrtc liệt kê, ở một trong hai dạng của Android:
+     * `NetInfo[name tun0; handle …; type 9; underlying_type_for_vpn 2]` (network monitor) và
+     * `Net[tun0:172.16.0.x/32:VPN/Wifi:id=4]` (port allocator). Dạng iOS chưa gặp trong data.
+     */
+    private static final Pattern VPN_INTERFACE = Pattern.compile(
+            "NetInfo\\[name ([\\w.-]+);[^\\]]*underlying_type_for_vpn|Net\\[([\\w.-]+):[^\\]]*:VPN\\b");
 
     public RuleSignals extract(CallTimeline timeline) {
         Set<LogSource> sources = EnumSet.noneOf(LogSource.class);
@@ -72,7 +88,7 @@ public class SignalExtractor {
                 // "bản export bị cắt" cho một timeline rỗng là nói sai sự thật.
                 timeline.notes().stream().anyMatch(n ->
                         n.kind() == TimelineNote.Kind.SIGNALING_TRUNCATED),
-                !turnFailedFiles(timeline).isEmpty(),
+                turnFailure(timeline),
                 candidateTimeoutEvent(timeline).isPresent(),
                 initCallRejectionEvent(timeline)
                         .flatMap(e -> describeCallError(e.attribute("payload")))
@@ -93,9 +109,97 @@ public class SignalExtractor {
         List<CanonicalEvent> basis = new ArrayList<>();
         initCallRejectionEvent(timeline).ifPresent(basis::add);
         candidateTimeoutEvent(timeline).ifPresent(basis::add);
-        turnFailedFiles(timeline).values().forEach(events -> basis.add(turnCitation(events)));
+        turnFailedFiles(timeline).forEach((file, events) -> {
+            TurnFailure failure = classifyTurnFailure(file, events, timeline);
+            basis.add(turnCitation(events, failure.kind()));
+            // Câu đề xuất nhắc tới VPN thì dòng log ghi nhận VPN cũng phải trích được
+            vpnEvent(timeline, file).ifPresent(basis::add);
+        });
         basis.addAll(worstDegradedRecordPerLeg(timeline));
         return List.copyOf(basis);
+    }
+
+    /**
+     * Kiểu TURN hỏng của file hỏng đầu tiên theo tên; {@link TurnFailure#NONE} nếu mọi file
+     * có hoạt động TURN đều cấp phát được ít nhất một lần.
+     */
+    private TurnFailure turnFailure(CallTimeline timeline) {
+        return turnFailedFiles(timeline).entrySet().stream()
+                .findFirst()
+                .map(entry -> classifyTurnFailure(entry.getKey(), entry.getValue(), timeline))
+                .orElse(TurnFailure.NONE);
+    }
+
+    /**
+     * Xếp kiểu theo hai câu hỏi: request có rời máy không, và server có trả lời không.
+     * Thứ tự xét quan trọng: `Failed to send` chỉ có nghĩa khi CHƯA có phản hồi nào —
+     * có phản hồi tức là đã có ít nhất một request tới được server.
+     */
+    private static TurnFailure classifyTurnFailure(String file, List<CanonicalEvent> turnEvents,
+                                                   CallTimeline timeline) {
+        int requestsSent = countMessages(turnEvents, TURN_REQUEST_SENT);
+        int responses = countMessages(turnEvents, TURN_RESPONSE);
+        boolean socketFailed = countMessages(turnEvents, TURN_SOCKET_FAILED) > 0;
+        String sendError = firstMatch(turnEvents, TURN_SEND_FAILED).orElse(null);
+        String transport = firstMatch(turnEvents, TURN_TRANSPORT).orElse(null);
+        String vpn = vpnEvent(timeline, file)
+                .flatMap(e -> vpnInterfaceOf(e.attribute("message")))
+                .orElse(null);
+
+        TurnFailure.Kind kind;
+        if (socketFailed && requestsSent == 0) {
+            kind = TurnFailure.Kind.SOCKET_NOT_CREATED;
+        } else if (sendError != null && responses == 0) {
+            kind = TurnFailure.Kind.SEND_FAILED_ON_DEVICE;
+        } else if (responses > 0) {
+            kind = TurnFailure.Kind.NOT_ALLOCATED_AFTER_RESPONSE;
+        } else if (requestsSent > 0) {
+            kind = TurnFailure.Kind.NO_RESPONSE;
+        } else {
+            kind = TurnFailure.Kind.UNCLASSIFIED;
+        }
+        return new TurnFailure(kind, requestsSent, responses, sendError, transport, vpn);
+    }
+
+    private static int countMessages(List<CanonicalEvent> events, String text) {
+        return (int) events.stream()
+                .map(e -> e.attribute("message"))
+                .filter(m -> m != null && m.contains(text))
+                .count();
+    }
+
+    private static Optional<String> firstMatch(List<CanonicalEvent> events, Pattern pattern) {
+        for (CanonicalEvent e : events) {
+            String message = e.attribute("message");
+            if (message == null) {
+                continue;
+            }
+            Matcher m = pattern.matcher(message);
+            if (m.find()) {
+                return Optional.of(m.group(1));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Dòng đầu tiên của file WebRTC có liệt kê giao diện VPN. */
+    private static Optional<CanonicalEvent> vpnEvent(CallTimeline timeline, String file) {
+        return timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.WEBRTC && file.equals(e.sourceRef().fileName()))
+                .filter(e -> vpnInterfaceOf(e.attribute("message")).isPresent())
+                .findFirst();
+    }
+
+    /** `…NetInfo[name tun0; …; underlying_type_for_vpn 2]` hoặc `Net[tun0:…:VPN/Wifi:id=4]` -> "tun0". */
+    public static Optional<String> vpnInterfaceOf(String message) {
+        if (message == null) {
+            return Optional.empty();
+        }
+        Matcher m = VPN_INTERFACE.matcher(message);
+        if (!m.find()) {
+            return Optional.empty();
+        }
+        return Optional.of(m.group(1) != null ? m.group(1) : m.group(2));
     }
 
     /**
@@ -105,7 +209,7 @@ public class SignalExtractor {
      * Xét theo vòng đời, không đếm dòng lỗi: `allocate error response` (401) là bước
      * bắt tay chuẩn và có ở mọi cuộc gọi thành công, `probe timeout` lẻ tẻ cũng vậy.
      * Trên data mẫu, 25/27 file WebRTC có dòng `turn_port`; 6 file thoả điều kiện này
-     * (3 ở fail/, 3 ở for_test/: không tạo được socket, error 65, probe timeout liên tục)
+     * (3 ở fail/, 3 ở for_test/ — kiểu của từng file xem {@link TurnFailure})
      * và 0/19 file còn lại, gồm cả 13 file của success/.
      */
     private Map<String, List<CanonicalEvent>> turnFailedFiles(CallTimeline timeline) {
@@ -121,16 +225,36 @@ public class SignalExtractor {
     }
 
     /**
-     * Dòng trích dẫn cho một file TURN hỏng: dòng TURN đầu tiên có chữ báo lỗi nguyên văn
-     * (`Failed to create TURN client socket`, `Failed to send TURN message, error: 65`,
-     * `TURN probe request ... timeout`), bỏ qua `allocate error response ... code=401`
-     * vì đó là bước bắt tay chuẩn; không có thì dòng TURN cuối cùng của file.
+     * Dòng trích dẫn cho một file TURN hỏng — đúng dòng làm nên kiểu của file đó:
+     *   SOCKET_NOT_CREATED     dòng `Failed to create TURN client socket` đầu tiên
+     *   SEND_FAILED_ON_DEVICE  dòng `Failed to send TURN message` đầu tiên
+     *   NO_RESPONSE            dòng `TURN allocate request sent` đầu tiên — request đi mà không về
+     * Hai kiểu còn lại: dòng TURN đầu tiên có chữ báo lỗi nguyên văn, bỏ qua
+     * `allocate error response ... code=401` vì đó là bước bắt tay chuẩn; không có thì
+     * dòng TURN cuối cùng của file.
      *
-     * Những chữ này cũng có ở cuộc gọi thành công (dòng 401 ở 13/13 file WebRTC của
-     * success/, probe timeout ở 5/13), nên chúng KHÔNG quyết định file có hỏng hay không —
-     * việc đó do turnFailedFiles làm. Ở đây chỉ chọn dòng đại diện để trích.
+     * Những chữ báo lỗi này cũng có ở cuộc gọi thành công (dòng 401 ở 13/13 file WebRTC
+     * của success/, probe timeout ở 5/13), nên chúng KHÔNG quyết định file có hỏng hay
+     * không — việc đó do turnFailedFiles làm. Ở đây chỉ chọn dòng đại diện để trích.
      */
-    private static CanonicalEvent turnCitation(List<CanonicalEvent> events) {
+    private static CanonicalEvent turnCitation(List<CanonicalEvent> events, TurnFailure.Kind kind) {
+        String marker = switch (kind) {
+            case SOCKET_NOT_CREATED -> TURN_SOCKET_FAILED;
+            case SEND_FAILED_ON_DEVICE -> "Failed to send TURN message";
+            case NO_RESPONSE -> TURN_REQUEST_SENT;
+            default -> null;
+        };
+        if (marker != null) {
+            Optional<CanonicalEvent> exact = events.stream()
+                    .filter(e -> {
+                        String message = e.attribute("message");
+                        return message != null && message.contains(marker);
+                    })
+                    .findFirst();
+            if (exact.isPresent()) {
+                return exact.get();
+            }
+        }
         return events.stream()
                 .filter(e -> {
                     String message = e.attribute("message");

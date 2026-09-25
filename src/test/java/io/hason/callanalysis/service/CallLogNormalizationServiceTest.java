@@ -5,6 +5,7 @@ import io.hason.callanalysis.domain.report.ReportBuilder;
 import io.hason.callanalysis.domain.rule.RuleSignals;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
 import io.hason.callanalysis.domain.rule.SignalExtractor;
+import io.hason.callanalysis.domain.rule.TurnFailure;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
 import io.hason.callanalysis.domain.signaling.SignalingFetch;
 import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
@@ -85,6 +86,9 @@ class CallLogNormalizationServiceTest {
                 turnLine("039:839", "TURN probe request 57437a50446 timeout"))));
 
         assertThat(s.turnAllocationFailed()).isTrue();
+        // chưa có phản hồi nào mà gửi đã lỗi -> lỗi ngay trên thiết bị, mã giữ nguyên văn
+        assertThat(s.turnFailure().kind()).isEqualTo(TurnFailure.Kind.SEND_FAILED_ON_DEVICE);
+        assertThat(s.turnFailure().sendError()).isEqualTo("error: 65");
     }
 
     @Test
@@ -96,6 +100,71 @@ class CallLogNormalizationServiceTest {
                 turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65"))));
 
         assertThat(s.turnAllocationFailed()).isFalse();
+    }
+
+    /** Dòng TURN theo format Android thật (703100CF); IP thay bằng dải tài liệu 203.0.113.0/24. */
+    private static String androidTurnLine(String time, String message) {
+        return "turn_port.cc: [" + time + "][32002] (line 556): TurnPort(Port[3b034600:0:1:0:relay:"
+                + "Net[wlan0:192.168.26.x/24:Wifi:id=3]]-Remote[203.0.113.10:3478/udp]: " + message;
+    }
+
+    /** Dòng network monitor của Android khi có VPN, đúng dạng trong 703100CF. */
+    private static final String ANDROID_VPN_LINE = "android_network_monitor.cc: [000:160][32002] (line 451): "
+            + "Network connected: NetInfo[name tun0; handle 100; type 9; underlying_type_for_vpn 2]";
+
+    @Test
+    @DisplayName("không tạo được socket TURN, 0 request gửi đi (703100CF) -> SOCKET_NOT_CREATED, ghi nhận VPN")
+    void socketNeverCreatedIsItsOwnKind() {
+        Map<String, List<String>> files = Map.of("caller_webrtc.log", List.of(
+                ANDROID_VPN_LINE,
+                androidTurnLine("000:209", "Failed to create TURN client socket"),
+                androidTurnLine("000:210", "Failed to create TURN client socket")));
+
+        TurnFailure turn = signalsFrom(files).turnFailure();
+        assertThat(turn.kind()).isEqualTo(TurnFailure.Kind.SOCKET_NOT_CREATED);
+        assertThat(turn.requestsSent()).isZero();
+        assertThat(turn.transport()).isEqualTo("3478/udp");
+        assertThat(turn.vpnInterface()).isEqualTo("tun0");
+
+        // căn cứ: dòng không tạo được socket đầu tiên, và dòng ghi nhận VPN mà đề xuất nhắc tới
+        assertThat(basisFrom(files)).extracting(e -> e.sourceRef().lineNumber()).containsExactly(2, 1);
+    }
+
+    @Test
+    @DisplayName("gửi request allocate mà không có phản hồi nào (E9D6C112) -> NO_RESPONSE, trích dòng gửi đầu tiên")
+    void requestsWithoutAnyResponseAreNoResponse() {
+        // probe timeout ở giữa là nhiễu (có ở 5/13 file WebRTC của success/), không được chọn làm căn cứ
+        Map<String, List<String>> files = Map.of("caller_webrtc.log", List.of(
+                turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
+                turnLine("000:120", "TURN probe request 57437a50446 timeout"),
+                turnLine("000:570", "TURN allocate request sent, id=5a6778756b6b")));
+
+        TurnFailure turn = signalsFrom(files).turnFailure();
+        assertThat(turn.kind()).isEqualTo(TurnFailure.Kind.NO_RESPONSE);
+        assertThat(turn.requestsSent()).isEqualTo(2);
+        assertThat(turn.responses()).isZero();
+        assertThat(turn.vpnInterface()).isNull();
+
+        assertThat(basisFrom(files)).singleElement().satisfies(e -> {
+            assertThat(e.sourceRef().lineNumber()).isEqualTo(1);
+            assertThat(e.attribute("message")).contains("TURN allocate request sent");
+        });
+    }
+
+    @Test
+    @DisplayName("Failed to send SAU khi đã cấp phát được (70A1F889, đổi Wi-Fi sang 4G) -> KHÔNG phải TURN hỏng")
+    void sendFailureAfterSuccessfulAllocationIsNotFlagged() {
+        // success/70A1F889: 3 × error: 101 khi gửi TURN REFRESH qua mạng di động, cuộc gọi vẫn thành công
+        Map<String, List<String>> files = Map.of("callee_webrtc.log", List.of(
+                turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
+                turnLine("000:102", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
+                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65"),
+                turnLine("017:629", "Failed to send TURN message, error: 101 id=Wx1, type=TURN REFRESH request")));
+
+        RuleSignals s = signalsFrom(files);
+        assertThat(s.turnAllocationFailed()).isFalse();
+        assertThat(s.turnFailure()).isEqualTo(TurnFailure.NONE);
+        assertThat(basisFrom(files)).isEmpty();
     }
 
     @Test

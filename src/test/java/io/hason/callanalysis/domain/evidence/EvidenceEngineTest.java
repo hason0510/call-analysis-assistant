@@ -76,6 +76,23 @@ class EvidenceEngineTest {
     }
 
     @Test
+    @DisplayName("dòng căn cứ ghi nhận VPN chỉ nêu tên giao diện, không in địa chỉ")
+    void vpnBasisIsCitedWithoutAddresses() {
+        CanonicalEvent vpn = new CanonicalEvent("caller_webrtc.log#164", "CALL-1", Leg.CALLER,
+                LogSource.WEBRTC, EventTime.relative(java.time.Duration.ofMillis(163)),
+                EventType.LOG_MESSAGE, "LOG",
+                Map.of("message", "Net[tun0:172.16.0.x/32:VPN/Wifi:id=4]"),
+                Severity.INFO, new SourceRef("caller_webrtc.log", 164, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(vpn), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).isEmpty();   // không phải căn cứ thì không tự vào
+        assertThat(engine.collect(timeline, List.of(vpn))).singleElement().satisfies(e -> {
+            assertThat(e.citation()).isEqualTo("[EV01][caller_webrtc.log:164]");
+            assertThat(e.description()).isEqualTo("Mạng: libwebrtc ghi nhận giao diện VPN tun0");
+        });
+    }
+
+    @Test
     @DisplayName("dòng _emitFailed (mã và lý do thất bại do app ghi) luôn vào evidence như _emitBye")
     void emitFailedLineIsEvidence() {
         CanonicalEvent failed = new CanonicalEvent("caller_endcall.log#28", "CALL-1", Leg.CALLER,

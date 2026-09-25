@@ -3,7 +3,7 @@
 > **Mentor yêu cầu (2026-09-24):** *"Tập đó để các bạn chạy test và report xem kết quả
 > thật sự thế nào."*
 
-Tài liệu này là **kết quả thô** hệ thống tự kết luận, chạy ngày 2026-09-24. Không chỉnh
+Tài liệu này là **kết quả thô** hệ thống tự kết luận, chạy ngày 2026-09-24, chạy lại 2026-09-25. Không chỉnh
 sửa, không chọn lọc — đủ cả 7 cuộc.
 
 > **Tài liệu liên quan:** [`ket-qua-demo-sprint-1.md`](ket-qua-demo-sprint-1.md) là
@@ -49,6 +49,26 @@ Accuracy tự báo cáo vẫn là **13/13 = 100%** trên tập có nhãn, không
 > `signaling#N` — N là **thứ tự sự kiện** trong kết quả truy vấn Elasticsearch, không phải số dòng của
 > file `signaling.json` (dạng cũ khiến người đọc mở nhầm dòng). Verdict, category, độ tin cậy và chỉ số
 > của cả 7 cuộc không đổi. Các khối báo cáo bên dưới là output mới, không chỉnh tay.
+
+> **Chạy lại 2026-09-25, sau một thay đổi:** phần Đề xuất của `TURN_FAILURE` tách theo **kiểu
+> TURN hỏng**, thay cho hai câu chung *"kiểm tra credential của TURN server"* và *"cổng UDP 3478
+> không bị chặn"*. Hai câu đó chỉ đúng khi request đã rời máy, trong khi `0A6C2821` và `45AA3011`
+> chưa gửi được request nào (không tạo được socket TURN). Kiểu được xác định bằng hai con số đọc
+> từ WebRTC log: số dòng `TURN allocate request sent` và số phản hồi từ server. Dòng căn cứ của
+> `AA9791CE` đổi từ một dòng probe timeout (nhiễu) sang dòng `TURN allocate request sent` đầu
+> tiên; report của hai cuộc có VPN có thêm dòng căn cứ ghi nhận `tun0`. Lỗi này lộ ra khi đọc
+> report `0A6C2821`, nhưng cách phân loại **chỉ dựa trên tập có nhãn**: mỗi kiểu có một ca trong
+> `fail/` (`703100CF`, `7B56D7AD`, `E9D6C112`), và các chuỗi bị loại vì là nhiễu được đo trên
+> `success/`. Verdict, category, độ tin cậy và chỉ số của cả 7 cuộc không đổi; 4 báo cáo không
+> thuộc TURN giữ nguyên từng chữ.
+
+> **Chạy lại lần hai 2026-09-25 — chỉ đổi cách trình bày, không đổi kết luận:** (1) lý do `N/A`
+> của leg chưa có media rút gọn thành đúng tên trường trong log (`audio.packetsReceived = 0`,
+> `transport.localStunResponse = 0`); câu giải thích "số 0 là giá trị trống" chuyển sang mục
+> Giới hạn dữ liệu, mỗi leg một dòng; (2) dòng "Cờ chất lượng" của cuộc FAIL chỉ ghi `Không` —
+> category là nguyên nhân cuộc gọi hỏng, đã có ở mục "Chính"; (3) câu tóm tắt TURN tách thành
+> câu riêng thay vì một đoạn ngoặc dài; (4) ISP/ASN thiếu thì ghi `N/A` và nêu tên trường thiếu
+> thay vì `?`; (5) mốc signaling thiếu thống nhất một cách viết "không đạt tới X".
 
 ---
 
@@ -147,7 +167,9 @@ trong SIP. Đây là giao thức riêng mượn một phần từ vựng của S
 | Nguồn | `703100CF` | `7B56D7AD` | `E9D6C112` |
 |---|---|---|---|
 | WebRTC log: số lần TURN allocate thành công | **0** | **0** | **0** |
-| WebRTC log: dấu hiệu | 8 × `Failed to create TURN client socket` | 40 × `Failed to send TURN message, error: 65` | 40 × TURN probe timeout |
+| WebRTC log: số `TURN allocate request sent` / số phản hồi từ server | 0 / 0 | 20 / 0 | 40 / 0 |
+| WebRTC log: dấu hiệu | 8 × `Failed to create TURN client socket` | 40 × `Failed to send TURN message, error: 65` | chỉ có request đi, không có phản hồi nào về |
+| Kiểu TURN hỏng | `SOCKET_NOT_CREATED` — chưa request nào rời máy | `SEND_FAILED_ON_DEVICE` — lỗi ngay khi gửi | `NO_RESPONSE` — gửi đi, không ai trả lời |
 | End call log | `_waitingCandidateTimer with error` → `_emitFailed … network_check code: 421` | không có file | không có file |
 | Signaling: `INIT_CALL` → `CANCEL` sau | 6,25 s | 6,38 s | 8,07 s |
 
@@ -160,14 +182,21 @@ So sánh: 7/8 cuộc có nhãn gửi `INVITE` sau 0,52 - 0,64 giây.
 
 | Call-ID | TURN allocate thành công | Dấu hiệu | `CANCEL` sau |
 |---|---|---|---|
-| `0A6C2821` | 0 | 8 × `Failed to create TURN client socket` (có VPN `tun0`), mã 421 | 6,22 s |
+| `0A6C2821` | 0 | 8 × `Failed to create TURN client socket`, 0 request gửi đi (có VPN `tun0`), mã 421 | 6,22 s |
 | `45AA3011` | 0 | như trên, mã 421 | 6,33 s |
-| `AA9791CE` | 0 | 60 × TURN probe timeout, không có end call log | 8,35 s |
+| `AA9791CE` | 0 | 60 × `TURN allocate request sent`, 0 phản hồi, không có end call log | 8,35 s |
 | `311A9B6A` | **4** | TURN tốt, offer tạo muộn, mã 421 | 6,66 s |
 
+`TURN probe … timeout` **không** được dùng làm dấu hiệu: nó có ở 5/13 file WebRTC của
+`success/`. `Failed to send TURN message` đứng riêng cũng vậy: `success/70A1F889` có 3 dòng
+`error: 101` khi gửi `TURN REFRESH` lúc đổi Wi-Fi sang 4G, và cuộc gọi vẫn thành công. Hai
+chuỗi này chỉ được xét trong file đã có 0 lần cấp phát thành công.
+
 Ba cuộc `Failed to create TURN client socket` (`703100CF`, `0A6C2821`, `45AA3011`) đều là
-Android có giao diện VPN `tun0` và cùng một `appUserId`; không file nào khác có `tun0`. Việc VPN
-là nguyên nhân chỉ là **giả thuyết**, chưa kiểm chứng.
+Android có giao diện VPN `tun0`, cùng một `appUserId` và **cùng `deviceId`** — tức là **một
+máy**, một nguồn bằng chứng duy nhất. Không file nào khác có `tun0`. Việc VPN là nguyên nhân chỉ
+là **giả thuyết**, chưa kiểm chứng; report nêu VPN như một dữ kiện đi kèm, không viết thành
+nguyên nhân.
 
 ### Câu hỏi cho anh
 
@@ -190,9 +219,9 @@ là nguyên nhân chỉ là **giả thuyết**, chưa kiểm chứng.
 # Báo cáo phân tích cuộc gọi
 Call-ID: 0A6C2821-0A19-49F4-9C05-8F8BCEACD64F
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: TURN_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
-Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào (0 lần allocate thành công) nên không có candidate để gửi INVITE; app hết thời gian chờ candidate (_emitFailed: mã 421 call.outgoing.error.network_check).
+Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào: không tạo được socket TURN nên chưa gửi được request nào. Vì vậy không có candidate để gửi INVITE; app hết thời gian chờ candidate (_emitFailed: mã 421 call.outgoing.error.network_check).
 
 ## Evidence chính
 1. [EV01][signaling#1] Signaling INIT_CALL từ caller
@@ -200,25 +229,26 @@ Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay 
 3. [EV03][caller_endcall.log:26] Call summary caller: không nhận được gói audio nào (packetsReceived=0, bytesRecv=0), mediaFail=0 — MOS/loss/RTT không đo được
 4. [EV04][caller_endcall.log:28] Thất bại phía client: _emitFailed with originator: 0 reason: call.outgoing.error.network_check endReason: 0 code: 421 open:true
 5. [EV05][signaling#11] Signaling CANCEL từ caller
-6. [EV06][caller_webrtc.log:214] TURN: Failed to create TURN client socket
+6. [EV06][caller_webrtc.log:159] Mạng: libwebrtc ghi nhận giao diện VPN tun0
+7. [EV07][caller_webrtc.log:214] TURN: Failed to create TURN client socket
 
 ## Chỉ số cuộc gọi
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
-| ISP / ASN / quốc gia (caller)            | ? / ? / US                                           | SIGNALING |
+| ISP / ASN / quốc gia (caller)            | N/A / N/A / US (signaling không ghi isp, asn)        | SIGNALING |
 | MOS (callee)                             | N/A (không có end call log của callee)               | ENDCALL   |
 | Packet loss (callee)                     | N/A (không có end call log của callee)               | ENDCALL   |
 | RTT (callee)                             | N/A (không có end call log của callee)               | ENDCALL   |
@@ -235,12 +265,14 @@ Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay 
 - Khả dĩ khác: Điểm mơ hồ: Không được đếm riêng dòng lỗi allocate: "TURN allocate error response code=401" là bước bắt tay xác thực chuẩn của TURN (RFC 8656), không phải lỗi.
 
 ## Đề xuất
-- Kiểm tra tình trạng và credential của TURN server.
-- Xác nhận cổng UDP 3478 không bị chặn từ phía mạng người dùng.
+- Chưa có request nào tới được TURN server: WebRTC không tạo được socket TURN (Failed to create TURN client socket), nên chưa thể kết luận gì về TURN server hay tường lửa.
+- Kiểm tra trạng thái mạng trên thiết bị lúc gọi: ứng dụng có được phép dùng mạng không, và giao diện mạng nào đang hoạt động.
+- Log ghi nhận giao diện VPN tun0 đang hoạt động trên thiết bị: nên thử lại khi tắt VPN. Đây là dữ kiện đi kèm, chưa đủ để kết luận VPN là nguyên nhân.
 
 ## Giới hạn dữ liệu
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của callee — không kiểm chứng được sự kiện ICE / TURN phía đó
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - caller_webrtc.log: 327 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 
 Report hợp lệ theo schema v1: CÓ
@@ -257,7 +289,7 @@ Report hợp lệ theo schema v1: CÓ
 # Báo cáo phân tích cuộc gọi
 Call-ID: 0EC7B700-6B5D-45A3-9BB6-1463B56C9634
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: SIGNALING_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. Xuất hiện FAIL_HARD trước khi thiết lập xong.
 
@@ -278,8 +310,8 @@ Tóm tắt: Cuộc gọi không thành công. Xuất hiện FAIL_HARD trước k
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới OK)                      | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
 | MOS (caller)                             | N/A (không có end call log của caller)               | ENDCALL   |
 | Packet loss (caller)                     | N/A (không có end call log của caller)               | ENDCALL   |
 | RTT (caller)                             | N/A (không có end call log của caller)               | ENDCALL   |
@@ -287,10 +319,10 @@ Tóm tắt: Cuộc gọi không thành công. Xuất hiện FAIL_HARD trước k
 | Trạng thái ICE đạt được (caller)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | VIETTEL / AS38731 / VN                               | SIGNALING |
-| MOS (callee)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (callee)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (callee)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (callee)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| MOS (callee)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (callee)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (callee)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (callee)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (callee)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (callee) | N/A (cuộc gọi không có PAIR_PING nào của callee)     | SIGNALING |
 | ISP / ASN / quốc gia (callee)            | VIETTEL / AS38731 / VN                               | SIGNALING |
@@ -309,6 +341,7 @@ Tóm tắt: Cuộc gọi không thành công. Xuất hiện FAIL_HARD trước k
 
 ## Giới hạn dữ liệu
 - Thiếu end call log của caller — không kiểm chứng được chỉ số chất lượng phía đó
+- Leg callee chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - callee_webrtc.log: 211 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 - caller_webrtc.log: 307 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 - Lệch đồng hồ CALLEE so với server là 1615 ms, đủ lớn để ảnh hưởng thứ tự sự kiện
@@ -411,7 +444,7 @@ Report hợp lệ theo schema v1: CÓ
 # Báo cáo phân tích cuộc gọi
 Call-ID: 311A9B6A-0D30-4C30-9E01-9A42E4EF11E6
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: SIGNALING_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. App hết thời gian chờ candidate (_emitFailed: mã 421 call.outgoing.error.network_check) trước khi gửi được INVITE; TURN vẫn cấp phát được nên nguyên nhân nằm ở bước tạo offer hoặc thu candidate phía client.
 
@@ -426,16 +459,16 @@ Tóm tắt: Cuộc gọi không thành công. App hết thời gian chờ candid
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | VIETTEL / AS38731 / VN                               | SIGNALING |
@@ -462,6 +495,7 @@ Tóm tắt: Cuộc gọi không thành công. App hết thời gian chờ candid
 ## Giới hạn dữ liệu
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của callee — không kiểm chứng được sự kiện ICE / TURN phía đó
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - caller_webrtc.log: 268 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 
 Report hợp lệ theo schema v1: CÓ
@@ -478,9 +512,9 @@ Report hợp lệ theo schema v1: CÓ
 # Báo cáo phân tích cuộc gọi
 Call-ID: 45AA3011-1034-4D13-82A4-634A72D432B6
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: TURN_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
-Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào (0 lần allocate thành công) nên không có candidate để gửi INVITE; app hết thời gian chờ candidate (_emitFailed: mã 421 call.outgoing.error.network_check).
+Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào: không tạo được socket TURN nên chưa gửi được request nào. Vì vậy không có candidate để gửi INVITE; app hết thời gian chờ candidate (_emitFailed: mã 421 call.outgoing.error.network_check).
 
 ## Evidence chính
 1. [EV01][signaling#1] Signaling INIT_CALL từ caller
@@ -488,25 +522,26 @@ Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay 
 3. [EV03][caller_endcall.log:26] Call summary caller: không nhận được gói audio nào (packetsReceived=0, bytesRecv=0), mediaFail=0 — MOS/loss/RTT không đo được
 4. [EV04][caller_endcall.log:28] Thất bại phía client: _emitFailed with originator: 0 reason: call.outgoing.error.network_check endReason: 0 code: 421 open:true
 5. [EV05][signaling#11] Signaling CANCEL từ caller
-6. [EV06][caller_webrtc.log:221] TURN: Failed to create TURN client socket
+6. [EV06][caller_webrtc.log:174] Mạng: libwebrtc ghi nhận giao diện VPN tun0
+7. [EV07][caller_webrtc.log:221] TURN: Failed to create TURN client socket
 
 ## Chỉ số cuộc gọi
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
-| ISP / ASN / quốc gia (caller)            | ? / ? / US                                           | SIGNALING |
+| ISP / ASN / quốc gia (caller)            | N/A / N/A / US (signaling không ghi isp, asn)        | SIGNALING |
 | MOS (callee)                             | N/A (không có end call log của callee)               | ENDCALL   |
 | Packet loss (callee)                     | N/A (không có end call log của callee)               | ENDCALL   |
 | RTT (callee)                             | N/A (không có end call log của callee)               | ENDCALL   |
@@ -523,12 +558,14 @@ Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay 
 - Khả dĩ khác: Điểm mơ hồ: Không được đếm riêng dòng lỗi allocate: "TURN allocate error response code=401" là bước bắt tay xác thực chuẩn của TURN (RFC 8656), không phải lỗi.
 
 ## Đề xuất
-- Kiểm tra tình trạng và credential của TURN server.
-- Xác nhận cổng UDP 3478 không bị chặn từ phía mạng người dùng.
+- Chưa có request nào tới được TURN server: WebRTC không tạo được socket TURN (Failed to create TURN client socket), nên chưa thể kết luận gì về TURN server hay tường lửa.
+- Kiểm tra trạng thái mạng trên thiết bị lúc gọi: ứng dụng có được phép dùng mạng không, và giao diện mạng nào đang hoạt động.
+- Log ghi nhận giao diện VPN tun0 đang hoạt động trên thiết bị: nên thử lại khi tắt VPN. Đây là dữ kiện đi kèm, chưa đủ để kết luận VPN là nguyên nhân.
 
 ## Giới hạn dữ liệu
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của callee — không kiểm chứng được sự kiện ICE / TURN phía đó
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - caller_webrtc.log: 336 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 
 Report hợp lệ theo schema v1: CÓ
@@ -545,7 +582,7 @@ Report hợp lệ theo schema v1: CÓ
 # Báo cáo phân tích cuộc gọi
 Call-ID: 9B556E56-24D3-43BA-853D-7972AD009865
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: SIGNALING_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 428 call.outgoing.error.privacy_restricted): cuộc gọi bị chặn trước khi tới callee.
 
@@ -559,16 +596,16 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (không có WebRTC log của caller)                 | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | VIETTEL / AS38731 / VN                               | SIGNALING |
@@ -596,6 +633,7 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 - Mã 428 call.outgoing.error.privacy_restricted là server từ chối theo chính sách, không phải lỗi mạng; taxonomy chưa có category riêng nên xếp tạm vào SIGNALING_FAILURE
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của cả hai bên — không kiểm chứng được sự kiện ICE / TURN
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 
 Report hợp lệ theo schema v1: CÓ
 ```
@@ -611,25 +649,25 @@ Report hợp lệ theo schema v1: CÓ
 # Báo cáo phân tích cuộc gọi
 Call-ID: AA9791CE-13D8-4DD7-942D-4D78304FD458
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: TURN_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: MEDIUM
-Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào (0 lần allocate thành công) nên không có candidate để gửi INVITE.
+Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay trên TURN server nào: đã gửi 60 request nhưng không nhận được phản hồi nào. Vì vậy không có candidate để gửi INVITE.
 
 ## Evidence chính
 1. [EV01][signaling#1] Signaling INIT_CALL từ caller
 2. [EV02][signaling#10] Signaling CANCEL từ caller
-3. [EV03][caller_webrtc.log:338] TURN: TURN probe request 3733554d5231483770547a59 timeout
+3. [EV03][caller_webrtc.log:252] TURN: TURN allocate request sent, id=357054437663336478343676
 
 ## Chỉ số cuộc gọi
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
 | MOS (caller)                             | N/A (không có end call log của caller)               | ENDCALL   |
 | Packet loss (caller)                     | N/A (không có end call log của caller)               | ENDCALL   |
 | RTT (caller)                             | N/A (không có end call log của caller)               | ENDCALL   |
@@ -653,8 +691,8 @@ Tóm tắt: Cuộc gọi không thành công. Không cấp phát được relay 
 - Khả dĩ khác: Điểm mơ hồ: Không được đếm riêng dòng lỗi allocate: "TURN allocate error response code=401" là bước bắt tay xác thực chuẩn của TURN (RFC 8656), không phải lỗi.
 
 ## Đề xuất
-- Kiểm tra tình trạng và credential của TURN server.
-- Xác nhận cổng UDP 3478 không bị chặn từ phía mạng người dùng.
+- Đã gửi 60 request allocate tới TURN server (cổng 3478/udp) nhưng không nhận được phản hồi nào, kể cả phản hồi 401 của bước xác thực.
+- Log không phân biệt được mạng đang chặn đường tới TURN server hay TURN server không trả lời: kiểm tra cả hai — cổng 3478/udp có bị chặn trên mạng của người dùng không, và TURN server có hoạt động tại thời điểm đó không.
 
 ## Giới hạn dữ liệu
 - Không có end call log nên không kiểm chứng được chất lượng media

@@ -204,7 +204,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5) |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Unit test | **162**, chạy ~0,4 giây, **không cần Elasticsearch** |
+| Unit test | **179**, chạy trong vài giây, **không cần Elasticsearch** |
 
 ### Known Limitations
 
@@ -235,6 +235,13 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
   điều kiện là "kéo dài trên nhiều mẫu liên tiếp". Chờ mentor chọn (ví dụ qua `271D1FAF`).
 - `NETWORK_DELAY_JITTER` chưa có nhánh riêng trong rule: mọi suy giảm đều được xếp
   `NETWORK_PACKET_LOSS`, dù taxonomy đã khai báo điều kiện RTT.
+- `TURN_FAILURE` chia theo kiểu để chọn đề xuất: không tạo được socket (chưa request nào rời
+  máy), lỗi ngay khi gửi trên thiết bị, gửi đi mà không có phản hồi nào. Mỗi kiểu có đúng một
+  ca trong `fail/`. Kiểu thứ tư, server có phản hồi nhưng không cấp phát, **chưa có ca mẫu**;
+  report tự ghi điều này vào Giới hạn dữ liệu khi gặp.
+- Ba cuộc không tạo được socket TURN (`703100CF`, `0A6C2821`, `45AA3011`) đều có giao diện VPN
+  `tun0`, nhưng cả ba **cùng một máy** (cùng `deviceId`), tức là chỉ một nguồn bằng chứng. Report
+  nêu VPN như dữ kiện đi kèm, không viết thành nguyên nhân.
 - Mã 428 `privacy_restricted` (server từ chối theo chính sách) được xếp tạm vào
   `SIGNALING_FAILURE` vì taxonomy của MVP mục 4.2 không có category riêng. Chờ mentor.
 - Cuộc gọi có signaling trông bình thường nhưng không kèm log phía client nào: hệ thống trả

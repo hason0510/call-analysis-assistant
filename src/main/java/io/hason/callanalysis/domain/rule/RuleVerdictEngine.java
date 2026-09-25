@@ -48,15 +48,20 @@ public class RuleVerdictEngine {
                                 + "): cuộc gọi bị chặn trước khi tới callee", limitations);
             }
             if (signals.turnAllocationFailed()) {
+                TurnFailure turn = signals.turnFailure();
+                if (turn.unvalidated()) {
+                    limitations.add("Kiểu TURN hỏng này (" + turn.kind() + ") chưa có ca mẫu có nhãn"
+                            + " nên hướng điều tra trong phần Đề xuất chưa được kiểm chứng");
+                }
                 // relay là đường mặc định (iceTransportPolicy NOHOST): không cấp phát được
                 // TURN thì không có candidate nào để gói vào INVITE.
-                return fail(IssueCategory.TURN_FAILURE,
+                return new RuleVerdict(Verdict.FAIL, false, IssueCategory.TURN_FAILURE,
                         signals.candidateTimeout() ? ConfidenceLevel.HIGH : ConfidenceLevel.MEDIUM,
-                        "Không cấp phát được relay trên TURN server nào (0 lần allocate thành công)"
-                                + " nên không có candidate để gửi INVITE"
+                        "Không cấp phát được relay trên TURN server nào: " + turnDetail(turn)
+                                + ". Vì vậy không có candidate để gửi INVITE"
                                 + (signals.candidateTimeout()
                                 ? "; app hết thời gian chờ candidate" + clientFailureNote(signals) : ""),
-                        limitations);
+                        limitations, turn);
             }
             if (signals.candidateTimeout()) {
                 return fail(IssueCategory.SIGNALING_FAILURE, cappedBySignalingGaps(signals),
@@ -128,6 +133,23 @@ public class RuleVerdictEngine {
     private static String clientFailureNote(RuleSignals signals) {
         return signals.clientFailure() == null ? ""
                 : " (_emitFailed: mã " + signals.clientFailure() + ")";
+    }
+
+    /**
+     * Mệnh đề cho biết request TURN dừng ở đâu; mã lỗi đọc nguyên văn từ log.
+     * Viết thành câu riêng sau dấu hai chấm, không nhét vào ngoặc giữa câu chính.
+     */
+    private static String turnDetail(TurnFailure turn) {
+        return switch (turn.kind()) {
+            case SOCKET_NOT_CREATED -> "không tạo được socket TURN nên chưa gửi được request nào";
+            case SEND_FAILED_ON_DEVICE -> "request lỗi ngay khi gửi trên thiết bị với " + turn.sendError()
+                    + " và không nhận được phản hồi nào";
+            case NO_RESPONSE -> "đã gửi " + turn.requestsSent()
+                    + " request nhưng không nhận được phản hồi nào";
+            case NOT_ALLOCATED_AFTER_RESPONSE -> "TURN server có phản hồi " + turn.responses()
+                    + " lần nhưng không lần nào cấp phát";
+            case UNCLASSIFIED, NONE -> "0 lần allocate thành công";
+        };
     }
 
     private static String mediaFailureReason(RuleSignals signals) {

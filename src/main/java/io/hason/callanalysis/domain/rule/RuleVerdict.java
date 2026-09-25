@@ -16,10 +16,21 @@ public record RuleVerdict(
         IssueCategory issueCategory,
         ConfidenceLevel confidence,
         String reasoning,
-        List<String> dataLimitations
+        List<String> dataLimitations,
+        /**
+         * Kiểu TURN hỏng khi issueCategory là TURN_FAILURE, để report chọn đề xuất đúng
+         * hướng; {@link TurnFailure#NONE} với mọi kết luận khác.
+         */
+        TurnFailure turnFailure
 ) {
 
     public RuleVerdict {
         dataLimitations = dataLimitations == null ? List.of() : List.copyOf(dataLimitations);
+        turnFailure = turnFailure == null ? TurnFailure.NONE : turnFailure;
+    }
+
+    public RuleVerdict(Verdict verdict, boolean qualityFlag, IssueCategory issueCategory,
+                       ConfidenceLevel confidence, String reasoning, List<String> dataLimitations) {
+        this(verdict, qualityFlag, issueCategory, confidence, reasoning, dataLimitations, TurnFailure.NONE);
     }
 }

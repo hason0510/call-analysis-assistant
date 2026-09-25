@@ -22,8 +22,11 @@ public record RuleSignals(
         boolean noMediaBytes,
         boolean qualityDegraded,
         boolean signalingTruncated,
-        /** Có file WebRTC đã thử TURN nhưng KHÔNG một lần allocate nào thành công. */
-        boolean turnAllocationFailed,
+        /**
+         * Kiểu TURN hỏng của file WebRTC đầu tiên (theo tên) đã thử TURN nhưng KHÔNG một
+         * lần allocate nào thành công; {@link TurnFailure#NONE} nếu không có file nào như vậy.
+         */
+        TurnFailure turnFailure,
         /** App hết giờ chờ ICE candidate (`_waitingCandidateTimer with error`). */
         boolean candidateTimeout,
         /** Server từ chối INIT_CALL, dạng "428 call.outgoing.error.privacy_restricted"; null nếu không. */
@@ -38,6 +41,12 @@ public record RuleSignals(
 
     public RuleSignals {
         availableSources = availableSources == null ? Set.of() : Set.copyOf(availableSources);
+        turnFailure = turnFailure == null ? TurnFailure.NONE : turnFailure;
+    }
+
+    /** Có file WebRTC đã thử TURN nhưng KHÔNG một lần allocate nào thành công. */
+    public boolean turnAllocationFailed() {
+        return turnFailure.failed();
     }
 
     public boolean hasSignaling() {

@@ -25,7 +25,7 @@ import java.util.Set;
  *
  * Ngoài năm loại sự kiện chọn cố định, report còn nhận các dòng CĂN CỨ của tín hiệu lỗi
  * (SignalExtractor.basis): ACK INIT_CALL mang mã lỗi, `_waitingCandidateTimer`, dòng TURN
- * của file không cấp phát được relay, bản ghi stats vượt ngưỡng. Thiếu chúng thì kết luận
+ * của file không cấp phát được relay (kèm dòng ghi nhận VPN nếu có), bản ghi stats vượt ngưỡng. Thiếu chúng thì kết luận
  * như "TURN_FAILURE" hay "server từ chối (428)" không trỏ được về dòng log nào, trái
  * MVP mục 3.3: "Mọi kết luận phải trace được về evidence".
  */
@@ -147,6 +147,11 @@ public class EvidenceEngine {
         }
         if (event.type() == EventType.TURN_EVENT) {
             return "TURN: " + turnMessage(event.attribute("message"));
+        }
+        // Chỉ nêu tên giao diện; địa chỉ trên dòng gốc là của mạng VPN phía người dùng
+        java.util.Optional<String> vpn = SignalExtractor.vpnInterfaceOf(event.attribute("message"));
+        if (event.source() == LogSource.WEBRTC && vpn.isPresent()) {
+            return "Mạng: libwebrtc ghi nhận giao diện VPN " + vpn.get();
         }
         if (msg != null && event.source() == LogSource.ENDCALL) {
             return "Log phía client: " + msg;

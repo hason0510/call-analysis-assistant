@@ -172,7 +172,7 @@ io.hason.callanalysis
 | `MetricsCalculator` test được không cần ES | "Chỉ số khớp 100% với tính tay" (5.1) |
 | Đổi AI provider chỉ cần viết adapter mới | "AI Provider Abstraction" (6.6) |
 
-Kết quả cụ thể: **162 test chạy trong ~0,4 giây, không cần Docker.**
+Kết quả cụ thể: **179 test chạy trong vài giây, không cần Docker.**
 
 ### Adapter chỉ làm việc cơ học
 
@@ -265,7 +265,7 @@ Ba lựa chọn đáng chú ý:
 | Verdict Accuracy | **13/13 = 100%** trên data có nhãn |
 | Chỉ số | **Khớp 100%** với tính tay độc lập trên 9 cuộc gọi |
 | Report hợp lệ theo schema | **20/20** |
-| Unit test | **162 test, ~0,4 giây, không cần Elasticsearch** |
+| Unit test | **179 test, vài giây, không cần Elasticsearch** |
 
 Ca đáng chú ý nhất là `2D9057AA`: signaling trông bình thường (đạt `OK_ACK_OK`, kết thúc bằng
 `BYE`, PAIR_PING phía callee đều tới sát lúc `BYE`) nhưng ground truth là FAIL. Hệ thống kết luận đúng `FAIL` + `ICE_FAILURE` nhờ

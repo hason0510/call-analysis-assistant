@@ -5,8 +5,11 @@ import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.evidence.Evidence;
 import io.hason.callanalysis.domain.metrics.CallMetric;
 import io.hason.callanalysis.domain.metrics.CallMetrics;
+import io.hason.callanalysis.domain.metrics.MetricKey;
+import io.hason.callanalysis.domain.metrics.MetricsCalculator;
 import io.hason.callanalysis.domain.metrics.MetricValue;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
+import io.hason.callanalysis.domain.rule.TurnFailure;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
 import io.hason.callanalysis.domain.taxonomy.IssueTaxonomy;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
@@ -49,7 +52,7 @@ public class ReportBuilder {
                 metricEntries,
                 possibleCauses(verdict, taxonomy),
                 suggestions(verdict),
-                dataLimitations(timeline, verdict, taxonomy),
+                dataLimitations(timeline, metrics, verdict, taxonomy),
                 false);
     }
 
@@ -111,9 +114,7 @@ public class ReportBuilder {
                     "Kiểm tra kết nối mạng của bên bị lỗi tại thời điểm cuộc gọi.",
                     "Đối chiếu danh sách ICE candidate hai bên xem có cặp nào khả dĩ không.",
                     "Xác nhận TURN server có cấp phát được relay không.");
-            case TURN_FAILURE -> List.of(
-                    "Kiểm tra tình trạng và credential của TURN server.",
-                    "Xác nhận cổng UDP 3478 không bị chặn từ phía mạng người dùng.");
+            case TURN_FAILURE -> turnSuggestions(verdict.turnFailure());
             case NETWORK_PACKET_LOSS -> List.of(
                     "Kiểm tra chất lượng mạng của bên bị ảnh hưởng trong thời gian cuộc gọi.",
                     "Đối chiếu chuỗi bản ghi stats theo từng giây để xem mất gói kéo dài hay chỉ thoáng qua.");
@@ -125,11 +126,59 @@ public class ReportBuilder {
         };
     }
 
-    private static List<String> dataLimitations(CallTimeline timeline, RuleVerdict verdict,
-                                                IssueTaxonomy taxonomy) {
+    /**
+     * Đề xuất theo KIỂU TURN hỏng, không theo category chung.
+     *
+     * Trước đây mọi ca TURN_FAILURE nhận cùng hai câu "kiểm tra credential" và "cổng UDP
+     * 3478 không bị chặn". Hai câu đó chỉ đúng khi request đã rời máy: với 703100CF (không
+     * tạo nổi socket, 0 request) và 7B56D7AD (lỗi gửi ngay trên máy) chúng chỉ sai hướng.
+     * Cổng và giao thức đọc từ log, không viết cứng.
+     */
+    private static List<String> turnSuggestions(TurnFailure turn) {
+        List<String> suggestions = new ArrayList<>();
+        String port = turn.transport() != null ? "cổng " + turn.transport() : "cổng TURN";
+        switch (turn.kind()) {
+            case SOCKET_NOT_CREATED -> {
+                suggestions.add("Chưa có request nào tới được TURN server: WebRTC không tạo được socket"
+                        + " TURN (Failed to create TURN client socket), nên chưa thể kết luận gì về"
+                        + " TURN server hay tường lửa.");
+                suggestions.add("Kiểm tra trạng thái mạng trên thiết bị lúc gọi: ứng dụng có được phép"
+                        + " dùng mạng không, và giao diện mạng nào đang hoạt động.");
+            }
+            case SEND_FAILED_ON_DEVICE -> {
+                suggestions.add("Request tới TURN server lỗi ngay khi gửi trên thiết bị (Failed to send"
+                        + " TURN message, " + turn.sendError() + ") và không có phản hồi nào: kiểm tra"
+                        + " kết nối mạng của thiết bị lúc gọi.");
+                suggestions.add("Chưa có phản hồi nào từ TURN server nên chưa thể kết luận gì về phía server.");
+            }
+            case NO_RESPONSE -> {
+                suggestions.add("Đã gửi " + turn.requestsSent() + " request allocate tới TURN server ("
+                        + port + ") nhưng không nhận được phản hồi nào, kể cả phản hồi 401 của bước"
+                        + " xác thực.");
+                suggestions.add("Log không phân biệt được mạng đang chặn đường tới TURN server hay TURN"
+                        + " server không trả lời: kiểm tra cả hai — " + port + " có bị chặn trên mạng của"
+                        + " người dùng không, và TURN server có hoạt động tại thời điểm đó không.");
+            }
+            case NOT_ALLOCATED_AFTER_RESPONSE -> suggestions.add("TURN server có phản hồi ("
+                    + turn.responses() + " lần) nhưng không lần nào cấp phát thành công: kiểm tra"
+                    + " credential TURN mà app gửi đi và cấu hình của TURN server.");
+            case UNCLASSIFIED, NONE -> suggestions.add("Log không đủ để biết request TURN có rời thiết bị"
+                    + " hay không: kiểm tra kết nối mạng của thiết bị và tình trạng TURN server.");
+        }
+        if (turn.vpnInterface() != null) {
+            suggestions.add("Log ghi nhận giao diện VPN " + turn.vpnInterface() + " đang hoạt động trên"
+                    + " thiết bị: nên thử lại khi tắt VPN. Đây là dữ kiện đi kèm, chưa đủ để kết luận"
+                    + " VPN là nguyên nhân.");
+        }
+        return List.copyOf(suggestions);
+    }
+
+    private static List<String> dataLimitations(CallTimeline timeline, CallMetrics metrics,
+                                                RuleVerdict verdict, IssueTaxonomy taxonomy) {
         Set<String> limitations = new LinkedHashSet<>(verdict.dataLimitations());
 
         limitations.addAll(missingClientLogs(timeline));
+        limitations.addAll(zeroFilledLegs(metrics));
 
         timeline.notes().stream()
                 .filter(n -> n.kind() == TimelineNote.Kind.RELATIVE_TRACK
@@ -189,6 +238,45 @@ public class ReportBuilder {
                     + " — " + consequence(source, false));
         }
         return missing;
+    }
+
+    /**
+     * Giải thích vì sao chỉ số chất lượng của một leg là N/A dù log có ghi số 0.
+     *
+     * Bảng chỉ số chỉ ghi ngắn `N/A (audio.packetsReceived = 0)`. Câu giải thích đặt ở đây,
+     * mỗi leg một dòng — trước đây nó nằm trong từng ô của bảng, nên một report lặp lại
+     * cùng một câu dài tới 6 lần và làm vỡ bảng.
+     */
+    private static List<String> zeroFilledLegs(CallMetrics metrics) {
+        List<String> notes = new ArrayList<>();
+        for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
+            boolean noAudio = hasReason(metrics, MetricKey.MOS, leg, MetricsCalculator.NO_AUDIO_PACKETS);
+            boolean noStun = hasReason(metrics, MetricKey.RTT, leg, MetricsCalculator.NO_STUN_RESPONSE);
+            if (!noAudio && !noStun) {
+                continue;
+            }
+            List<String> causes = new ArrayList<>();
+            List<String> affected = new ArrayList<>();
+            if (noAudio) {
+                causes.add("chưa nhận được gói audio nào (" + MetricsCalculator.NO_AUDIO_PACKETS + ")");
+                affected.add("MOS, packet loss, jitter");
+            }
+            if (noStun) {
+                causes.add("chưa có phản hồi STUN nào (" + MetricsCalculator.NO_STUN_RESPONSE + ")");
+                affected.add("RTT");
+            }
+            notes.add("Leg " + leg.name().toLowerCase() + " " + String.join(" và ", causes) + ": "
+                    + String.join(", ", affected)
+                    + " trong log đều là 0 điền vào chỗ trống, không phải kết quả đo");
+        }
+        return notes;
+    }
+
+    private static boolean hasReason(CallMetrics metrics, MetricKey key, Leg leg, String reason) {
+        return metrics.find(key, leg)
+                .map(CallMetric::value)
+                .filter(v -> v instanceof MetricValue.NotAvailable n && n.reason().equals(reason))
+                .isPresent();
     }
 
     private static boolean hasEvents(CallTimeline timeline, LogSource source, Leg leg) {

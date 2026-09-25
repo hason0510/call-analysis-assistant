@@ -68,9 +68,9 @@ public class AnalyzeCommand implements ApplicationRunner {
         log.info("# Báo cáo phân tích cuộc gọi");
         log.info("Call-ID: {}", r.callId());
         log.info("Kết luận: {}", r.verdict());
-        log.info("Cờ chất lượng: {}", r.qualityFlag()
-                ? "Có - " + r.issueCategory()
-                : (r.issueCategory() == null ? "Không" : "Không (nguyên nhân: " + r.issueCategory() + ")"));
+        // Theo mẫu MVP 4.5: category chỉ ghi ở dòng này khi cờ BẬT. Với cuộc FAIL, category là
+        // nguyên nhân cuộc gọi hỏng, không phải của cờ chất lượng — đã có ở mục "Chính:" bên dưới.
+        log.info("Cờ chất lượng: {}", r.qualityFlag() ? "Có - " + r.issueCategory() : "Không");
         log.info("Độ tin cậy: {}", r.confidenceLevel());
         log.info("Tóm tắt: {}", r.summary());
 

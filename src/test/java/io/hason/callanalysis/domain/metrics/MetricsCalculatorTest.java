@@ -349,4 +349,51 @@ class MetricsCalculatorTest {
         assertThat(metrics.availableCount()).isZero();
         assertThat(metrics.unavailableCount()).isEqualTo(metrics.metrics().size());
     }
+
+    @Test
+    @DisplayName("lý do N/A của leg chưa có media: ngắn, nêu ĐÚNG tên trường đầy đủ trong log")
+    void zeroFilledReasonNamesFullLogField() {
+        // Câu giải thích "số 0 là giá trị trống" nằm ở Giới hạn dữ liệu, không lặp trong từng ô
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                summary(Leg.CALLEE, Map.of(
+                        "audio.audioMos", "0",
+                        "transport.currentRttMs", "0",
+                        "audio.packetsReceived", "0",
+                        "transport.localStunResponse", "0")))));
+
+        assertThat(metrics.find(MetricKey.MOS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("N/A (audio.packetsReceived = 0)");
+        assertThat(metrics.find(MetricKey.RTT, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("N/A (transport.localStunResponse = 0)");
+    }
+
+    @Test
+    @DisplayName("thiếu mốc signaling thì mọi chỉ số dùng CÙNG một cách viết: 'không đạt tới X'")
+    void missingMilestoneUsesOneWording() {
+        // Trước đây cùng việc "không có BYE" được viết hai kiểu ("không có lệnh BYE" và
+        // "không có BYE"), người đọc tưởng là hai tình huống khác nhau.
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER))));
+
+        assertThat(metrics.valueOf(MetricKey.TIME_TO_CALLEE).display()).isEqualTo("N/A (cuộc gọi không đạt tới INVITE)");
+        assertThat(metrics.valueOf(MetricKey.INVITE_RETRANSMISSIONS).display()).isEqualTo("N/A (cuộc gọi không đạt tới INVITE)");
+        assertThat(metrics.valueOf(MetricKey.TERMINATED_BY).display()).isEqualTo("N/A (cuộc gọi không đạt tới BYE)");
+        assertThat(metrics.valueOf(MetricKey.BYE_RETRANSMISSIONS).display()).isEqualTo("N/A (cuộc gọi không đạt tới BYE)");
+    }
+
+    @Test
+    @DisplayName("ISP / ASN thiếu một phần -> ghi N/A và nêu tên trường thiếu, KHÔNG tự điền '?'")
+    void partialNetworkContextNamesMissingFields() {
+        // 0A6C2821 và 45AA3011: signaling chỉ có countryCode, không có isp và asn
+        CanonicalEvent onlyCountry = new CanonicalEvent("signaling#0", "CALL-1", Leg.CALLER,
+                LogSource.SIGNALING, EventTime.absolute(T0, ClockDomain.SERVER),
+                EventType.SIGNALING_COMMAND, "INIT_CALL", Map.of("countryCode", "US"), Severity.INFO,
+                new SourceRef(SourceRef.SIGNALING, 1, "INIT_CALL"));
+
+        assertThat(calculator.calculate(timelineOf(List.of(onlyCountry)))
+                .find(MetricKey.NETWORK_CONTEXT, Leg.CALLER)).get()
+                .extracting(m -> m.value().display())
+                .isEqualTo("N/A / N/A / US (signaling không ghi isp, asn)");
+    }
 }

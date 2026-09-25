@@ -40,12 +40,13 @@ public class MetricsCalculator {
 
     private static final String PACKETS_RECEIVED = "audio.packetsReceived";
     private static final String STUN_RESPONSES = "transport.localStunResponse";
-    private static final String NO_AUDIO_PACKETS =
-            "không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được;"
-                    + " số 0 trong log là giá trị trống, không phải kết quả đo";
-    private static final String NO_STUN_RESPONSE =
-            "chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT;"
-                    + " số 0 trong log là giá trị trống, không phải kết quả đo";
+    /**
+     * Lý do N/A chỉ nêu đúng trường và giá trị trong log, để người đọc tra thẳng được.
+     * Lời giải thích "số 0 là giá trị trống, không phải kết quả đo" nằm MỘT lần ở mục
+     * Giới hạn dữ liệu (ReportBuilder) — viết vào từng ô thì một report lặp câu đó 6 lần.
+     */
+    public static final String NO_AUDIO_PACKETS = PACKETS_RECEIVED + " = 0";
+    public static final String NO_STUN_RESPONSE = STUN_RESPONSES + " = 0";
 
     public CallMetrics calculate(CallTimeline timeline) {
         List<CallMetric> metrics = new ArrayList<>();
@@ -198,8 +199,24 @@ public class MetricsCalculator {
         if (isp == null && asn == null && country == null) {
             return MetricValue.unavailable("sự kiện signaling không ghi isp/asn/countryCode");
         }
-        return MetricValue.text(String.format("%s / %s / %s",
-                isp == null ? "?" : isp, asn == null ? "?" : asn, country == null ? "?" : country));
+        // Thiếu một phần thì ghi N/A và nêu tên trường thiếu (MVP mục 4.3), không tự điền "?"
+        List<String> missing = new ArrayList<>();
+        if (isp == null) {
+            missing.add("isp");
+        }
+        if (asn == null) {
+            missing.add("asn");
+        }
+        if (country == null) {
+            missing.add("countryCode");
+        }
+        String value = String.format("%s / %s / %s", orNa(isp), orNa(asn), orNa(country));
+        return MetricValue.text(missing.isEmpty() ? value
+                : value + " (signaling không ghi " + String.join(", ", missing) + ")");
+    }
+
+    private static String orNa(String value) {
+        return value == null ? "N/A" : value;
     }
 
     private static String firstAttribute(List<CanonicalEvent> events, String key) {
@@ -265,7 +282,7 @@ public class MetricsCalculator {
                 .sorted()
                 .toList();
         if (times.isEmpty()) {
-            return MetricValue.unavailable("cuộc gọi không có lệnh " + command);
+            return MetricValue.unavailable("cuộc gọi không đạt tới " + command);
         }
 
         long transmissions = 1;
@@ -285,7 +302,7 @@ public class MetricsCalculator {
                 .map(e -> e.leg() == Leg.UNKNOWN
                         ? MetricValue.unavailable("không suy ra được bên gửi BYE")
                         : MetricValue.text(e.leg().name()))
-                .orElseGet(() -> MetricValue.unavailable("cuộc gọi không có BYE"));
+                .orElseGet(() -> MetricValue.unavailable("cuộc gọi không đạt tới " + BYE));
     }
 
     /**

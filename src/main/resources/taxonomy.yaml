@@ -91,7 +91,9 @@ categories:
       gói vào INVITE và cuộc gọi không bắt đầu được.
     symptoms:
       - "Không có dòng 'TURN allocate requested successfully' nào trong file WebRTC"
-      - "Failed to create TURN client socket / Failed to send TURN message, error: 65 / TURN probe timeout liên tục"
+      - "Kiểu SOCKET_NOT_CREATED: 'Failed to create TURN client socket', 0 dòng 'TURN allocate request sent'"
+      - "Kiểu SEND_FAILED_ON_DEVICE: 'Failed to send TURN message, error: <mã>', 0 phản hồi từ server"
+      - "Kiểu NO_RESPONSE: có 'TURN allocate request sent' nhưng 0 phản hồi, kể cả 401"
       - "End call log: _waitingCandidateTimer with error, _emitFailed code 421 network_check"
       - "Signaling: INIT_CALL rồi CANCEL, không bao giờ có INVITE"
     requiredEvidence:
@@ -105,17 +107,22 @@ categories:
     calibration:
       status: VALIDATED
       evidence: >-
-        Chỉ rút từ tập CÓ NHÃN. 3 ca trong fail/ thoả điều kiện: 703100CF (8 lần
-        'Failed to create TURN client socket', máy có giao diện VPN tun0), 7B56D7AD
-        (40 lần 'Failed to send TURN message, error: 65'), E9D6C112 (40 lần TURN probe
-        timeout); cả 3 đều 0 lần allocate thành công, WebRTC log chỉ dài khoảng 6 giây,
+        Chỉ rút từ tập CÓ NHÃN. 3 ca trong fail/ thoả điều kiện, mỗi ca một kiểu: 703100CF
+        (SOCKET_NOT_CREATED: 8 lần 'Failed to create TURN client socket', 0 request gửi
+        đi, máy có giao diện VPN tun0), 7B56D7AD (SEND_FAILED_ON_DEVICE: 20 request, 40 lần
+        'Failed to send TURN message, error: 65'), E9D6C112 (NO_RESPONSE: 40 request, 0
+        phản hồi); cả 3 đều 0 lần allocate thành công, WebRTC log chỉ dài khoảng 6 giây,
         signaling INIT_CALL rồi CANCEL. 703100CF có end call log xác nhận mã 421.
+        Kiểu NOT_ALLOCATED_AFTER_RESPONSE (server có phản hồi nhưng không cấp phát) chưa
+        có ca mẫu nào.
         0/13 file WebRTC của success/ và 0/1 file của 2D9057AA thoả điều kiện: mọi file
         đó đều có ít nhất 2 lần allocate thành công.
         Không được đếm dòng lỗi riêng lẻ: 'Received TURN allocate error response' (401)
         là bắt tay chuẩn (73 error, đúng 73 thành công ở các file TURN chạy được); đếm
-        dòng này sẽ báo nhầm 11/20 cuộc gọi, gồm cả 7/7 cuộc thành công. Probe timeout lẻ
-        tẻ cũng có ở cuộc gọi thành công.
+        dòng này sẽ báo nhầm 11/20 cuộc gọi, gồm cả 7/7 cuộc thành công. Probe timeout
+        (5/13 file WebRTC của success/) và 'Failed to send TURN message' (1/13, 70A1F889
+        khi đổi Wi-Fi sang 4G) cũng có ở cuộc gọi thành công, nên chỉ được xét trong file
+        đã có 0 lần allocate thành công.
 
   - id: NETWORK_PACKET_LOSS
     definition: >-

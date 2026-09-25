@@ -19,7 +19,7 @@ liệu này là **bằng chứng đã chạy** để mentor đọc được mà 
 | Java | 21.0.10 (ép qua `build.ps1`) |
 | Elasticsearch | 8.18.8 trong Docker, index `signaling-events` |
 | Số document | **1 059** / 20 cuộc gọi |
-| Unit test | **162 pass**, ~0,4 giây, không cần Elasticsearch |
+| Unit test | **179 pass**, vài giây, không cần Elasticsearch |
 
 Lệnh dựng lại:
 
@@ -176,7 +176,7 @@ report sẽ nói dối rằng cuộc gọi thiết lập trong 0 ms.
 # Báo cáo phân tích cuộc gọi
 Call-ID: 1B009D42-49CD-479E-B26C-3A2994AEB720
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: SIGNALING_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 428 call.outgoing.error.privacy_restricted): cuộc gọi bị chặn trước khi tới callee.
 
@@ -190,16 +190,16 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (WebRTC log không ghi chuyển trạng thái ICE nào) | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | MOBIFONE / AS131429 / VN                             | SIGNALING |
@@ -227,6 +227,7 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 - Mã 428 call.outgoing.error.privacy_restricted là server từ chối theo chính sách, không phải lỗi mạng; taxonomy chưa có category riêng nên xếp tạm vào SIGNALING_FAILURE
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của callee — không kiểm chứng được sự kiện ICE / TURN phía đó
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - caller_webrtc.log: 6 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 
 Report hợp lệ theo schema v1: CÓ
@@ -268,7 +269,7 @@ khoảng im lặng từ lần ping cuối tới hết cuộc gọi — một gi�
 # Báo cáo phân tích cuộc gọi
 Call-ID: 2D9057AA-C496-48B2-946A-98FA2896D086
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: ICE_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. ICE chuyển sang failed và không bao giờ đạt connected.
 
@@ -304,10 +305,10 @@ Tóm tắt: Cuộc gọi không thành công. ICE chuyển sang failed và khôn
 | Trạng thái ICE đạt được (caller)         | N/A (không có WebRTC log của caller)                 | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | 1019 ms [proxy]                                      | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | AS45903 / AS45903 / VN                               | SIGNALING |
-| MOS (callee)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (callee)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (callee)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (callee)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| MOS (callee)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (callee)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (callee)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (callee)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (callee)         | failed                                               | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (callee) | 4447 ms [proxy]                                      | SIGNALING |
 | ISP / ASN / quốc gia (callee)            | AS45903 / AS45903 / VN                               | SIGNALING |
@@ -327,6 +328,7 @@ Tóm tắt: Cuộc gọi không thành công. ICE chuyển sang failed và khôn
 ## Giới hạn dữ liệu
 - Thiếu end call log của caller — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của caller — không kiểm chứng được sự kiện ICE / TURN phía đó
+- Leg callee chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 - callee_webrtc.log: 960 sự kiện dùng mốc thời gian tương đối, chưa đồng bộ được với timeline signaling
 
 Report hợp lệ theo schema v1: CÓ
@@ -499,7 +501,7 @@ file cụ thể, vì chính thư mục này chứng minh tên file không đáng
 # Báo cáo phân tích cuộc gọi
 Call-ID: 9B556E56-24D3-43BA-853D-7972AD009865
 Kết luận: FAIL
-Cờ chất lượng: Không (nguyên nhân: SIGNALING_FAILURE)
+Cờ chất lượng: Không
 Độ tin cậy: HIGH
 Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 428 call.outgoing.error.privacy_restricted): cuộc gọi bị chặn trước khi tới callee.
 
@@ -513,16 +515,16 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 | Chỉ số                                   | Giá trị                                              | Nguồn     |
 | Thời gian thiết lập                      | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
 | Thời gian với tới callee                 | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
-| Số lần gửi lại INVITE                    | N/A (cuộc gọi không có lệnh INVITE)                  | SIGNALING |
+| Số lần gửi lại INVITE                    | N/A (cuộc gọi không đạt tới INVITE)                  | SIGNALING |
 | Số lần No sessions found                 | N/A (signaling không có trường text để đếm thông báo này) | SIGNALING |
 | Thời gian đổ chuông                      | N/A (cuộc gọi không đạt tới RINGING)                 | SIGNALING |
 | Thời lượng kết nối                       | N/A (cuộc gọi không đạt tới OK_ACK_OK)               | SIGNALING |
-| Bên kết thúc                             | N/A (cuộc gọi không có BYE)                          | SIGNALING |
-| Số lần gửi lại BYE                       | N/A (cuộc gọi không có lệnh BYE)                     | SIGNALING |
-| MOS (caller)                             | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Packet loss (caller)                     | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| RTT (caller)                             | N/A (chưa có phản hồi STUN nào (transport.localStunResponse = 0) nên không đo được RTT; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
-| Jitter (caller)                          | N/A (không nhận được gói audio nào (audio.packetsReceived = 0) nên không đo được; số 0 trong log là giá trị trống, không phải kết quả đo) | ENDCALL   |
+| Bên kết thúc                             | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| Số lần gửi lại BYE                       | N/A (cuộc gọi không đạt tới BYE)                     | SIGNALING |
+| MOS (caller)                             | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| Packet loss (caller)                     | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
+| RTT (caller)                             | N/A (transport.localStunResponse = 0)                | ENDCALL   |
+| Jitter (caller)                          | N/A (audio.packetsReceived = 0)                      | ENDCALL   |
 | Trạng thái ICE đạt được (caller)         | N/A (không có WebRTC log của caller)                 | WEBRTC    |
 | Khoảng trống PAIR_PING lớn nhất (caller) | N/A (cuộc gọi không có PAIR_PING nào của caller)     | SIGNALING |
 | ISP / ASN / quốc gia (caller)            | VIETTEL / AS38731 / VN                               | SIGNALING |
@@ -550,6 +552,7 @@ Tóm tắt: Cuộc gọi không thành công. Server từ chối INIT_CALL (mã 
 - Mã 428 call.outgoing.error.privacy_restricted là server từ chối theo chính sách, không phải lỗi mạng; taxonomy chưa có category riêng nên xếp tạm vào SIGNALING_FAILURE
 - Thiếu end call log của callee — không kiểm chứng được chỉ số chất lượng phía đó
 - Thiếu WebRTC log của cả hai bên — không kiểm chứng được sự kiện ICE / TURN
+- Leg caller chưa nhận được gói audio nào (audio.packetsReceived = 0) và chưa có phản hồi STUN nào (transport.localStunResponse = 0): MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống, không phải kết quả đo
 
 Report hợp lệ theo schema v1: CÓ
 ```
@@ -571,19 +574,19 @@ Cột `KHỚP` và con số accuracy được **tính bằng code**, không đ�
 ```text
 NHÓM       CALL-ID    KẾT LUẬN  GR.TRUTH  KHỚP     VẤN ĐỀ               TIN CẬY  EV    SCHEMA
 ----------------------------------------------------------------------------------------------------
-fail       1B009D42   FAIL      FAIL      OK       SIGNALING_FAILURE    HIGH     2     OK
+fail       1B009D42   FAIL      FAIL      OK       SIGNALING_FAILURE    HIGH     4     OK
 fail       2D9057AA   FAIL      FAIL      OK       ICE_FAILURE          HIGH     13    OK
-fail       703100CF   FAIL      FAIL      OK       TURN_FAILURE         HIGH     3     OK
-fail       7B56D7AD   FAIL      FAIL      OK       TURN_FAILURE         MEDIUM   2     OK
-fail       D114749E   FAIL      FAIL      OK       SIGNALING_FAILURE    HIGH     2     OK
-fail       E9D6C112   FAIL      FAIL      OK       TURN_FAILURE         MEDIUM   2     OK
-for_test   0A6C2821   FAIL      (không)   -        TURN_FAILURE         HIGH     3     OK
-for_test   0EC7B700   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     6     OK
-for_test   271D1FAF   SUCCESS   (không)   -        NETWORK_PACKET_LOSS  LOW      20    OK
-for_test   311A9B6A   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     3     OK
-for_test   45AA3011   FAIL      (không)   -        TURN_FAILURE         HIGH     3     OK
-for_test   9B556E56   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     2     OK
-for_test   AA9791CE   FAIL      (không)   -        TURN_FAILURE         MEDIUM   2     OK
+fail       703100CF   FAIL      FAIL      OK       TURN_FAILURE         HIGH     7     OK
+fail       7B56D7AD   FAIL      FAIL      OK       TURN_FAILURE         MEDIUM   3     OK
+fail       D114749E   FAIL      FAIL      OK       SIGNALING_FAILURE    HIGH     4     OK
+fail       E9D6C112   FAIL      FAIL      OK       TURN_FAILURE         MEDIUM   3     OK
+for_test   0A6C2821   FAIL      (không)   -        TURN_FAILURE         HIGH     7     OK
+for_test   0EC7B700   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     7     OK
+for_test   271D1FAF   SUCCESS   (không)   -        NETWORK_PACKET_LOSS  LOW      22    OK
+for_test   311A9B6A   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     5     OK
+for_test   45AA3011   FAIL      (không)   -        TURN_FAILURE         HIGH     7     OK
+for_test   9B556E56   FAIL      (không)   -        SIGNALING_FAILURE    HIGH     4     OK
+for_test   AA9791CE   FAIL      (không)   -        TURN_FAILURE         MEDIUM   3     OK
 success    5E0800AE   SUCCESS   SUCCESS   OK       -                    MEDIUM   11    OK
 success    6A7CE985   SUCCESS   SUCCESS   OK       -                    MEDIUM   15    OK
 success    70A1F889   SUCCESS   SUCCESS   OK       -                    HIGH     18    OK
@@ -607,7 +610,7 @@ Cuộc gọi không có nhãn   : 7
 | Timeline đúng thứ tự, xử lý duplicate | Dedupe mức file + đo lệch đồng hồ, thứ tự tất định |
 | Invalid input không crash pipeline | Parser trả `ParseWarning` thay vì throw |
 | Chỉ số khớp tính tay ≥ 5 cuộc gọi | **9 cuộc gọi** — xem [`kiem-thu-tay.md`](kiem-thu-tay.md) |
-| Unit test đầy đủ cho core logic | **162 test**, không cần Elasticsearch |
+| Unit test đầy đủ cho core logic | **179 test**, không cần Elasticsearch |
 
 Ngoài acceptance criteria:
 
