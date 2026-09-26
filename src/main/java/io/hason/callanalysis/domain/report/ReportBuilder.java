@@ -87,9 +87,11 @@ public class ReportBuilder {
         if (verdict.issueCategory() == null) {
             return new CallReport.PossibleCauses(null, List.of());
         }
-        String primary = taxonomy.find(verdict.issueCategory())
-                .map(d -> verdict.issueCategory().name() + " — " + d.definition().strip())
-                .orElse(verdict.issueCategory().name());
+        // Có căn cứ đo được của chính cuộc gọi thì in căn cứ; không thì dùng định nghĩa của taxonomy
+        String explanation = verdict.causeBasis() != null ? verdict.causeBasis()
+                : taxonomy.find(verdict.issueCategory()).map(d -> d.definition().strip()).orElse(null);
+        String primary = explanation == null ? verdict.issueCategory().name()
+                : verdict.issueCategory().name() + " — " + explanation;
 
         List<String> alternatives = new ArrayList<>();
         taxonomy.find(verdict.issueCategory()).ifPresent(d -> {
@@ -179,6 +181,7 @@ public class ReportBuilder {
 
         limitations.addAll(missingClientLogs(timeline));
         limitations.addAll(zeroFilledLegs(metrics));
+        endOfCallSnapshotNote(metrics).ifPresent(limitations::add);
 
         timeline.notes().stream()
                 .filter(n -> n.kind() == TimelineNote.Kind.RELATIVE_TRACK
@@ -270,6 +273,22 @@ public class ReportBuilder {
                     + " trong log đều là 0 điền vào chỗ trống, không phải kết quả đo");
         }
         return notes;
+    }
+
+    /**
+     * MOS, RTT, jitter trong bảng là bản chụp mẫu stats CUỐI (summary trùng mẫu cuối ở 8/8
+     * leg có media), không phải giá trị của cả cuộc. Nhãn trong bảng giữ đúng như mẫu MVP 4.5
+     * (`MOS (callee)`), nên điều này được nói MỘT lần ở đây. Chỉ nêu khi có ít nhất một giá trị
+     * đo được — toàn N/A thì câu này không có đối tượng.
+     */
+    private static java.util.Optional<String> endOfCallSnapshotNote(CallMetrics metrics) {
+        boolean anyMeasured = metrics.metrics().stream()
+                .filter(m -> m.key() == MetricKey.MOS || m.key() == MetricKey.RTT || m.key() == MetricKey.JITTER)
+                .anyMatch(m -> m.value() instanceof MetricValue.Present);
+        return anyMeasured
+                ? java.util.Optional.of("MOS, RTT, jitter là giá trị lúc kết thúc cuộc gọi (mẫu stats cuối),"
+                        + " không phải của cả cuộc")
+                : java.util.Optional.empty();
     }
 
     private static boolean hasReason(CallMetrics metrics, MetricKey key, Leg leg, String reason) {

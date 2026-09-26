@@ -46,13 +46,28 @@ class TaxonomyAndReportTest {
     }
 
     @Test
-    @DisplayName("hai category không có ca mẫu có nhãn được đánh dấu UNVALIDATED")
+    @DisplayName("ba category không có ca mẫu có nhãn được đánh dấu UNVALIDATED")
     void categoriesWithoutSamplesAreMarkedUnvalidated() {
         // Data có nhãn phủ 3/6 category: SIGNALING_FAILURE, ICE_FAILURE, TURN_FAILURE
         // (TURN: 3 ca CANCEL trong fail/ không cấp phát được relay nào).
         assertThat(taxonomy.unvalidatedCategories()).containsExactlyInAnyOrder(
                 IssueCategory.NETWORK_PACKET_LOSS,
-                IssueCategory.NETWORK_DELAY_JITTER);
+                IssueCategory.NETWORK_DELAY_JITTER,
+                IssueCategory.UNKNOWN);
+    }
+
+    @Test
+    @DisplayName("knownAmbiguity là cảnh báo chung: ngắn và không nhắc Call-ID cụ thể")
+    void knownAmbiguityIsGenericForEveryCategory() {
+        // ReportBuilder in knownAmbiguity vào MỌI report thuộc category đó. Nhắc tên một cuộc
+        // gọi hay một mã lỗi riêng (vd. 428) sẽ đọc như nhận định về chính cuộc đang xem —
+        // report của 311A9B6A từng in "Mã 428 privacy_restricted..." dù log không có mã 428.
+        for (IssueDefinition d : taxonomy.definitions()) {
+            assertThat(d.knownAmbiguity()).as(d.id() + ".knownAmbiguity")
+                    .hasSizeLessThan(250)
+                    .doesNotContainPattern("[0-9A-F]{8}")
+                    .doesNotContain("428");
+        }
     }
 
     @Test

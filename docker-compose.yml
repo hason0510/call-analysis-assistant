@@ -16,7 +16,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false        # chỉ chạy local với data mẫu, không mở ra ngoài
       - xpack.security.enrollment.enabled=false
-      - ES_JAVA_OPTS=-Xms2g -Xmx2g          # máy 15.7GB, Docker được cấp 8.1GB -> 2g thoải mái
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g          # máy 15.7GB, Docker được cấp 7.6GB -> 2g thoải mái
     ports:
       - "127.0.0.1:9200:9200"               # chi lang nghe tren localhost
     volumes:

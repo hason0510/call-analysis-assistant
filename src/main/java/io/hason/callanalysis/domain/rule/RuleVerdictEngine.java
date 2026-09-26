@@ -5,7 +5,9 @@ import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
 
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -111,7 +113,8 @@ public class RuleVerdictEngine {
             return new RuleVerdict(Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS,
                     ConfidenceLevel.LOW,
                     "Cuộc gọi thiết lập và kết thúc bình thường nhưng chỉ số chất lượng vượt ngưỡng",
-                    withUnvalidatedThresholdNote(limitations));
+                    withUnvalidatedThresholdNote(limitations), TurnFailure.NONE,
+                    qualityBasis(signals.qualityByLeg()));
         }
 
         // 7. Bình thường
@@ -150,6 +153,47 @@ public class RuleVerdictEngine {
                     + " lần nhưng không lần nào cấp phát";
             case UNCLASSIFIED, NONE -> "0 lần allocate thành công";
         };
+    }
+
+    /**
+     * Căn cứ đo được của cờ chất lượng, in ở dòng "Chính" thay cho định nghĩa chung của taxonomy.
+     *
+     * Định nghĩa NETWORK_PACKET_LOSS khẳng định "mất gói đủ làm giảm chất lượng thoại", nhưng
+     * rule chỉ kiểm có mẫu vượt ngưỡng, không kiểm hậu quả. Vì vậy nêu cả bằng chứng ủng hộ lẫn
+     * phản bác. Không có số liệu theo leg (chỉ xảy ra khi gọi thẳng engine) thì trả null để report
+     * quay về định nghĩa.
+     */
+    private static String qualityBasis(List<LegQuality> legs) {
+        List<String> signs = new ArrayList<>();
+        for (LegQuality q : legs) {
+            if (!q.degraded()) {
+                continue;
+            }
+            List<String> parts = new ArrayList<>();
+            if (q.lossOverThreshold() > 0) {
+                parts.add(q.lossOverThreshold() + "/" + q.samples() + " mẫu stats mất gói > 5 % (cao nhất "
+                        + q.maxLoss().setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " %)");
+            }
+            if (q.mosBelowThreshold() > 0) {
+                parts.add(q.mosBelowThreshold() + "/" + q.samples() + " mẫu MOS < 3.5");
+            }
+            if (q.mediaPoor() > 0) {
+                parts.add(q.mediaPoor() + " mẫu app bật hasMediaPoor");
+            }
+            signs.add(q.leg().name().toLowerCase() + " có " + String.join(", ", parts));
+        }
+        if (signs.isEmpty()) {
+            return null;
+        }
+        List<String> counter = new ArrayList<>();
+        legs.stream().filter(q -> q.minMos() != null)
+                .min(Comparator.comparing(LegQuality::minMos))
+                .ifPresent(q -> counter.add("MOS thấp nhất " + q.minMos().stripTrailingZeros().toPlainString()
+                        + " (" + q.leg().name().toLowerCase() + ")"));
+        if (legs.stream().allMatch(q -> q.mediaPoor() == 0)) {
+            counter.add("app không bật hasMediaPoor ở mẫu nào");
+        }
+        return String.join("; ", signs) + (counter.isEmpty() ? "" : ". Đối chiếu: " + String.join(", ", counter));
     }
 
     private static String mediaFailureReason(RuleSignals signals) {

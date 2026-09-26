@@ -109,9 +109,8 @@ Importer quét đệ quy mọi file `signaling.json` dưới thư mục được
 | `--analyze=<thư-mục>` | **Phân tích đầy đủ, in report theo mẫu mục 4.5** |
 | `--analyze-all=<thư-mục-gốc>` | Bảng verdict toàn bộ, kèm kiểm tra schema |
 
-Kịch bản demo cho mentor: [`docs/demo-sprint-1.md`](docs/demo-sprint-1.md).
-Kết quả đã chạy: [`docs/ket-qua-demo-sprint-1.md`](docs/ket-qua-demo-sprint-1.md) (5 cuộc minh hoạ)
-và [`docs/ket-qua-for-test.md`](docs/ket-qua-for-test.md) (7 cuộc của tập `for_test/`).
+Kết quả đã chạy (7 cuộc của tập `for_test/`) nằm trong thư mục Drive:
+
 
 ### Đọc report: evidence trỏ về đâu
 
@@ -204,18 +203,21 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5) |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Unit test | **179**, chạy trong vài giây, **không cần Elasticsearch** |
+| Unit test | **195**, chạy trong vài giây, **không cần Elasticsearch** |
 
 ### Known Limitations
 
 **Dữ liệu và chỉ số**
 
-- Chỉ số chất lượng (MOS, packet loss, jitter, RTT) chỉ có giá trị thật ở **7 leg / 5 cuộc
+- Chỉ số chất lượng (MOS, packet loss, jitter, RTT) chỉ có giá trị thật ở **8 leg / 5 cuộc
   gọi**. 6 cuộc gọi không có end call log (`5E0800AE`, `6A7CE985`, `F3D7914B`, `7B56D7AD`,
   `E9D6C112`, `AA9791CE`) nên các chỉ số này là `N/A`. Leg chưa từng nhận gói audio nào thì app
   ghi 0 vào MOS/loss/RTT; report hiển thị `N/A` kèm lý do thay vì in số 0 đó (MVP mục 4.3).
-- Chỉ số chất lượng trong bảng là giá trị **lúc kết thúc** cuộc gọi. Suy giảm giữa cuộc chỉ
-  hiện qua cờ chất lượng và evidence (mẫu stats nặng nhất), không hiện trong bảng chỉ số.
+- MOS, RTT, jitter trong bảng là giá trị **lúc kết thúc** cuộc gọi: bản ghi tổng kết của app
+  trùng đúng mẫu stats cuối (8/8 leg có media), và log không có bộ đếm để tính lại cho cả cuộc.
+  Report ghi rõ điều này ở mục Giới hạn dữ liệu. Packet loss thì tính được cho **cả cuộc** từ
+  hai bộ đếm cộng dồn `audio.packetsLost` / `audio.packetsReceived`, kèm mẫu cao nhất;
+  `audio.packetLostPercent` chỉ là tỉ lệ trong khoảng giữa hai lần đo nên không dùng cho bảng.
 - "Thời gian với tới callee" (`INVITE` → `TRYING`) chỉ đo được khi callee được đánh thức qua
   push. Callee đang online nhận `INVITE` qua WebSocket thì không gửi `TRYING`, nên chỉ số này
   là `N/A`.
@@ -231,10 +233,16 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
   `NETWORK_DELAY_JITTER` còn `UNVALIDATED`. Ngưỡng 5% / MOS 3,5 là phỏng đoán, đặt cao hơn mức
   đo được ở các cuộc thành công (844 mẫu stats của 6 leg: loss cao nhất 3,704%, MOS thấp nhất
   4,335).
-- Rule gắn cờ chất lượng khi **một** mẫu stats vượt ngưỡng, trong khi `taxonomy.yaml` mô tả
-  điều kiện là "kéo dài trên nhiều mẫu liên tiếp". Chờ mentor chọn (ví dụ qua `271D1FAF`).
+- Rule gắn cờ chất lượng khi **một** mẫu stats vượt ngưỡng, chưa yêu cầu vượt kéo dài nhiều mẫu
+  liên tiếp: không có dữ liệu để chọn số mẫu (không leg thành công nào có loss > 5 %; chuỗi dài
+  nhất toàn data là 2 mẫu, ở `271D1FAF` thuộc `for_test/`). Vì vậy cờ còn nhạy với mất gói
+  thoáng qua; report bù lại bằng cách nêu cả căn cứ phản bác (MOS thấp nhất, `hasMediaPoor`).
 - `NETWORK_DELAY_JITTER` chưa có nhánh riêng trong rule: mọi suy giảm đều được xếp
-  `NETWORK_PACKET_LOSS`, dù taxonomy đã khai báo điều kiện RTT.
+  `NETWORK_PACKET_LOSS`. Điều kiện RTT / jitter trong `taxonomy.yaml` là thiết kế dự kiến, đã
+  đánh dấu "chưa cài".
+- Không có ca `UNKNOWN` nào trong tập có nhãn (nhãn chỉ có `fail/` và `success/`), nên
+  `UNKNOWN` cũng `UNVALIDATED`. Rule hiện chỉ trả `UNKNOWN` khi không có dữ liệu signaling;
+  hai trường hợp khác MVP mục 4.1 nêu — thiếu file thiết yếu, evidence mâu thuẫn — chưa cài.
 - `TURN_FAILURE` chia theo kiểu để chọn đề xuất: không tạo được socket (chưa request nào rời
   máy), lỗi ngay khi gửi trên thiết bị, gửi đi mà không có phản hồi nào. Mỗi kiểu có đúng một
   ca trong `fail/`. Kiểu thứ tư, server có phản hồi nhưng không cấp phát, **chưa có ca mẫu**;

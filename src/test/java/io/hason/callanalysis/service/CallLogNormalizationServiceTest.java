@@ -456,4 +456,30 @@ class CallLogNormalizationServiceTest {
                 .anyMatch(n -> n.kind() == TimelineNote.Kind.DATA_LIMITATION);
         assertThat(extractor.extract(timeline).signalingTruncated()).isFalse();
     }
+
+    @Test
+    @DisplayName("căn cứ cờ chất lượng đếm trên chuỗi stats bằng CÙNG ngưỡng bật cờ, không đếm trùng bản ghi summary")
+    void qualityBasisCountsStatsWithFlagThresholds() {
+        // 4 mẫu stats (2 mẫu mất gói > 5 %) + summary trùng mẫu cuối: phải ra 2/4, không phải 2/5
+        RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "1\t1789700842905\tinfo\tCALL-1\tcaller\tios",
+                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
+                "#H8\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
+                "6\t1789700850000\tstats\t0\t4.4\t100",
+                "6\t1789700851000\tstats\t7.5\t4.1\t150",
+                "6\t1789700852000\tstats\t12.0\t3.9\t190",
+                "6\t1789700853000\tstats\t0\t4.3\t240",
+                "8\t1789700853001\tendcall\t0\t4.3\t240")));
+
+        assertThat(s.qualityDegraded()).isTrue();
+        assertThat(s.qualityByLeg()).singleElement().satisfies(q -> {
+            assertThat(q.samples()).isEqualTo(4);
+            assertThat(q.lossOverThreshold()).isEqualTo(2);
+            assertThat(q.maxLoss()).isEqualByComparingTo("12.0");
+            assertThat(q.minMos()).isEqualByComparingTo("3.9");
+            assertThat(q.mosBelowThreshold()).isZero();
+            assertThat(q.mediaPoor()).isZero();
+        });
+    }
 }

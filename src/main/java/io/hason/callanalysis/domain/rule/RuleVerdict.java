@@ -21,7 +21,13 @@ public record RuleVerdict(
          * Kiểu TURN hỏng khi issueCategory là TURN_FAILURE, để report chọn đề xuất đúng
          * hướng; {@link TurnFailure#NONE} với mọi kết luận khác.
          */
-        TurnFailure turnFailure
+        TurnFailure turnFailure,
+        /**
+         * Căn cứ đo được của CHÍNH cuộc gọi cho issueCategory, để report in thay câu định nghĩa
+         * chung của taxonomy; null thì report dùng định nghĩa. Hiện đặt cho cờ chất lượng: định
+         * nghĩa NETWORK_PACKET_LOSS khẳng định "đủ làm giảm chất lượng thoại", điều rule không kiểm.
+         */
+        String causeBasis
 ) {
 
     public RuleVerdict {
@@ -31,6 +37,12 @@ public record RuleVerdict(
 
     public RuleVerdict(Verdict verdict, boolean qualityFlag, IssueCategory issueCategory,
                        ConfidenceLevel confidence, String reasoning, List<String> dataLimitations) {
-        this(verdict, qualityFlag, issueCategory, confidence, reasoning, dataLimitations, TurnFailure.NONE);
+        this(verdict, qualityFlag, issueCategory, confidence, reasoning, dataLimitations, TurnFailure.NONE, null);
+    }
+
+    public RuleVerdict(Verdict verdict, boolean qualityFlag, IssueCategory issueCategory,
+                       ConfidenceLevel confidence, String reasoning, List<String> dataLimitations,
+                       TurnFailure turnFailure) {
+        this(verdict, qualityFlag, issueCategory, confidence, reasoning, dataLimitations, turnFailure, null);
     }
 }

@@ -43,12 +43,13 @@ class RuleVerdictEngineTest {
         String initCallRejection = null;
         String clientFailure = null;
         Set<LogSource> sources = ALL_SOURCES;
+        List<LegQuality> qualityByLeg = List.of();
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
                     qualityDegraded, signalingTruncated, turnFailure, candidateTimeout,
-                    initCallRejection, clientFailure, sources);
+                    initCallRejection, clientFailure, sources, qualityByLeg);
         }
     }
 
@@ -382,5 +383,35 @@ class RuleVerdictEngineTest {
         assertThat(v.reasoning()).isEqualTo("Không cấp phát được relay trên TURN server nào:"
                 + " không tạo được socket TURN nên chưa gửi được request nào."
                 + " Vì vậy không có candidate để gửi INVITE");
+    }
+
+    @Test
+    @DisplayName("cờ chất lượng nêu căn cứ ĐO ĐƯỢC của cuộc gọi, cả ủng hộ lẫn phản bác — không chép định nghĩa (271D1FAF)")
+    void qualityFlagCarriesMeasuredBasis() {
+        // Định nghĩa taxonomy khẳng định "mất gói đủ làm giảm chất lượng thoại" — rule không kiểm điều đó.
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.qualityDegraded = true;
+            b.qualityByLeg = List.of(
+                    new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 80, 18,
+                            new java.math.BigDecimal("11.3208"), 0, new java.math.BigDecimal("4.10477"), 0),
+                    new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLEE, 80, 3,
+                            new java.math.BigDecimal("7.54717"), 0, new java.math.BigDecimal("4.34143"), 0));
+        }));
+
+        assertThat(v.causeBasis()).isEqualTo("caller có 18/80 mẫu stats mất gói > 5 % (cao nhất 11.32 %);"
+                + " callee có 3/80 mẫu stats mất gói > 5 % (cao nhất 7.55 %)."
+                + " Đối chiếu: MOS thấp nhất 4.10477 (caller), app không bật hasMediaPoor ở mẫu nào");
+    }
+
+    @Test
+    @DisplayName("kết luận FAIL không đặt căn cứ riêng -> report dùng định nghĩa taxonomy như cũ")
+    void failVerdictHasNoCauseBasis() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.iceEverConnected = false;
+            b.iceEverFailed = true;
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.ICE_FAILURE);
+        assertThat(v.causeBasis()).isNull();
     }
 }

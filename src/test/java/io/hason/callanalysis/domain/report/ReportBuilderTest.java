@@ -129,4 +129,59 @@ class ReportBuilderTest {
                         + " MOS, packet loss, jitter, RTT trong log đều là 0 điền vào chỗ trống,"
                         + " không phải kết quả đo");
     }
+
+    @Test
+    @DisplayName("MOS/RTT/jitter đo được -> nêu MỘT lần là giá trị lúc kết thúc; nhãn trong bảng giữ như mẫu MVP")
+    void endOfCallSnapshotIsDisclosedOnce() {
+        io.hason.callanalysis.domain.event.CanonicalEvent summary =
+                new io.hason.callanalysis.domain.event.CanonicalEvent("callee_endcall.log#181", "CALL-1",
+                        io.hason.callanalysis.domain.event.Leg.CALLEE,
+                        io.hason.callanalysis.domain.event.LogSource.ENDCALL,
+                        io.hason.callanalysis.domain.event.EventTime.absolute(java.time.Instant.parse(
+                                "2026-09-21T08:01:00Z"), io.hason.callanalysis.domain.event.ClockDomain.CLIENT_CALLEE),
+                        io.hason.callanalysis.domain.event.EventType.CALL_SUMMARY, "CALL_SUMMARY",
+                        java.util.Map.of("audio.audioMos", "4.37331", "audio.packetsReceived", "4024",
+                                "audio.packetsLost", "21", "transport.localStunResponse", "30",
+                                "transport.currentRttMs", "18"),
+                        io.hason.callanalysis.domain.event.Severity.INFO,
+                        new io.hason.callanalysis.domain.event.SourceRef("callee_endcall.log", 181, "raw"));
+        CallTimeline withSummary = new TimelineBuilder().build("CALL-1", List.of(summary), LegAssignment.unknown());
+
+        CallReport report = new ReportBuilder()
+                .build(withSummary, new MetricsCalculator().calculate(withSummary), List.of(),
+                        new RuleVerdict(Verdict.SUCCESS, false, null, ConfidenceLevel.HIGH,
+                                "không xét ở test này", List.of()),
+                        new IssueTaxonomy(List.of()));
+
+        assertThat(report.dataLimitations()).filteredOn(l -> l.contains("lúc kết thúc")).singleElement()
+                .isEqualTo("MOS, RTT, jitter là giá trị lúc kết thúc cuộc gọi (mẫu stats cuối), không phải của cả cuộc");
+        assertThat(report.metrics()).anyMatch(m -> m.name().equals("MOS (callee)"));
+    }
+
+    @Test
+    @DisplayName("không có MOS/RTT/jitter nào đo được thì KHÔNG thêm câu 'lúc kết thúc'")
+    void noSnapshotNoteWithoutMeasuredValues() {
+        CallReport report = new ReportBuilder()
+                .build(timeline, new MetricsCalculator().calculate(timeline), List.of(),
+                        new RuleVerdict(Verdict.SUCCESS, false, null, ConfidenceLevel.HIGH,
+                                "không xét ở test này", List.of()),
+                        new IssueTaxonomy(List.of()));
+
+        assertThat(report.dataLimitations()).noneMatch(l -> l.contains("lúc kết thúc"));
+    }
+
+    @Test
+    @DisplayName("dòng 'Chính' in căn cứ đo được của cuộc gọi khi có, thay cho định nghĩa chung của category")
+    void primaryCauseUsesMeasuredBasis() {
+        RuleVerdict verdict = new RuleVerdict(Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS,
+                ConfidenceLevel.LOW, "không xét ở test này", List.of(), TurnFailure.NONE,
+                "caller có 18/80 mẫu stats mất gói > 5 % (cao nhất 11.32 %)");
+
+        CallReport report = new ReportBuilder()
+                .build(timeline, new MetricsCalculator().calculate(timeline), List.of(), verdict,
+                        new IssueTaxonomy(List.of()));
+
+        assertThat(report.possibleCauses().primary())
+                .isEqualTo("NETWORK_PACKET_LOSS — caller có 18/80 mẫu stats mất gói > 5 % (cao nhất 11.32 %)");
+    }
 }

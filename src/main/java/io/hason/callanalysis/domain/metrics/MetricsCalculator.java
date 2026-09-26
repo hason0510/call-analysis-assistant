@@ -39,6 +39,7 @@ public class MetricsCalculator {
     private static final String BYE = "BYE";
 
     private static final String PACKETS_RECEIVED = "audio.packetsReceived";
+    private static final String PACKETS_LOST = "audio.packetsLost";
     private static final String STUN_RESPONSES = "transport.localStunResponse";
     /**
      * Lý do N/A chỉ nêu đúng trường và giá trị trong log, để người đọc tra thẳng được.
@@ -72,8 +73,7 @@ public class MetricsCalculator {
             metrics.add(CallMetric.of(MetricKey.MOS, leg, measuredOnly(quality, PACKETS_RECEIVED,
                     NO_AUDIO_PACKETS, () -> decimalFrom(quality, "audio.audioMos", "", timeline, leg))));
             metrics.add(CallMetric.of(MetricKey.PACKET_LOSS, leg, measuredOnly(quality, PACKETS_RECEIVED,
-                    NO_AUDIO_PACKETS,
-                    () -> decimalFrom(quality, "audio.packetLostPercent", "%", timeline, leg))));
+                    NO_AUDIO_PACKETS, () -> packetLoss(quality, timeline, leg))));
             metrics.add(CallMetric.of(MetricKey.RTT, leg, measuredOnly(quality, STUN_RESPONSES,
                     NO_STUN_RESPONSE,
                     // transport.rttMs là giá trị TÍCH LUỸ (8385 khi RTT thật là 63),
@@ -130,24 +130,51 @@ public class MetricsCalculator {
         return MetricValue.millis(max);
     }
 
-    /** Latency của các API nội bộ, lấy từ trường latencyMs của sự kiện INIT_CALL. */
+    /**
+     * Latency của các API nội bộ, lấy từ trường latencyMs của sự kiện INIT_CALL.
+     *
+     * In ĐỦ các mẫu thay vì max + trung vị: mỗi cuộc gọi trong data mẫu chỉ có khoảng 4 mẫu,
+     * và bản cũ tính trung vị bằng `values.get(size / 2)` — sai khi số mẫu chẵn (311A9B6A:
+     * in 8 ms, đúng là 5,5 ms). Cả 4 mẫu thường thuộc CÙNG một request (cùng requestId), tức
+     * là các bước xử lý bên trong một lần INIT_CALL, nên ghi rõ số request.
+     */
     private MetricValue internalApiLatency(CallTimeline timeline) {
-        List<Long> values = timeline.mainTrack().stream()
+        List<CanonicalEvent> samples = timeline.mainTrack().stream()
                 .filter(e -> e.source() == LogSource.SIGNALING)
                 .filter(e -> INIT_CALL.equals(e.name()))
-                .map(e -> e.attribute("latencyMs"))
-                .filter(java.util.Objects::nonNull)
-                .map(Long::parseLong)
-                .sorted()
+                .filter(e -> e.attribute("latencyMs") != null)
                 .toList();
 
-        if (values.isEmpty()) {
+        if (samples.isEmpty()) {
             return MetricValue.unavailable("không sự kiện INIT_CALL nào ghi latencyMs");
         }
-        long max = values.getLast();
-        long median = values.get(values.size() / 2);
-        return MetricValue.text(String.format("max %d ms, trung vị %d ms (%d mẫu)",
-                max, median, values.size()));
+        List<Long> sorted = samples.stream()
+                .map(e -> Long.parseLong(e.attribute("latencyMs")))
+                .sorted()
+                .toList();
+        // Ít mẫu thì in đủ; nhiều mẫu (EE129C8F: 34 mẫu / 11 request) thì tóm tắt để không vỡ bảng
+        String values = sorted.size() <= MAX_LISTED_LATENCY_SAMPLES
+                ? sorted.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(", "))
+                : "min " + sorted.getFirst() + ", trung vị " + median(sorted) + ", max " + sorted.getLast();
+        long requests = samples.stream()
+                .map(e -> e.attribute("requestId"))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .count();
+        String requestNote = requests == 0 ? ""
+                : requests == 1 ? ", cùng 1 request" : ", " + requests + " request";
+        return MetricValue.text(values + " ms (" + samples.size() + " mẫu" + requestNote + ")");
+    }
+
+    private static final int MAX_LISTED_LATENCY_SAMPLES = 6;
+
+    /** Trung vị đúng định nghĩa: số mẫu chẵn thì lấy trung bình hai số ở giữa. */
+    private static String median(List<Long> sorted) {
+        int n = sorted.size();
+        BigDecimal m = n % 2 == 1
+                ? BigDecimal.valueOf(sorted.get(n / 2))
+                : BigDecimal.valueOf(sorted.get(n / 2 - 1) + sorted.get(n / 2)).divide(BigDecimal.valueOf(2));
+        return m.stripTrailingZeros().toPlainString();
     }
 
     /**
@@ -344,6 +371,49 @@ public class MetricsCalculator {
         return readDecimal(record, field, timeline, leg)
                 .map(v -> MetricValue.of(v, unit))
                 .orElseGet(() -> unavailableReason(record, field, timeline, leg));
+    }
+
+    /**
+     * Tỉ lệ mất gói CẢ CUỘC, kèm mẫu stats cao nhất của leg.
+     *
+     * KHÔNG đọc `audio.packetLostPercent` của bản ghi summary: trường đó là tỉ lệ mất gói
+     * TRONG KHOẢNG giữa hai lần đo (công thức "mất ÷ (mất + nhận) trong khoảng" khớp 996/996
+     * mẫu stats), còn summary chỉ là bản chụp mẫu cuối — nên cả 8 leg có media trong data mẫu
+     * đều ghi 0 %, kể cả 271D1FAF caller đã mất thật 74/4 044 gói (1,83 %).
+     * Hai bộ đếm `audio.packetsLost` / `audio.packetsReceived` thì cộng dồn cả cuộc.
+     */
+    private MetricValue packetLoss(Optional<CanonicalEvent> record, CallTimeline timeline, Leg leg) {
+        Optional<BigDecimal> wholeCall = record.flatMap(MetricsCalculator::cumulativeLossPercent);
+        if (wholeCall.isEmpty()) {
+            return unavailableReason(record, PACKETS_LOST, timeline, leg);
+        }
+        String value = percent(wholeCall.get());
+        Optional<BigDecimal> peak = timeline.allEvents().stream()
+                .filter(e -> e.type() == EventType.MEDIA_STATS && e.leg() == leg)
+                .map(e -> parseDecimal(e.attribute("audio.packetLostPercent")))
+                .flatMap(Optional::stream)
+                .max(BigDecimal::compareTo);
+        return MetricValue.text(peak.filter(p -> p.signum() > 0)
+                .map(p -> value + " (cao nhất " + percent(p) + ")")
+                .orElse(value));
+    }
+
+    /** packetsLost ÷ (packetsLost + packetsReceived) × 100, làm tròn 2 chữ số; rỗng nếu thiếu bộ đếm. */
+    public static Optional<BigDecimal> cumulativeLossPercent(CanonicalEvent record) {
+        Optional<BigDecimal> lost = parseDecimal(record.attribute(PACKETS_LOST));
+        Optional<BigDecimal> received = parseDecimal(record.attribute(PACKETS_RECEIVED));
+        if (lost.isEmpty() || received.isEmpty()) {
+            return Optional.empty();
+        }
+        BigDecimal total = lost.get().add(received.get());
+        if (total.signum() == 0) {
+            return Optional.empty();
+        }
+        return Optional.of(lost.get().multiply(BigDecimal.valueOf(100)).divide(total, 2, RoundingMode.HALF_UP));
+    }
+
+    private static String percent(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " %";
     }
 
     /** audio.jitter tính bằng GIÂY trong log; đổi sang mili giây cho dễ đọc. */

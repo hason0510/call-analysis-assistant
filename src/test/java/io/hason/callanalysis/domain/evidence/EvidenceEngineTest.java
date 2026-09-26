@@ -76,6 +76,34 @@ class EvidenceEngineTest {
     }
 
     @Test
+    @DisplayName("loss trong dòng call summary là tỉ lệ CẢ CUỘC từ bộ đếm, khớp bảng chỉ số — không phải 0% của khoảng cuối")
+    void summaryLossIsWholeCall() {
+        // 271D1FAF caller: packetLostPercent = 0 nhưng bộ đếm cho 74 / 4 044 gói = 1,83 %
+        List<Evidence> evidence = engine.collect(timelineWithSummary(Map.of(
+                "audio.audioMos", "4.15346", "audio.packetLostPercent", "0", "transport.currentRttMs", "16",
+                "audio.packetsLost", "74", "audio.packetsReceived", "3970", "audio.bytesReceived", "177699")));
+
+        assertThat(evidence).singleElement().satisfies(e -> assertThat(e.description())
+                .contains("loss cả cuộc=1.83%").doesNotContain("loss=0%"));
+    }
+
+    @Test
+    @DisplayName("dòng mẫu stats ghi rõ 'loss trong khoảng' để không lẫn với loss cả cuộc của summary")
+    void statsSampleLossIsLabelledAsInterval() {
+        // 271D1FAF caller dòng 108: mất 6 / (6 + 47) gói trong khoảng đó = 11,3208 %
+        CanonicalEvent sample = new CanonicalEvent("caller_endcall.log#108", "CALL-1", Leg.CALLER,
+                LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:30Z"), ClockDomain.CLIENT_CALLER),
+                EventType.MEDIA_STATS, "STATS",
+                Map.of("audio.audioMos", "4.19547", "audio.packetLostPercent", "11.3208", "audio.bytesReceived", "59244"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 108, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(sample), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).singleElement().satisfies(e -> assertThat(e.description())
+                .contains("loss trong khoảng=11.3208%"));
+    }
+
+    @Test
     @DisplayName("dòng căn cứ ghi nhận VPN chỉ nêu tên giao diện, không in địa chỉ")
     void vpnBasisIsCitedWithoutAddresses() {
         CanonicalEvent vpn = new CanonicalEvent("caller_webrtc.log#164", "CALL-1", Leg.CALLER,

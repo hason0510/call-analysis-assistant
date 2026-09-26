@@ -2,6 +2,7 @@ package io.hason.callanalysis.domain.rule;
 
 import io.hason.callanalysis.domain.event.LogSource;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -36,11 +37,14 @@ public record RuleSignals(
          * dạng "421 call.outgoing.error.network_check"; null nếu không có dòng này.
          */
         String clientFailure,
-        Set<LogSource> availableSources
+        Set<LogSource> availableSources,
+        /** Căn cứ đo được của cờ chất lượng, mỗi leg có bản ghi chỉ số một phần tử. */
+        List<LegQuality> qualityByLeg
 ) {
 
     public RuleSignals {
         availableSources = availableSources == null ? Set.of() : Set.copyOf(availableSources);
+        qualityByLeg = qualityByLeg == null ? List.of() : List.copyOf(qualityByLeg);
         turnFailure = turnFailure == null ? TurnFailure.NONE : turnFailure;
     }
 

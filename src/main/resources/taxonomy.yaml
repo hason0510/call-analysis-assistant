@@ -25,18 +25,16 @@ categories:
       - source: SIGNALING
         field: cmd
     detectionConditions:
-      - "không tồn tại cmd=INVITE"
+      - "không tồn tại cmd=INVITE (trừ khi WebRTC log cho thấy TURN không cấp phát được -> TURN_FAILURE)"
       - "tồn tại cmd=FAIL_HARD"
       - "tồn tại cmd=CANCEL và không tồn tại cmd=OK_ACK_OK"
+      - "không đạt OK_ACK_OK vì lý do khác (không có CANCEL)"
+    # knownAmbiguity in vào MỌI report thuộc category này, nên chỉ ghi cảnh báo chung.
+    # Cảnh báo riêng mã 428 do RuleVerdictEngine thêm vào limitations khi cuộc gọi có mã đó.
     knownAmbiguity: >-
-      Mã 428 privacy_restricted là server TỪ CHỐI theo chính sách của người nhận, không
-      phải lỗi mạng; taxonomy MVP mục 4.2 không có category riêng nên xếp tạm vào đây —
-      cần mentor xác nhận. Với CANCEL: 703100CF (cuộc CANCEL duy nhất của tập có nhãn có
-      end call log) ghi `_waitingCandidateTimer with error` rồi `_emitFailed ... code: 421`,
-      tức app TỰ huỷ khi hết `waitingCandidateTimeout` (6000 ms trong config của app);
-      7B56D7AD và E9D6C112 không có end call log nên chưa thấy trực tiếp lý do huỷ. Nếu
-      TURN không cấp phát được thì xếp TURN_FAILURE, còn TURN tốt mà vẫn hết giờ thì lỗi
-      nằm ở phía client.
+      Signaling chỉ cho biết cuộc gọi dừng ở bước nào, không cho biết vì sao: server từ
+      chối theo chính sách, app tự huỷ vì hết giờ chờ, hay lỗi mạng ở tầng dưới đều cho
+      cùng triệu chứng. Lý do cụ thể nằm ở end call log / WebRTC log.
     calibration:
       status: VALIDATED
       evidence: >-
@@ -46,14 +44,22 @@ categories:
         2 ca trong fail/: 1B009D42 và D114749E chỉ có INIT_CALL rồi im lặng. End call
         log của caller cho thấy lý do: ACK của INIT_CALL trả callErrorCode 428,
         key call.outgoing.error.privacy_restricted ("Người này hiện chưa thể nhận cuộc gọi").
+        Mã 428 là server TỪ CHỐI theo chính sách của người nhận, không phải lỗi mạng;
+        taxonomy MVP mục 4.2 không có category riêng nên xếp tạm vào đây — cần mentor xác nhận.
         3 ca CANCEL trong fail/ (703100CF, 7B56D7AD, E9D6C112) trước đây xếp ở đây, nay
         chuyển sang TURN_FAILURE vì WebRTC log cho thấy TURN không cấp phát được.
+        Với CANCEL: 703100CF (cuộc CANCEL duy nhất của tập có nhãn có end call log) ghi
+        `_waitingCandidateTimer with error` rồi `_emitFailed ... code: 421`, tức app TỰ huỷ
+        khi hết `waitingCandidateTimeout` (6000 ms trong config của app); 7B56D7AD và
+        E9D6C112 không có end call log nên chưa thấy trực tiếp lý do huỷ. Nếu TURN không
+        cấp phát được thì xếp TURN_FAILURE, còn TURN tốt mà vẫn hết giờ thì lỗi nằm ở phía client.
         KHÔNG có ca FAIL_HARD nào trong tập có nhãn, nên nhánh đó chưa kiểm chứng được.
 
   - id: ICE_FAILURE
     definition: >-
-      Signaling bắt tay xong nhưng đường truyền media không thiết lập được:
-      ICE chuyển sang failed và không bao giờ đạt connected.
+      Signaling bắt tay xong nhưng đường truyền media không thiết lập được: ICE chuyển
+      sang failed mà chưa từng đạt connected, hoặc app báo lỗi media, hoặc không một byte
+      audio nào được truyền.
     symptoms:
       - "IceConnectionState chuyển checking => failed"
       - "Gửi STUN BINDING request liên tục mà không nhận được response nào"
@@ -65,10 +71,11 @@ categories:
         field: iceStateTo
       - source: ENDCALL
         field: transport.hasMediaFail
+    # Cả ba điều kiện chỉ xét SAU KHI đã đạt OK_ACK_OK (RuleVerdictEngine, bước 5).
     detectionConditions:
       - "iceStateTo=failed và không tồn tại iceStateTo=connected"
-      - "transport.hasMediaFail=1"
-      - "audio.bytesReceived=0 sau khi đã đạt OK_ACK_OK"
+      - "transport.hasMediaFail=1 ở bản ghi chỉ số bất kỳ"
+      - "audio.bytesReceived=0 và audio.bytesSent=0 ở MỌI bản ghi chỉ số"
     knownAmbiguity: >-
       Timeout ICE mặc định khoảng 15 giây; cuộc gọi bị cúp máy trước mốc đó sẽ không
       kịp sinh trạng thái failed dù media thật sự không chạy.
@@ -128,7 +135,7 @@ categories:
     definition: >-
       Cuộc gọi thiết lập và chạy được nhưng mất gói đủ làm giảm chất lượng thoại.
     symptoms:
-      - "audio.packetLostPercent cao kéo dài"
+      - "audio.packetLostPercent vượt ngưỡng ở các mẫu stats giữa cuộc gọi"
       - "audio.audioMos tụt"
       - "transport.hasMediaPoor = 1"
     requiredEvidence:
@@ -136,13 +143,21 @@ categories:
         field: audio.packetLostPercent
       - source: ENDCALL
         field: audio.audioMos
+    # Mô tả ĐÚNG điều rule đang kiểm (SignalExtractor.degradedRecords): chỉ cần MỘT mẫu vượt
+    # ngưỡng. Chưa yêu cầu "kéo dài N mẫu liên tiếp" vì không có dữ liệu để chọn N: không leg
+    # thành công nào có loss > 5 %, chuỗi dài nhất toàn data là 2 mẫu ở 271D1FAF (for_test/,
+    # không dùng để hiệu chỉnh). Bỏ transport.countMediaPoor: > 0 duy nhất ở callee 2D9057AA,
+    # leg KHÔNG có media (ICE failed) — đó là dấu hiệu mất media, không phải mất gói.
     detectionConditions:
-      - "audio.packetLostPercent > 5.0 kéo dài trên nhiều mẫu liên tiếp"
-      - "audio.audioMos < 3.5"
-      - "transport.hasMediaPoor=1 hoặc transport.countMediaPoor > 0"
+      - "ít nhất một mẫu stats có audio.packetLostPercent > 5.0"
+      - "audio.audioMos < 3.5 (bỏ qua MOS = 0 của leg chưa có media)"
+      - "transport.hasMediaPoor = 1"
     knownAmbiguity: >-
       Mất gói thoáng qua là bình thường. Phải xét CHUỖI bản ghi stats chứ không chỉ đọc
-      bản ghi summary (endcall) cuối cùng — DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
+      bản ghi summary (endcall) cuối cùng, vì summary chỉ chụp lúc kết thúc.
+    # Ví dụ trên data: DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
+    # Để ở comment chứ không ở knownAmbiguity/calibration.evidence: category UNVALIDATED
+    # thì ReportBuilder in calibration.evidence vào limitations của MỌI report thuộc category.
     calibration:
       status: UNVALIDATED
       evidence: >-
@@ -162,9 +177,11 @@ categories:
         field: transport.currentRttMs
       - source: ENDCALL
         field: audio.jitter
+    # CHƯA CÀI trong rule: RuleVerdictEngine chưa có nhánh riêng cho category này, mọi suy
+    # giảm chất lượng đang xếp NETWORK_PACKET_LOSS. Hai điều kiện dưới là thiết kế dự kiến.
     detectionConditions:
-      - "transport.currentRttMs > 300 kéo dài trên nhiều mẫu liên tiếp"
-      - "audio.jitter > 0.050 (giây)"
+      - "(chưa cài) transport.currentRttMs > 300 kéo dài trên nhiều mẫu liên tiếp"
+      - "(chưa cài) audio.jitter > 0.050 (giây)"
     knownAmbiguity: >-
       Rất dễ trùng triệu chứng với NETWORK_PACKET_LOSS. Khi cả hai điều kiện cùng đúng,
       ưu tiên category có bằng chứng mạnh hơn.
@@ -184,13 +201,16 @@ categories:
       - "Bằng chứng từ các nguồn mâu thuẫn nhau"
       - "Bản export signaling bị cắt bớt"
     requiredEvidence: []
+    # Rule HIỆN CHỈ trả UNKNOWN ở điều kiện đầu. Hai điều kiện sau là thiết kế dự kiến
+    # (MVP mục 4.1: thiếu file, thiếu dữ liệu, evidence mâu thuẫn), chưa cài.
     detectionConditions:
-      - "không xác định được bất kỳ category nào khác"
-      - "thiếu nguồn log thiết yếu để kiểm chứng"
+      - "không có dữ liệu signaling"
+      - "(chưa cài) thiếu nguồn log thiết yếu để kiểm chứng kết luận"
+      - "(chưa cài) bằng chứng từ các nguồn mâu thuẫn nhau"
     knownAmbiguity: >-
       Trả UNKNOWN khi thiếu dữ liệu là đúng; đoán bừa khi không có căn cứ mới là lỗi nặng.
     calibration:
-      status: VALIDATED
+      status: UNVALIDATED
       evidence: >-
-        Rất nhiều ca trong data: 9B556E56 chỉ có signaling + caller_webrtc, không có
-        end call log nào.
+        Tập có nhãn chỉ có nhãn fail/ và success/, không có ca UNKNOWN nào. Nhánh "không có
+        dữ liệu signaling" được kiểm bằng unit test và tái hiện được khi tắt Elasticsearch.

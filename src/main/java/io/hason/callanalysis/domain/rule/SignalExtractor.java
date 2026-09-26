@@ -94,7 +94,49 @@ public class SignalExtractor {
                         .flatMap(e -> describeCallError(e.attribute("payload")))
                         .orElse(null),
                 clientFailureEvent(timeline).flatMap(SignalExtractor::describeClientFailure).orElse(null),
-                sources);
+                sources,
+                qualityByLeg(timeline));
+    }
+
+    /**
+     * Căn cứ đo được của cờ chất lượng cho từng leg — cùng ngưỡng với degradedRecords.
+     *
+     * Đếm trên chuỗi mẫu stats, không đếm bản ghi summary vì nó trùng đúng mẫu stats cuối
+     * (8/8 leg có media trong data mẫu); chỉ dùng summary khi leg không có mẫu stats nào.
+     */
+    private List<LegQuality> qualityByLeg(CallTimeline timeline) {
+        List<LegQuality> result = new ArrayList<>();
+        for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
+            List<CanonicalEvent> records = qualityRecords(timeline).filter(e -> e.leg() == leg).toList();
+            List<CanonicalEvent> samples = records.stream()
+                    .filter(e -> e.type() == EventType.MEDIA_STATS).toList();
+            if (samples.isEmpty()) {
+                samples = records;
+            }
+            if (samples.isEmpty()) {
+                continue;
+            }
+            int lossOver = 0;
+            int mosLow = 0;
+            int mediaPoor = 0;
+            BigDecimal maxLoss = null;
+            BigDecimal minMos = null;
+            for (CanonicalEvent e : samples) {
+                Optional<BigDecimal> loss = decimal(e.attribute("audio.packetLostPercent"));
+                if (loss.isPresent()) {
+                    lossOver += loss.get().compareTo(LOSS_THRESHOLD_PERCENT) > 0 ? 1 : 0;
+                    maxLoss = maxLoss == null || loss.get().compareTo(maxLoss) > 0 ? loss.get() : maxLoss;
+                }
+                Optional<BigDecimal> mos = decimal(e.attribute("audio.audioMos")).filter(v -> v.signum() > 0);
+                if (mos.isPresent()) {
+                    mosLow += mos.get().compareTo(MOS_THRESHOLD) < 0 ? 1 : 0;
+                    minMos = minMos == null || mos.get().compareTo(minMos) < 0 ? mos.get() : minMos;
+                }
+                mediaPoor += "1".equals(e.attribute("transport.hasMediaPoor")) ? 1 : 0;
+            }
+            result.add(new LegQuality(leg, samples.size(), lossOver, maxLoss, mosLow, minMos, mediaPoor));
+        }
+        return result;
     }
 
     /**

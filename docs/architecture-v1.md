@@ -70,22 +70,29 @@ trên toàn bộ data có nhãn.
 └──────┬───────┘ └───┬────┘ └──────┬───────┘
        │             ▼             │
        │     ┌───────────────┐     │
-       │     │ RuleVerdict   │◄────┼──── taxonomy.yaml
+       │     │ RuleVerdict   │     │
        │     │ Engine        │     │
        │     └───────┬───────┘     │
        └─────────────┼─────────────┘
                      ▼
             ┌─────────────────┐
-            │  ReportBuilder  │
+            │  ReportBuilder  │◄──── taxonomy.yaml
             └────────┬────────┘
                      ▼
             ┌─────────────────────┐
-            │ ReportSchema        │  chặn report sai cấu trúc
-            │ Validator           │
+            │ ReportSchema        │  kiểm report đúng cấu trúc
+            │ Validator           │  (Sprint 1: chỉ báo, chưa chặn)
             └────────┬────────────┘
                      ▼
                   Report
 ```
+
+Hai điểm sơ đồ không vẽ hết:
+
+- `SignalExtractor` còn trao cho `EvidenceEngine` các **dòng căn cứ** của tín hiệu lỗi (ACK mang
+  mã 428, dòng TURN hỏng, mẫu stats mất gói nặng nhất), để kết luận nào cũng trỏ được về dòng log.
+- `taxonomy.yaml` do `ReportBuilder` đọc (định nghĩa category, điểm mơ hồ, category chưa kiểm
+  chứng), **không** do `RuleVerdictEngine` đọc: điều kiện của rule nằm trong code.
 
 ### 2.2. Sprint 2 sẽ chèn vào đâu
 
@@ -143,9 +150,10 @@ io.hason.callanalysis
 │   ├── parse/       FileTypeDetector, EndCallLogParser, WebRtcLogParser
 │   ├── signaling/   RawSignalingRecord, SignalingNormalizer, LegAssignment
 │   ├── timeline/    TimelineBuilder, LegCorrelator, ClockOffsetEstimator
-│   ├── metrics/     MetricsCalculator, MetricValue
+│   ├── metrics/     MetricsCalculator, MetricValue, MetricKey, CallMetrics
 │   ├── taxonomy/    IssueCategory, Verdict, IssueDefinition
-│   ├── rule/        SignalExtractor, RuleVerdictEngine
+│   ├── rule/        SignalExtractor, RuleSignals, RuleVerdictEngine, RuleVerdict,
+│   │                TurnFailure, LegQuality
 │   ├── evidence/    EvidenceEngine
 │   ├── report/      CallReport, ReportBuilder
 │   └── security/    DataClassification, HandlingPolicy, SensitiveField
@@ -172,7 +180,7 @@ io.hason.callanalysis
 | `MetricsCalculator` test được không cần ES | "Chỉ số khớp 100% với tính tay" (5.1) |
 | Đổi AI provider chỉ cần viết adapter mới | "AI Provider Abstraction" (6.6) |
 
-Kết quả cụ thể: **179 test chạy trong vài giây, không cần Docker.**
+Kết quả cụ thể: **195 test chạy trong vài giây, không cần Docker.**
 
 ### Adapter chỉ làm việc cơ học
 
@@ -189,7 +197,7 @@ Elasticsearch thật mới test được.
 | Nguồn | Vào hệ thống bằng | Định dạng thời gian | Đặc thù |
 |---|---|---|---|
 | `signaling.json` | **Elasticsearch local**, truy vấn theo Call-ID | ISO-8601 UTC, 9 chữ số nano | Không có trường `leg`, không có trường text |
-| `*_endcall.log` | Người dùng đính kèm | epoch millis (đồng hồ client) | TSV **tự mang schema** ở 9 dòng `#H` đầu; số header thay đổi theo file |
+| `*_endcall.log` | Người dùng đính kèm | epoch millis (đồng hồ client) | TSV **tự mang schema** ở các dòng `#H` đầu file (5–9 dòng tuỳ file); số hiệu `#Hn` không cố định, tra loại bản ghi theo cột `#tag` |
 | `*_webrtc.log` | Người dùng đính kèm | `[giây:mili]` **tương đối** | 2 format (iOS/Android); 6,2% số dòng (1 649) là dòng nối tiếp |
 
 ### Ba hệ thời gian không cùng gốc
@@ -217,7 +225,7 @@ sự kiện server cùng lệnh — nhưng chỉ **báo cáo, không viết lạ
 ### Index `signaling-events`
 
 ```json
-{ "mappings": { "dynamic": "strict", "properties": { … 16 trường … } } }
+{ "mappings": { "dynamic": "strict", "properties": { … 17 trường … } } }
 ```
 
 Ba lựa chọn đáng chú ý:
@@ -251,7 +259,7 @@ Ba lựa chọn đáng chú ý:
 | Tín hiệu verdict | **Code** (`SignalExtractor`) | Code — không đổi |
 | Verdict cuối cùng | **Code** (`RuleVerdictEngine`) | AI đề xuất, Guardrails đối chiếu với rule |
 | Hiểu câu hỏi tiếng Việt | — | AI |
-| Phân tích, đề xuất | Bộ đề xuất cố định theo category | AI |
+| Phân tích, đề xuất | Bộ đề xuất theo category (riêng `TURN_FAILURE` theo kiểu lỗi TURN) | AI |
 | Bố cục report | **Code** (`ReportBuilder`) | Code — không đổi |
 | Độ tin cậy | **Code**, logic tất định | Code — không để AI sinh số |
 
@@ -265,7 +273,7 @@ Ba lựa chọn đáng chú ý:
 | Verdict Accuracy | **13/13 = 100%** trên data có nhãn |
 | Chỉ số | **Khớp 100%** với tính tay độc lập trên 9 cuộc gọi |
 | Report hợp lệ theo schema | **20/20** |
-| Unit test | **179 test, vài giây, không cần Elasticsearch** |
+| Unit test | **195 test, vài giây, không cần Elasticsearch** |
 
 Ca đáng chú ý nhất là `2D9057AA`: signaling trông bình thường (đạt `OK_ACK_OK`, kết thúc bằng
 `BYE`, PAIR_PING phía callee đều tới sát lúc `BYE`) nhưng ground truth là FAIL. Hệ thống kết luận đúng `FAIL` + `ICE_FAILURE` nhờ
@@ -278,13 +286,16 @@ xét media trước khi kết luận SUCCESS — rule chỉ dựa vào signaling
 Danh sách đầy đủ, kèm lý do từng mục: `README.md`, mục *Known Limitations*. Dưới đây là các
 giới hạn ảnh hưởng tới kiến trúc.
 
-- **Data có nhãn phủ 3/6 issue category.** `NETWORK_PACKET_LOSS`, `NETWORK_DELAY_JITTER`
+- **Data có nhãn phủ 3/6 issue category.** `NETWORK_PACKET_LOSS`, `NETWORK_DELAY_JITTER`, `UNKNOWN`
   không có ca mẫu nào; điều kiện phát hiện viết theo phỏng đoán và được đánh dấu
   `UNVALIDATED` trong `taxonomy.yaml`. `TURN_FAILURE` có 3 ca (các cuộc CANCEL trong `fail/`).
-- **Chỉ số chất lượng chỉ có ở 7 leg / 5 cuộc gọi.** Bản ghi summary có ở cả 16 file end
+- **Chỉ số chất lượng chỉ có ở 8 leg / 5 cuộc gọi.** Bản ghi summary có ở cả 17 file end
   call log, nhưng 6 cuộc gọi không có end call log (trả `N/A`), và các leg chưa từng nhận gói
   audio nào thì app ghi MOS/loss/RTT = 0; report hiển thị `N/A` kèm lý do thay vì số 0 đó
   (MVP mục 4.3).
+- **MOS, RTT, jitter là giá trị lúc kết thúc cuộc gọi**: bản ghi summary trùng đúng mẫu stats
+  cuối, và log không có bộ đếm để tính lại cho cả cuộc. Packet loss thì tính được cả cuộc từ
+  hai bộ đếm cộng dồn `audio.packetsLost` / `audio.packetsReceived`.
 - **WebRTC log chưa đồng bộ được với timeline signaling** do dùng mốc thời gian tương đối.
 - **Ngưỡng chất lượng chưa kiểm chứng.** Đường nền đo trên 844 mẫu của các cuộc gọi khoẻ
   mạnh: loss cao nhất 3,704%, MOS thấp nhất 4,335, RTT cao nhất 266 ms. Ngưỡng cảnh báo

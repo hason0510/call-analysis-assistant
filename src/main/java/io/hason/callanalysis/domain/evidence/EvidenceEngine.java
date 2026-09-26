@@ -4,6 +4,7 @@ import io.hason.callanalysis.domain.event.CanonicalEvent;
 import io.hason.callanalysis.domain.event.EventTime;
 import io.hason.callanalysis.domain.event.EventType;
 import io.hason.callanalysis.domain.event.LogSource;
+import io.hason.callanalysis.domain.metrics.MetricsCalculator;
 import io.hason.callanalysis.domain.rule.SignalExtractor;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 
@@ -119,16 +120,21 @@ public class EvidenceEngine {
                     + " — MOS/loss/RTT không đo được";
         }
         if (event.type() == EventType.CALL_SUMMARY) {
+            // loss của summary tính từ bộ đếm cả cuộc, khớp bảng chỉ số; packetLostPercent
+            // trong summary chỉ là tỉ lệ của khoảng cuối nên gần như luôn 0
             return "Call summary " + event.leg().name().toLowerCase()
                     + ": MOS=" + orDash(event.attribute("audio.audioMos"))
-                    + ", loss=" + orDash(event.attribute("audio.packetLostPercent")) + "%"
+                    + ", loss cả cuộc=" + MetricsCalculator.cumulativeLossPercent(event)
+                            .map(v -> v.stripTrailingZeros().toPlainString() + "%").orElse("-")
                     + ", RTT=" + orDash(event.attribute("transport.currentRttMs")) + "ms"
                     + ", bytesRecv=" + orDash(event.attribute("audio.bytesReceived"));
         }
         if (event.type() == EventType.MEDIA_STATS) {
+            // Một mẫu stats: packetLostPercent là tỉ lệ TRONG KHOẢNG của mẫu đó, ghi rõ để
+            // không lẫn với "loss cả cuộc" của dòng call summary
             return "Chỉ số media " + event.leg().name().toLowerCase()
                     + ": MOS=" + orDash(event.attribute("audio.audioMos"))
-                    + ", loss=" + orDash(event.attribute("audio.packetLostPercent")) + "%"
+                    + ", loss trong khoảng=" + orDash(event.attribute("audio.packetLostPercent")) + "%"
                     + ", mediaFail=" + orDash(event.attribute("transport.hasMediaFail"))
                     + ", bytesRecv=" + orDash(event.attribute("audio.bytesReceived"));
         }

@@ -188,7 +188,7 @@ class MetricsCalculatorTest {
     }
 
     @Test
-    @DisplayName("leg có media mà mất 0% gói thật (DE7DD314) -> vẫn hiển thị 0 %, không bị đổi thành N/A")
+    @DisplayName("leg có media và bộ đếm packetsLost = 0 -> hiển thị 0 %, không bị đổi thành N/A")
     void genuineZeroLossIsKept() {
         CallMetrics metrics = calculator.calculate(timelineOf(List.of(
                 sigAt(0, "INIT_CALL", Leg.CALLER),
@@ -196,7 +196,7 @@ class MetricsCalculatorTest {
                         "audio.audioMos", "4.42201",
                         "audio.packetLostPercent", "0",
                         "transport.currentRttMs", "63",
-                        "audio.packetsReceived", "17974",
+                        "audio.packetsReceived", "17974", "audio.packetsLost", "0",
                         "transport.localStunResponse", "145")))));
 
         assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLEE)).get()
@@ -338,7 +338,7 @@ class MetricsCalculatorTest {
                 sigLatency(0, 12), sigLatency(10, 16), sigLatency(20, 17)));
 
         assertThat(calculator.calculate(timeline).valueOf(MetricKey.INTERNAL_API_LATENCY).display())
-                .isEqualTo("max 17 ms, trung vị 16 ms (3 mẫu)");
+                .isEqualTo("12, 16, 17 ms (3 mẫu)");
     }
 
     @Test
@@ -395,5 +395,98 @@ class MetricsCalculatorTest {
                 .find(MetricKey.NETWORK_CONTEXT, Leg.CALLER)).get()
                 .extracting(m -> m.value().display())
                 .isEqualTo("N/A / N/A / US (signaling không ghi isp, asn)");
+    }
+
+    private static CanonicalEvent stats(int line, Leg leg, String lossPercent) {
+        return new CanonicalEvent("caller_endcall.log#" + line, "CALL-1", leg, LogSource.ENDCALL,
+                EventTime.absolute(T0.plusSeconds(line), ClockDomain.CLIENT_CALLER),
+                EventType.MEDIA_STATS, "STATS", Map.of("audio.packetLostPercent", lossPercent), Severity.INFO,
+                new SourceRef("caller_endcall.log", line, "raw"));
+    }
+
+    @Test
+    @DisplayName("packet loss tính CẢ CUỘC từ bộ đếm, KHÔNG đọc packetLostPercent của khoảng cuối (271D1FAF caller)")
+    void packetLossIsWholeCallFromCounters() {
+        // Giá trị thật: summary ghi packetLostPercent = 0 (chỉ là khoảng cuối) nhưng bộ đếm
+        // cộng dồn cho thấy mất 74 / (74 + 3970) = 1,83 %; giữa cuộc có mẫu 11,3208 %.
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                stats(98, Leg.CALLER, "10.2041"),
+                stats(108, Leg.CALLER, "11.3208"),
+                stats(146, Leg.CALLER, "9.80392"),
+                summary(Leg.CALLER, Map.of(
+                        "audio.packetLostPercent", "0",
+                        "audio.packetsLost", "74",
+                        "audio.packetsReceived", "3970")))));
+
+        assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLER)).get()
+                .extracting(m -> m.value().display()).isEqualTo("1.83 % (cao nhất 11.32 %)");
+    }
+
+    @Test
+    @DisplayName("không có mẫu stats nào mất gói thì chỉ in tỉ lệ cả cuộc, không kèm 'cao nhất 0 %'")
+    void packetLossWithoutLossySampleShowsWholeCallOnly() {
+        // DE7DD314 callee: mất 5 / (5 + 17974) gói = 0,03 %
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                stats(90, Leg.CALLEE, "0"),
+                summary(Leg.CALLEE, Map.of(
+                        "audio.packetsLost", "5",
+                        "audio.packetsReceived", "17974")))));
+
+        assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("0.03 %");
+    }
+
+    @Test
+    @DisplayName("thiếu bộ đếm packetsLost -> N/A nêu tên trường, KHÔNG quay về packetLostPercent")
+    void packetLossWithoutCounterIsNotAvailable() {
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                summary(Leg.CALLEE, Map.of(
+                        "audio.packetLostPercent", "0",
+                        "audio.packetsReceived", "100")))));
+
+        assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).asString()
+                .startsWith("N/A").contains("audio.packetsLost");
+    }
+
+    @Test
+    @DisplayName("latency: in ĐỦ các mẫu và số request — không tính trung vị (bản cũ sai khi số mẫu chẵn)")
+    void latencyListsAllSamplesOfOneRequest() {
+        // 311A9B6A: 4 mẫu cùng một requestId. Bản cũ in "trung vị 8 ms", đúng phải là 5,5 ms.
+        List<CanonicalEvent> events = new ArrayList<>();
+        int[] latencies = {10, 3, 8, 3};
+        for (int i = 0; i < latencies.length; i++) {
+            int n = ordinal++;
+            events.add(new CanonicalEvent("signaling#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+                    EventTime.absolute(T0.plusMillis(i), ClockDomain.SERVER),
+                    EventType.SIGNALING_COMMAND, "INIT_CALL",
+                    Map.of("latencyMs", String.valueOf(latencies[i]), "requestId", "req-1"), Severity.INFO,
+                    new SourceRef(SourceRef.SIGNALING, n + 1, "INIT_CALL")));
+        }
+
+        assertThat(calculator.calculate(timelineOf(events)).valueOf(MetricKey.INTERNAL_API_LATENCY).display())
+                .isEqualTo("3, 3, 8, 10 ms (4 mẫu, cùng 1 request)");
+    }
+
+    @Test
+    @DisplayName("latency nhiều mẫu -> tóm tắt min / trung vị / max, trung vị ĐÚNG công thức khi số mẫu chẵn")
+    void manyLatencySamplesAreSummarisedWithTrueMedian() {
+        // EE129C8F có 34 mẫu / 11 request: in đủ sẽ làm vỡ bảng. 8 mẫu dưới đây: trung vị = (4 + 6) / 2 = 5
+        List<CanonicalEvent> events = new ArrayList<>();
+        int[] latencies = {1, 2, 3, 4, 6, 7, 8, 90};
+        for (int i = 0; i < latencies.length; i++) {
+            int n = ordinal++;
+            events.add(new CanonicalEvent("signaling#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+                    EventTime.absolute(T0.plusMillis(i * 600L), ClockDomain.SERVER),
+                    EventType.SIGNALING_COMMAND, "INIT_CALL",
+                    Map.of("latencyMs", String.valueOf(latencies[i]), "requestId", "req-" + (i / 4)), Severity.INFO,
+                    new SourceRef(SourceRef.SIGNALING, n + 1, "INIT_CALL")));
+        }
+
+        assertThat(calculator.calculate(timelineOf(events)).valueOf(MetricKey.INTERNAL_API_LATENCY).display())
+                .isEqualTo("min 1, trung vị 5, max 90 ms (8 mẫu, 2 request)");
     }
 }

@@ -99,4 +99,25 @@ class SensitiveDataInventoryTest {
         assertThat(byId("phone-and-email").matchesValue("phone=0987654321")).isTrue();
         assertThat(byId("phone-and-email").matchesValue("lien he: user@example.com")).isTrue();
     }
+
+    @Test
+    @DisplayName("IPv6 trong dòng Cand[...] của libwebrtc bị nhận diện — văn bản tự do, không có tên trường")
+    void ipv6InLibwebrtcCandidateIsDetected() {
+        // Đúng định dạng dòng thật trong data mẫu; địa chỉ thay bằng dải tài liệu 2001:db8::/32
+        SensitiveField ip = byId("client-ip");
+        assertThat(ip.matchesValue("Cand[:9268178:1:udp:2122262784:[2001:db8:456:a046:1:2:3:4]:61421:host::0:EF1K::2:10:0]"))
+                .isTrue();
+        assertThat(ip.matchesValue("addr 2001:db8::1 port 3478")).isTrue();
+        // giờ dạng hh:mm:ss không bị nhầm là IPv6
+        assertThat(ip.matchesValue("[signaling 10:00:06.320] OK_ACK")).isFalse();
+    }
+
+    @Test
+    @DisplayName("TURN credential (MVP mục 5.2) là SECRET và bị DROP")
+    void turnCredentialIsDropped() {
+        SensitiveField turn = byId("turn-credential");
+        assertThat(turn.classification()).isEqualTo(DataClassification.SECRET);
+        assertThat(turn.policy()).isEqualTo(HandlingPolicy.DROP);
+        assertThat(turn.matchesFieldName("credential")).isTrue();
+    }
 }
