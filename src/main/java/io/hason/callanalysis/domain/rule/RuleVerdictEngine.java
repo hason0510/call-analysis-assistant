@@ -5,6 +5,7 @@ import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -171,11 +172,13 @@ public class RuleVerdictEngine {
             }
             List<String> parts = new ArrayList<>();
             if (q.lossOverThreshold() > 0) {
-                parts.add(q.lossOverThreshold() + "/" + q.samples() + " mẫu stats mất gói > 5 % (cao nhất "
-                        + q.maxLoss().setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() + " %)");
+                parts.add(q.lossOverThreshold() + "/" + q.samples() + " mẫu stats mất gói > "
+                        + plain(SignalExtractor.LOSS_THRESHOLD_PERCENT) + " % (cao nhất "
+                        + plain(q.maxLoss().setScale(2, RoundingMode.HALF_UP)) + " %)");
             }
             if (q.mosBelowThreshold() > 0) {
-                parts.add(q.mosBelowThreshold() + "/" + q.samples() + " mẫu MOS < 3.5");
+                parts.add(q.mosBelowThreshold() + "/" + q.samples() + " mẫu MOS < "
+                        + plain(SignalExtractor.MOS_THRESHOLD));
             }
             if (q.mediaPoor() > 0) {
                 parts.add(q.mediaPoor() + " mẫu app bật hasMediaPoor");
@@ -188,12 +191,17 @@ public class RuleVerdictEngine {
         List<String> counter = new ArrayList<>();
         legs.stream().filter(q -> q.minMos() != null)
                 .min(Comparator.comparing(LegQuality::minMos))
-                .ifPresent(q -> counter.add("MOS thấp nhất " + q.minMos().stripTrailingZeros().toPlainString()
+                .ifPresent(q -> counter.add("MOS thấp nhất " + plain(q.minMos())
                         + " (" + q.leg().name().toLowerCase() + ")"));
         if (legs.stream().allMatch(q -> q.mediaPoor() == 0)) {
             counter.add("app không bật hasMediaPoor ở mẫu nào");
         }
         return String.join("; ", signs) + (counter.isEmpty() ? "" : ". Đối chiếu: " + String.join(", ", counter));
+    }
+
+    /** 5.0 → "5", 3.5 → "3.5": bỏ số 0 thừa, không bao giờ in dạng khoa học 5E+1. */
+    private static String plain(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
     }
 
     private static String mediaFailureReason(RuleSignals signals) {

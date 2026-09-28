@@ -353,7 +353,7 @@ public class MetricsCalculator {
      * Leg chưa từng có media vẫn có bản ghi summary, nhưng MOS/loss/RTT/jitter đều là 0:
      * MOS theo định nghĩa nằm trong 1-5 nên 0 không phải kết quả đo; loss% là 0/0 khi không
      * có gói nào; RTT 0 ms chỉ có nghĩa là chưa có phản hồi STUN; jitter cần ít nhất 2 gói.
-     * Trên data mẫu, 33/33 dòng có MOS = 0 đều có packetsReceived = 0, và 7 leg có media thật
+     * Trên data mẫu, 33/33 dòng có MOS = 0 đều có packetsReceived = 0, và 8 leg có media thật
      * đều có packetsReceived > 0 và localStunResponse > 0.
      */
     private static MetricValue measuredOnly(Optional<CanonicalEvent> record, String counterField,

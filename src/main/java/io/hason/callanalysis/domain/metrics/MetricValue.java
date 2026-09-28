@@ -11,7 +11,7 @@ import java.math.BigDecimal;
  * Vì vậy không dùng double với 0 hay -1 làm sentinel: kiểu tổng được tách tường minh
  * để compiler bắt buộc xử lý nhánh thiếu dữ liệu, và để "đo được và bằng 0" không bao giờ
  * bị nhầm với "không đo được". Trên data mẫu điều này rất quan trọng: summary `endcall`
- * có ở cả 16 file end call log, nhưng MOS/loss/RTT chỉ có giá trị thật ở 7 leg (5 cuộc
+ * có ở cả 16 file end call log, nhưng MOS/loss/RTT chỉ có giá trị thật ở 8 leg (5 cuộc
  * gọi). Các leg còn lại chưa từng có media, app ghi 0 vào chỗ trống, và 0 đó phải thành
  * N/A chứ không được in ra như một kết quả đo.
  */

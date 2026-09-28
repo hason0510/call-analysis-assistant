@@ -404,6 +404,20 @@ class RuleVerdictEngineTest {
     }
 
     @Test
+    @DisplayName("câu căn cứ in ngưỡng từ chính hằng số của SignalExtractor — đổi ngưỡng không làm report tự mâu thuẫn")
+    void qualityBasisPrintsTheThresholdsTheFlagUses() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.qualityDegraded = true;
+            b.qualityByLeg = List.of(new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 10, 1,
+                    new java.math.BigDecimal("9"), 2, new java.math.BigDecimal("2.9"), 0));
+        }));
+
+        assertThat(v.causeBasis())
+                .contains("mất gói > " + SignalExtractor.LOSS_THRESHOLD_PERCENT.stripTrailingZeros().toPlainString() + " %")
+                .contains("MOS < " + SignalExtractor.MOS_THRESHOLD.stripTrailingZeros().toPlainString());
+    }
+
+    @Test
     @DisplayName("kết luận FAIL không đặt căn cứ riêng -> report dùng định nghĩa taxonomy như cũ")
     void failVerdictHasNoCauseBasis() {
         RuleVerdict v = engine.decide(signals(b -> {

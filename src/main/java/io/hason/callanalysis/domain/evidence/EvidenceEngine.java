@@ -18,7 +18,7 @@ import java.util.Set;
  * Chọn ra các sự kiện đáng làm bằng chứng và gán ID ổn định.
  *
  * Phải LỌC MẠNH: một cuộc gọi sinh tới gần 7 000 sự kiện (DE7DD314: 6 680; cả 20 cuộc
- * gọi mẫu là 28 522), trong khi report chỉ giữ vài chục dòng (nhiều nhất 21). MVP mục 3.3 cũng yêu cầu LLM chỉ nhận timeline, evidence và
+ * gọi mẫu là 28 522), trong khi report chỉ giữ vài chục dòng (trên data mẫu nhiều nhất 22, ở 271D1FAF; trần cứng MAX_EVIDENCE). MVP mục 3.3 cũng yêu cầu LLM chỉ nhận timeline, evidence và
  * chỉ số đã chuẩn hoá, không nhận raw log.
  *
  * ID được gán sau khi sắp xếp tất định; thứ tự đổi giữa các lần chạy sẽ làm Evidence ID

@@ -76,6 +76,32 @@ class CanonicalEventTest {
     }
 
     @Test
+    @DisplayName("gán lại leg thì đồng hồ client đi theo máy thật; đồng hồ server và giờ tương đối giữ nguyên")
+    void withLegMovesClientClockAlong() {
+        Instant t = Instant.parse("2026-09-21T08:01:00Z");
+        CanonicalEvent endcall = new CanonicalEvent(
+                "E1", "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(t, ClockDomain.CLIENT_CALLEE),
+                EventType.LOG_MESSAGE, "x", Map.of(), Severity.INFO,
+                new SourceRef("callee_endcall.log", 9, "..."));
+
+        assertThat(endcall.withLeg(Leg.CALLER).time())
+                .isEqualTo(EventTime.absolute(t, ClockDomain.CLIENT_CALLER));
+        // File không có tiền tố caller_/callee_: lúc parse chỉ gán tạm LOG_RELATIVE dù giờ là tuyệt đối.
+        CanonicalEvent unprefixed = new CanonicalEvent(
+                "E2", "CALL-1", Leg.UNKNOWN, LogSource.ENDCALL,
+                EventTime.absolute(t, ClockDomain.LOG_RELATIVE),
+                EventType.LOG_MESSAGE, "x", Map.of(), Severity.INFO,
+                new SourceRef("endcall.log", 9, "..."));
+        assertThat(unprefixed.withLeg(Leg.CALLEE).time())
+                .isEqualTo(EventTime.absolute(t, ClockDomain.CLIENT_CALLEE));
+        assertThat(event(Map.of()).withLeg(Leg.CALLEE).time().sortKeyNanos())
+                .isEqualTo(event(Map.of()).time().sortKeyNanos());
+        assertThat(((EventTime.Absolute) event(Map.of()).withLeg(Leg.CALLEE).time()).clock())
+                .isEqualTo(ClockDomain.SERVER);
+    }
+
+    @Test
     @DisplayName("khoá sắp xếp của event tương đối nhỏ hơn mọi event tuyệt đối — hai loại không xen kẽ")
     void relativeKeyIsBelowEveryAbsoluteKey() {
         EventTime absolute = EventTime.absolute(Instant.parse("1970-01-01T00:00:00Z"), ClockDomain.SERVER);

@@ -49,9 +49,26 @@ public record CanonicalEvent(
      * Gán lại leg sau khi bước correlate xác định được chủ sở hữu thật của file.
      * Cần thiết vì tên file không đáng tin: data mẫu có `calleer_webrtc.log` thực chất
      * là log của caller.
+     *
+     * Đồng hồ client đi theo máy ghi log, nên đổi leg thì đổi luôn ClockDomain. Trước đây
+     * clock giữ nguyên giá trị suy từ tên file: event nói leg CALLER nhưng timestamp lại
+     * ghi là đồng hồ của callee.
      */
     public CanonicalEvent withLeg(Leg newLeg) {
         return newLeg == leg ? this : new CanonicalEvent(
-                eventId, callId, newLeg, source, time, type, name, attributes, severity, sourceRef);
+                eventId, callId, newLeg, source, clockFollowing(newLeg), type, name, attributes, severity, sourceRef);
+    }
+
+    private EventTime clockFollowing(Leg newLeg) {
+        // Mọi giờ tuyệt đối không phải của server đều là đồng hồ của máy ghi log, kể cả file
+        // không có tiền tố caller_/callee_ lúc parse (ParseContext gán tạm LOG_RELATIVE).
+        if (!(time instanceof EventTime.Absolute a) || a.clock() == ClockDomain.SERVER) {
+            return time;
+        }
+        return switch (newLeg) {
+            case CALLER -> EventTime.absolute(a.instant(), ClockDomain.CLIENT_CALLER);
+            case CALLEE -> EventTime.absolute(a.instant(), ClockDomain.CLIENT_CALLEE);
+            case SERVER, UNKNOWN -> time;
+        };
     }
 }

@@ -27,9 +27,12 @@ public class SignalExtractor {
      * loss cao nhất 3,704%, MOS thấp nhất 4,335, RTT cao nhất 266 ms, jitter cao nhất 28 ms.
      * Ngưỡng cảnh báo đặt CAO HƠN đường nền để không gắn cờ nhầm cho cuộc gọi tốt.
      * Đây vẫn là PHỎNG ĐOÁN vì không có ca mẫu chất lượng kém — xem taxonomy.yaml.
+     *
+     * Package-private để RuleVerdictEngine in câu căn cứ từ CHÍNH hai hằng số này: viết cứng
+     * "> 5 %" ở đó thì đổi ngưỡng ở đây xong report sẽ in câu tự mâu thuẫn.
      */
-    private static final BigDecimal LOSS_THRESHOLD_PERCENT = new BigDecimal("5.0");
-    private static final BigDecimal MOS_THRESHOLD = new BigDecimal("3.5");
+    static final BigDecimal LOSS_THRESHOLD_PERCENT = new BigDecimal("5.0");
+    static final BigDecimal MOS_THRESHOLD = new BigDecimal("3.5");
 
     private static final String TURN_ALLOCATE_SUCCESS = "TURN allocate requested successfully";
     private static final String CANDIDATE_TIMEOUT = "_waitingCandidateTimer with error";

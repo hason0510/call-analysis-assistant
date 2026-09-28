@@ -17,22 +17,6 @@ Dự án OJT AI 20K — 6 tuần, 3 sprint. **Sprint 1 hiện tại: rule baseli
 | Docker | bất kỳ bản hỗ trợ Compose v2 | Cho Elasticsearch + Kibana local |
 | RAM trống | ~4 GB | Elasticsearch cấu hình 2 GB heap |
 
-> ### ⚠️ Bắt buộc dùng JDK 21
->
-> Spring Boot 3.5 **không hỗ trợ JDK 24 trở lên**. Nếu máy để JDK mới hơn làm mặc định,
-> build sẽ lỗi với thông báo khó hiểu. Kiểm tra bằng `java -version`, nếu không phải 21 thì set:
->
-> ```bash
-> export JAVA_HOME=/duong/dan/toi/jdk-21        # Linux / macOS / Git Bash
-> ```
-> ```powershell
-> $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"   # PowerShell
-> ```
->
-> Trên Windows có thể dùng `.\build.ps1` thay cho `mvnw`: script tự tìm JDK 21 và chỉ đặt
-> `JAVA_HOME` trong phiên chạy đó, không đổi biến môi trường của máy. Ví dụ
-> `.\build.ps1 test`, `.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze-all=../ai20k_sample"`.
-
 ---
 
 ## Chạy thử nhanh
@@ -80,7 +64,6 @@ docker compose down                   # dừng, GIỮ dữ liệu
 docker compose down -v                # dừng và XOÁ dữ liệu
 ```
 
-Máy dưới 16 GB RAM: sửa `ES_JAVA_OPTS` trong `docker-compose.yml` xuống `-Xms1g -Xmx1g`.
 
 ### Nạp data mẫu
 
@@ -203,7 +186,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5) |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Unit test | **195**, chạy trong vài giây, **không cần Elasticsearch** |
+| Unit test | **197**, chạy trong vài giây, **không cần Elasticsearch** |
 
 ### Known Limitations
 
