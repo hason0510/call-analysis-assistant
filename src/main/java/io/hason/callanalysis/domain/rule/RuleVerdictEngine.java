@@ -1,5 +1,6 @@
 package io.hason.callanalysis.domain.rule;
 
+import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
@@ -23,6 +24,31 @@ import java.util.List;
 public class RuleVerdictEngine {
 
     public RuleVerdict decide(RuleSignals signals) {
+        return capByMissingClientLegs(decideBySignals(signals), signals);
+    }
+
+    /**
+     * Thiếu log client của một leg thì tối đa MEDIUM (MVP mục 7.2: "thiếu một phần file → MEDIUM").
+     *
+     * Bản Sprint 1 chỉ hạ khi giới hạn đụng tới căn cứ của chính kết luận, nên `311A9B6A` (chỉ có
+     * log caller) vẫn báo HIGH; mentor yêu cầu hạ theo mức dữ liệu cho phép. Ngoại lệ duy nhất:
+     * server từ chối INIT_CALL kèm mã nguyên văn — đó là câu trả lời của chính server, không có
+     * log client nào bổ sung hay phản bác được nó.
+     */
+    private static RuleVerdict capByMissingClientLegs(RuleVerdict v, RuleSignals signals) {
+        List<Leg> missing = signals.legsMissingClientLog();
+        if (v.confidence() != ConfidenceLevel.HIGH || missing.isEmpty()
+                || signals.initCallRejection() != null) {
+            return v;
+        }
+        List<String> limitations = new ArrayList<>(v.dataLimitations());
+        limitations.add("Độ tin cậy tối đa MEDIUM vì thiếu log client của "
+                + String.join(", ", missing.stream().map(l -> l.name().toLowerCase()).toList()));
+        return new RuleVerdict(v.verdict(), v.qualityFlag(), v.issueCategory(), ConfidenceLevel.MEDIUM,
+                v.reasoning(), limitations, v.turnFailure(), v.causeBasis());
+    }
+
+    private RuleVerdict decideBySignals(RuleSignals signals) {
         List<String> limitations = new ArrayList<>();
 
         if (!signals.hasSignaling()) {
@@ -109,6 +135,16 @@ public class RuleVerdictEngine {
                     mediaFailureReason(signals), limitations);
         }
 
+        // Từ đây trở xuống là kết luận SUCCESS, tức kết luận dựa trên việc KHÔNG THẤY lỗi media.
+        // Không có log client nào thì không có gì để thấy: 2D9057AA có signaling hoàn hảo mà
+        // vẫn FAIL vì media. MVP mục 4.1: thiếu file → UNKNOWN.
+        if (!signals.hasClientLog()) {
+            limitations.add("Không có log client nào (end call / WebRTC) nên không kiểm chứng được"
+                    + " media; signaling đẹp chưa đủ để kết luận SUCCESS");
+            return unknown("Signaling đạt OK_ACK_OK nhưng không có log client để kiểm chứng media",
+                    limitations);
+        }
+
         // 6. Thiết lập được, media chạy, nhưng chất lượng kém
         if (signals.qualityDegraded()) {
             return new RuleVerdict(Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS,
@@ -118,11 +154,12 @@ public class RuleVerdictEngine {
                     qualityBasis(signals.qualityByLeg()));
         }
 
-        // 7. Bình thường
+        // 7. Bình thường. SUCCESS đòi "kết thúc bình thường" (MVP mục 4.1); không thấy BYE thì
+        //    không biết cuộc gọi kết thúc ra sao — có thể rớt giữa chừng, có thể bản export thiếu.
         if (!signals.terminatedNormally()) {
-            limitations.add("Không thấy BYE nên chưa xác nhận được cuộc gọi kết thúc bình thường");
-            return new RuleVerdict(Verdict.SUCCESS, false, null, ConfidenceLevel.MEDIUM,
-                    "Đã đạt OK_ACK_OK và không có dấu hiệu lỗi media", limitations);
+            limitations.add("Không thấy BYE nên không xác nhận được cuộc gọi kết thúc bình thường"
+                    + (signals.signalingTruncated() ? " (bản export bị cắt bớt, BYE có thể nằm ở phần mất)" : ""));
+            return unknown("Đã đạt OK_ACK_OK nhưng không thấy BYE", limitations);
         }
 
         return new RuleVerdict(Verdict.SUCCESS, false, null,
@@ -226,7 +263,8 @@ public class RuleVerdictEngine {
                 && !signals.signalingTruncated()) {
             return ConfidenceLevel.HIGH;
         }
-        return signals.hasClientLog() ? ConfidenceLevel.MEDIUM : ConfidenceLevel.LOW;
+        // Không có log client nào thì đã ra UNKNOWN từ trước, không tới được đây.
+        return ConfidenceLevel.MEDIUM;
     }
 
     /**

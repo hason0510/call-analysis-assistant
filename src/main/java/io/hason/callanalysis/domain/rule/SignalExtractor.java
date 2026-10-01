@@ -69,6 +69,11 @@ public class SignalExtractor {
     public RuleSignals extract(CallTimeline timeline) {
         Set<LogSource> sources = EnumSet.noneOf(LogSource.class);
         timeline.allEvents().forEach(e -> sources.add(e.source()));
+        Set<Leg> legsWithClientLog = EnumSet.noneOf(Leg.class);
+        timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.ENDCALL || e.source() == LogSource.WEBRTC)
+                .filter(e -> e.leg() == Leg.CALLER || e.leg() == Leg.CALLEE)
+                .forEach(e -> legsWithClientLog.add(e.leg()));
 
         List<String> iceStates = timeline.allEvents().stream()
                 .map(e -> e.attribute("iceStateTo"))
@@ -98,6 +103,7 @@ public class SignalExtractor {
                         .orElse(null),
                 clientFailureEvent(timeline).flatMap(SignalExtractor::describeClientFailure).orElse(null),
                 sources,
+                legsWithClientLog,
                 qualityByLeg(timeline));
     }
 

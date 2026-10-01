@@ -1,9 +1,11 @@
 package io.hason.callanalysis.domain.rule;
 
+import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Các tín hiệu THÔ rút từ timeline, tách khỏi kết luận.
@@ -38,12 +40,15 @@ public record RuleSignals(
          */
         String clientFailure,
         Set<LogSource> availableSources,
+        /** Leg có ít nhất một log client (end call hoặc WebRTC) đính kèm. */
+        Set<Leg> legsWithClientLog,
         /** Căn cứ đo được của cờ chất lượng, mỗi leg có bản ghi chỉ số một phần tử. */
         List<LegQuality> qualityByLeg
 ) {
 
     public RuleSignals {
         availableSources = availableSources == null ? Set.of() : Set.copyOf(availableSources);
+        legsWithClientLog = legsWithClientLog == null ? Set.of() : Set.copyOf(legsWithClientLog);
         qualityByLeg = qualityByLeg == null ? List.of() : List.copyOf(qualityByLeg);
         turnFailure = turnFailure == null ? TurnFailure.NONE : turnFailure;
     }
@@ -60,6 +65,13 @@ public record RuleSignals(
     public boolean hasClientLog() {
         return availableSources.contains(LogSource.ENDCALL)
                 || availableSources.contains(LogSource.WEBRTC);
+    }
+
+    /** Leg không có log client nào, theo thứ tự caller rồi callee. */
+    public List<Leg> legsMissingClientLog() {
+        return Stream.of(Leg.CALLER, Leg.CALLEE)
+                .filter(l -> !legsWithClientLog.contains(l))
+                .toList();
     }
 
     /** Có bằng chứng media thất bại từ bất kỳ nguồn nào. */

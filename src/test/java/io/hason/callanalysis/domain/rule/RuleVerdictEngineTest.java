@@ -1,5 +1,6 @@
 package io.hason.callanalysis.domain.rule;
 
+import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
@@ -43,13 +44,14 @@ class RuleVerdictEngineTest {
         String initCallRejection = null;
         String clientFailure = null;
         Set<LogSource> sources = ALL_SOURCES;
+        Set<Leg> legsWithClientLog = Set.of(Leg.CALLER, Leg.CALLEE);
         List<LegQuality> qualityByLeg = List.of();
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
                     qualityDegraded, signalingTruncated, turnFailure, candidateTimeout,
-                    initCallRejection, clientFailure, sources, qualityByLeg);
+                    initCallRejection, clientFailure, sources, legsWithClientLog, qualityByLeg);
         }
     }
 
@@ -290,16 +292,82 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("thiếu end call log -> SUCCESS nhưng hạ độ tin cậy và ghi giới hạn dữ liệu")
-    void missingClientLogLowersConfidence() {
+    @DisplayName("signaling đẹp nhưng không có log client nào -> UNKNOWN, không SUCCESS (nhận xét mentor)")
+    void noClientLogAtAllIsUnknown() {
         RuleVerdict v = engine.decide(signals(b -> {
             b.sources = Set.of(LogSource.SIGNALING);
+            b.legsWithClientLog = Set.of();
             b.iceEverConnected = false;
         }));
 
-        assertThat(v.verdict()).isEqualTo(Verdict.SUCCESS);
+        assertThat(v.verdict()).isEqualTo(Verdict.UNKNOWN);
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.UNKNOWN);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.LOW);
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("end call log"));
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("Không có log client"));
+    }
+
+    @Test
+    @DisplayName("đạt OK_ACK_OK nhưng không thấy BYE -> UNKNOWN, không SUCCESS (nhận xét mentor)")
+    void missingByeIsUnknown() {
+        RuleVerdict v = engine.decide(signals(b -> b.terminatedNormally = false));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.UNKNOWN);
+        assertThat(v.reasoning()).contains("BYE");
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("Không thấy BYE"));
+    }
+
+    @Test
+    @DisplayName("không thấy BYE và bản export bị cắt -> giới hạn dữ liệu nói rõ BYE có thể nằm ở phần mất")
+    void missingByeWithTruncatedExportSaysWhy() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.terminatedNormally = false;
+            b.signalingTruncated = true;
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.UNKNOWN);
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("phần mất"));
+    }
+
+    @Test
+    @DisplayName("thiếu log callee (311A9B6A) -> kết luận FAIL giữ nguyên nhưng tối đa MEDIUM")
+    void missingCalleeLogCapsConfidenceAtMedium() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.candidateTimeout = true;
+            b.clientFailure = "421 call.outgoing.error.network_check";
+            b.legsWithClientLog = Set.of(Leg.CALLER);
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.SIGNALING_FAILURE);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("thiếu log client của callee"));
+    }
+
+    @Test
+    @DisplayName("thiếu log một leg -> SUCCESS cũng tối đa MEDIUM dù đủ ba loại nguồn")
+    void missingOneLegCapsSuccess() {
+        RuleVerdict v = engine.decide(signals(b -> b.legsWithClientLog = Set.of(Leg.CALLEE)));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.SUCCESS);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("thiếu log client của caller"));
+    }
+
+    @Test
+    @DisplayName("server từ chối INIT_CALL kèm mã -> vẫn HIGH dù thiếu log callee (ngoại lệ duy nhất)")
+    void serverRejectionIsNotCappedByMissingLeg() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.initCallRejection = "428 call.outgoing.error.privacy_restricted";
+            b.legsWithClientLog = Set.of(Leg.CALLER);
+        }));
+
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
     }
 
     @Test
@@ -357,13 +425,13 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("thiếu end call log KHÔNG hạ tin cậy của kết luận SIGNALING_FAILURE")
+    @DisplayName("thiếu end call log nhưng đủ log client hai leg -> KHÔNG hạ tin cậy của SIGNALING_FAILURE")
     void missingEndCallLogDoesNotCapSignalingVerdict() {
-        // Signaling một mình đã đủ chứng minh server chưa từng gọi tới callee.
-        // Hạ tin cậy theo MỌI giới hạn sẽ làm gần như cuộc gọi nào cũng thành MEDIUM.
+        // Signaling một mình đã đủ chứng minh server chưa từng gọi tới callee; thiếu MỘT LOẠI
+        // log không hạ. Chỉ thiếu cả một leg mới hạ (missingCalleeLogCapsConfidenceAtMedium).
         RuleVerdict v = engine.decide(signals(b -> {
             b.sentInvite = false;
-            b.sources = Set.of(LogSource.SIGNALING);
+            b.sources = Set.of(LogSource.SIGNALING, LogSource.WEBRTC);
         }));
 
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);

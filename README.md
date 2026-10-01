@@ -38,7 +38,7 @@ curl http://localhost:9200/_cluster/health
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="--analyze-all=../ai20k_sample"
 ```
 
-Kết quả import đúng: **1 059 document / 20 cuộc gọi**.
+Kết quả import đúng: **1 059 document / 20 cuộc gọi**. Importer gửi theo lô 500 document.
 
 > Các lệnh `--analyze*`, `--metrics*`, `--timeline`, `--parse-*` lấy signaling từ
 > Elasticsearch, nên phải bật ES trước. Nếu quên, `--analyze-all` sẽ ra `UNKNOWN` cho mọi cuộc
@@ -52,7 +52,8 @@ Kết quả import đúng: **1 059 document / 20 cuộc gọi**.
 
 ```bash
 ./mvnw clean compile
-./mvnw test          # không cần Elasticsearch — toàn bộ test chạy trên lớp thuần
+./mvnw test          # unit test không cần Elasticsearch; 3 test tích hợp ES chạy qua
+                     # Testcontainers khi có Docker, không có Docker thì tự bỏ qua
 ```
 
 ### Elasticsearch + Kibana
@@ -92,7 +93,7 @@ Importer quét đệ quy mọi file `signaling.json` dưới thư mục được
 | `--analyze=<thư-mục>` | **Phân tích đầy đủ, in report theo mẫu mục 4.5** |
 | `--analyze-all=<thư-mục-gốc>` | Bảng verdict toàn bộ, kèm kiểm tra schema |
 
-Kết quả đã chạy (7 cuộc của tập `for_test/`) nằm trong thư mục Drive:
+Kết quả chạy 7 cuộc của tập `for_test/`: [`docs/ket-qua-for-test.md`](docs/ket-qua-for-test.md).
 
 
 ### Đọc report: evidence trỏ về đâu
@@ -184,9 +185,9 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 |---|---|
 | Verdict Accuracy | **13/13** trên toàn bộ data có nhãn (6 fail + 7 success) |
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
-| Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5) |
+| Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5); 280/280 giá trị trên 20 cuộc khớp script độc lập `scripts/verify-metrics/run.sh` |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Unit test | **197**, chạy trong vài giây, **không cần Elasticsearch** |
+| Test | **233** pass: 230 unit test (vài giây, không cần Elasticsearch) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
 ### Known Limitations
 
@@ -235,9 +236,10 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
   nêu VPN như dữ kiện đi kèm, không viết thành nguyên nhân.
 - Mã 428 `privacy_restricted` (server từ chối theo chính sách) được xếp tạm vào
   `SIGNALING_FAILURE` vì taxonomy của MVP mục 4.2 không có category riêng. Chờ mentor.
-- Cuộc gọi có signaling trông bình thường nhưng không kèm log phía client nào: hệ thống trả
-  `SUCCESS` / `LOW` kèm ghi chú thiếu file, chứ không trả `UNKNOWN`. Signaling đủ để bắt lỗi thiết lập nhưng không bao giờ thấy lỗi
-  media. Chờ mentor quyết (scenario 5 của MVP mục 10).
+- Cuộc gọi có signaling trông bình thường nhưng không kèm log phía client nào, hoặc đạt
+  `OK_ACK_OK` mà không thấy `BYE`: trả `UNKNOWN` (theo nhận xét mentor, MVP mục 4.1). Thiếu log
+  client của một leg: độ tin cậy tối đa `MEDIUM` (MVP mục 7.2), trừ ca server từ chối `INIT_CALL`
+  kèm mã nguyên văn.
 
 **Vận hành**
 
