@@ -12,7 +12,7 @@ Dự án OJT AI 20K — 6 tuần, 3 sprint. **Sprint 1 hiện tại: rule baseli
 
 | | Phiên bản | Ghi chú |
 |---|---|---|
-| JDK | **21** | Xem cảnh báo bên dưới |
+| JDK | **21** | |
 | Maven | không cần cài | Dùng `./mvnw` kèm sẵn trong repo (Windows: `.\build.ps1`) |
 | Docker | bất kỳ bản hỗ trợ Compose v2 | Cho Elasticsearch + Kibana local |
 | RAM trống | ~4 GB | Elasticsearch cấu hình 2 GB heap |
@@ -92,9 +92,6 @@ Importer quét đệ quy mọi file `signaling.json` dưới thư mục được
 | `--metrics-all=<thư-mục-gốc>` | Bảng chỉ số của toàn bộ cuộc gọi |
 | `--analyze=<thư-mục>` | **Phân tích đầy đủ, in report theo mẫu mục 4.5** |
 | `--analyze-all=<thư-mục-gốc>` | Bảng verdict toàn bộ, kèm kiểm tra schema |
-
-Kết quả chạy 7 cuộc của tập `for_test/`: [`docs/ket-qua-for-test.md`](docs/ket-qua-for-test.md).
-
 
 ### Đọc report: evidence trỏ về đâu
 
@@ -187,7 +184,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5); 280/280 giá trị trên 20 cuộc khớp script độc lập `scripts/verify-metrics/run.sh` |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Test | **233** pass: 230 unit test (vài giây, không cần Elasticsearch) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
+| Test | **253**: 250 unit test (vài giây, không cần Elasticsearch) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
 ### Known Limitations
 
@@ -245,7 +242,9 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 
 - Signaling bắt buộc lấy từ Elasticsearch. ES tắt thì `--analyze` vẫn chạy và trả `UNKNOWN`
   kèm lý do, còn `--parse-call` / `--parse-all` dừng với lỗi vì chưa bọc lỗi ES.
-- Chưa giới hạn kích thước file đính kèm (ca kiểm thử F04). Thuộc File Validator ở Sprint 2.
+- File Validator (Sprint 2 T3) loại file quá lớn (mặc định 20 MB, cấu hình
+  `call-analysis.files.max-size-per-file`), rỗng, hỏng, không nhận diện được, hoặc end call log mang
+  Call-ID khác. WebRTC log không mang Call-ID nên không kiểm được file WebRTC của cuộc gọi khác.
 
 ---
 

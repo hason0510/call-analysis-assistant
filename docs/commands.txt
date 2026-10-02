@@ -1,0 +1,36 @@
+0. Build và unit test (không cần Elasticsearch)
+
+.\build.ps1 -q clean compile
+.\build.ps1 test                 # 197 test, vài giây
+
+1. Bật Elasticsearch và nạp data mẫu
+
+Mọi lệnh CLI bên dưới đều đọc signaling từ ES, nên phải chạy bước này trước.
+
+docker compose up -d elasticsearch      # chỉ ES
+docker compose up -d                    # ES + Kibana (localhost:5601), nếu cần xem data
+
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_sample"
+# Xoá index rồi nạp lại từ đầu:
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_sample --recreate-index"
+Kết quả đúng là 1 059 document / 20 cuộc gọi. Chạy lại nhiều lần cũng không sinh bản trùng.
+
+2. Các lệnh CLI
+
+# --fetch-call: đọc signaling của một Call-ID từ ES
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--fetch-call=DE7DD314-F432-45CB-BCB4-AE9103CC0919"
+
+# --parse-call / --parse-all: số event và cảnh báo parse
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--parse-call=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--parse-all=../ai20k_sample"
+
+# --timeline: correlate leg, dedupe, lệch đồng hồ
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--timeline=../ai20k_sample/success/EE129C8F-EAD0-4302-AB68-920D32F8B8B7"
+
+# --metrics / --metrics-all: bộ chỉ số
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--metrics=../ai20k_sample/success/DE7DD314-F432-45CB-BCB4-AE9103CC0919"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--metrics-all=../ai20k_sample"
+
+# --analyze / --analyze-all: chạy cả pipeline, kiểm schema, in report theo mẫu mục 4.5
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze-all=../ai20k_sample"
