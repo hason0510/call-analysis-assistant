@@ -35,6 +35,13 @@
         <artifactId>commons-compress</artifactId>
         <version>1.28.0</version>
       </dependency>
+      <dependency>
+        <groupId>me.paulschwarz</groupId>
+        <artifactId>spring-dotenv-bom</artifactId>
+        <version>5.1.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -46,6 +53,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+    </dependency>
+    <!-- Chat API + Web UI (Sprint 2 T1, T2). Chỉ bật server khi chạy profile "web". -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
@@ -59,6 +71,16 @@
       <groupId>com.networknt</groupId>
       <artifactId>json-schema-validator</artifactId>
       <version>1.5.2</version>
+    </dependency>
+    <!--
+      Nạp file .env (OPENAI_API_KEY…) vào Spring Environment khi chạy local. Bản springboot3-,
+      KHÔNG phải springboot4-: bản 4 đăng ký bằng khoá org.springframework.boot.EnvironmentPostProcessor
+      của Boot 4, Boot 3.5 không đọc khoá đó nên .env bị bỏ qua mà không báo lỗi gì.
+    -->
+    <dependency>
+      <groupId>me.paulschwarz</groupId>
+      <artifactId>springboot3-dotenv</artifactId>
+      <optional>true</optional>
     </dependency>
 
     <dependency>
