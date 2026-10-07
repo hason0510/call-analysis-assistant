@@ -1,10 +1,10 @@
 # Benchmark `dev` (MVP mục 6.3) — đầu vào của Evaluation Runner (T9).
 #
-#   python scripts/benchmark-variants/make_variants.py ../ai20k_sample      # một lần: sinh biến thể F02
+#   python scripts/benchmark-variants/make_variants.py ../ai20k_sample      # một lần: tạo file biến thể F02 (case-016)
 #   mvn spring-boot:run -Dspring-boot.run.arguments="--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample"
 #
 # Mỗi case là một tài liệu YAML, cách nhau bằng `---`, đúng các trường của mẫu 6.3.
-# Phần mở rộng, chờ mentor xác nhận (đều TUỲ CHỌN — file chỉ dùng mẫu 6.3 vẫn đọc được):
+# Phần mở rộng, chưa chốt (đều TUỲ CHỌN — file chỉ dùng mẫu 6.3 vẫn đọc được):
 #   - Câu hỏi ghi được dạng `{text, expected_intent}` để đo Intent Accuracy (mục 6.5).
 #     Câu chỉ là chuỗi → không tính vào Intent Accuracy.
 #   - Case toàn câu OUT_OF_SCOPE bỏ trống `expected_verdict`: pipeline không được chạy.
@@ -20,7 +20,7 @@
 #     để `null`, KHÔNG tự đặt nhãn. Runner báo metric tương ứng là N/A.
 #   - Câu hỏi viết mới, viết TRƯỚC khi xem hệ thống trả lời; không trùng câu trong KeywordIntentClassifierTest
 #     và ví dụ trong prompts/parse-request.system.txt (câu đã dùng để viết luật / prompt thì đo bị thổi phồng).
-#   - Nhãn intent theo định nghĩa đã chốt (docs/sprint-2-tien-do.md, T4): câu chung về cuộc gọi (ổn không,
+#   - Nhãn intent theo định nghĩa của dự án: câu chung về cuộc gọi (ổn không,
 #     lỗi gì, vì sao thất bại) là ANALYZE_CALL; câu nêu một bên / triệu chứng / giai đoạn / chỉ số là
 #     ANALYZE_WITH_FOCUS; nhờ làm việc khác là OUT_OF_SCOPE kể cả khi nhắc tới cuộc gọi.
 #   - Viết câu để có MỘT nhãn duy nhất: câu ANALYZE_CALL chỉ hỏi về cuộc gọi nói chung (kết quả, thành công, ổn,
@@ -333,8 +333,10 @@ expected_evidence: null
 split: dev
 
 ---
-# F02 — tên file sai loại: end call log của caller mang tên `caller_webrtc.log`
-# (sinh bằng scripts/benchmark-variants/make_variants.py). Loại file phải nhận theo nội dung.
+# F02 — tên file sai loại. File `_variants/F02-sai-loai/caller_webrtc.log` là bản sao y hệt
+# caller_endcall.log của DE7DD314, chỉ bị đặt sai tên (tạo bằng scripts/benchmark-variants/make_variants.py,
+# nằm ngoài repo vì là data mẫu). Hệ thống phải nhận nó là END CALL LOG của caller theo nội dung, không phải
+# WebRTC log theo tên. Đường dẫn có dấu `/` nên được tính từ thư mục log, không từ thư mục DE7DD314.
 case_id: case-016
 call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
 files: [_variants/F02-sai-loai/caller_webrtc.log, callee_endcall.log, callee_webrtc.log]
