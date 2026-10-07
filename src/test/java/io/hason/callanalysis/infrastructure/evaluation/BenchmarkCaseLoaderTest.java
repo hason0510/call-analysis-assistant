@@ -97,7 +97,7 @@ class BenchmarkCaseLoaderTest {
                 call_id: X
                 files: [caller_endcall.log]
                 questions: ["q"]
-                expected_verdict: success
+                expected_verdict: PASS
                 ---
                 case_id: ok
                 call_id: Y
@@ -118,10 +118,51 @@ class BenchmarkCaseLoaderTest {
 
         assertThat(loaded.cases()).extracting(BenchmarkCase::caseId).containsExactly("ok");
         assertThat(loaded.errors()).hasSize(4);
-        assertThat(loaded.errors().get(0)).contains("verdict-sai", "expected_verdict 'success'");
+        assertThat(loaded.errors().get(0)).contains("verdict-sai", "expected_verdict 'PASS'");
         assertThat(loaded.errors().get(1)).contains("trùng");
         assertThat(loaded.errors().get(2)).contains("thieu-file", "files");
         assertThat(loaded.errors().get(3)).contains("intent-sai", "CHITCHAT");
+    }
+
+    @Test
+    @DisplayName("đáp án gõ tay khác kiểu mẫu vẫn đọc được: enum chữ thường, một file không trong [ ], cờ trong ngoặc kép")
+    void lenientGroundTruth() {
+        BenchmarkCaseLoader.Loaded loaded = loader.parse("""
+                case_id: go-tay
+                call_id: X
+                files: caller_endcall.log
+                questions:
+                  - text: "q"
+                    expected_intent: analyze_with_focus
+                expected_verdict: fail
+                expected_quality_flag: "False"
+                expected_issue_category: " ice_failure "
+                expected_evidence: EV002
+                """);
+
+        assertThat(loaded.errors()).isEmpty();
+        BenchmarkCase c = loaded.cases().getFirst();
+        assertThat(c.files()).containsExactly("caller_endcall.log");
+        assertThat(c.questions().getFirst().expectedIntent()).isEqualTo(Intent.ANALYZE_WITH_FOCUS);
+        assertThat(c.expectedVerdict()).isEqualTo(Verdict.FAIL);
+        assertThat(c.expectedQualityFlag()).isFalse();
+        assertThat(c.expectedIssueCategory()).isEqualTo(IssueCategory.ICE_FAILURE);
+        assertThat(c.expectedEvidence()).containsExactly("EV002");
+    }
+
+    @Test
+    @DisplayName("cờ chất lượng không phải true / false vẫn là lỗi của case")
+    void qualityFlagMustBeBoolean() {
+        BenchmarkCaseLoader.Loaded loaded = loader.parse("""
+                case_id: co-sai
+                call_id: X
+                files: [caller_endcall.log]
+                questions: ["q"]
+                expected_quality_flag: maybe
+                """);
+
+        assertThat(loaded.cases()).isEmpty();
+        assertThat(loaded.errors()).singleElement().asString().contains("co-sai", "expected_quality_flag", "maybe");
     }
 
     @Test

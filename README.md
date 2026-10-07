@@ -174,7 +174,8 @@ split: held-out
 - Câu hỏi viết dạng chuỗi trơn như mẫu MVP là đủ; dạng `{text, expected_intent}` là phần dự án thêm để chấm intent.
 - Muốn thử ca "thiếu file" thì **không liệt kê** file đó. File có trong `files` mà không có trên đĩa là lỗi của case:
   case đó bị bỏ qua và nêu ở mục "Case không chạy được" của báo cáo; các case khác vẫn chạy.
-- Giá trị enum phải viết hoa đúng tên: `FAIL`, `ICE_FAILURE`, `ANALYZE_CALL`…
+- Giá trị enum nên viết như mẫu (`FAIL`, `ICE_FAILURE`, `ANALYZE_CALL`…). Viết thường, một file không đặt trong `[ ]`,
+  hay cờ `"true"` trong ngoặc kép vẫn được chấp nhận; giá trị ngoài taxonomy thì case bị loại và nêu tên.
 
 #### Bước 3 — Nạp signaling vào Elasticsearch
 
@@ -320,7 +321,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5); 280/280 giá trị trên 20 cuộc khớp script độc lập `scripts/verify-metrics/run.sh` |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Test | **388** (2026-10-06): 385 unit test (không cần Elasticsearch hay AI thật) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
+| Test | **390** (2026-10-07): 387 unit test (không cần Elasticsearch hay AI thật) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
 ## Trạng thái — Sprint 2: 10/11 task xong
 

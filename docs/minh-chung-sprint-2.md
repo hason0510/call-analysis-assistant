@@ -1,7 +1,7 @@
 # Minh chứng Sprint 2 — MVP mục 6.1 đến 6.6
 
 Đối chiếu từng yêu cầu ở MVP mục 6 với **file code, file test và số đo được** trong repo.
-Số liệu chạy ngày **2026-10-06** (388 test; benchmark `dev` 315 lần chạy với `gpt-4o-mini`).
+Số liệu chạy ngày **2026-10-06** (benchmark `dev` 315 lần chạy với `gpt-4o-mini`); test chạy lại 2026-10-07: 390 test.
 Đường dẫn code tính từ `src/main/java/io/hason/callanalysis/`, test từ `src/test/java/io/hason/callanalysis/`.
 
 ## Tóm tắt
@@ -29,7 +29,7 @@ Số liệu chạy ngày **2026-10-06** (388 test; benchmark `dev` 315 lần ch�
 | **T6 Guardrails** | verdict / category thuộc taxonomy; evidenceId tồn tại; không số ngoài chỉ số; lệch rule → UNKNOWN / gắn cờ; invalid → reject / fallback | `domain/guardrail/Guardrails`, `GuardrailResult`; gọi từ `service/AiVerdictService` | `GuardrailsTest` (11) | Benchmark: 0 số bịa tới người dùng; G05 chặn 0-3% đầu ra thô của AI tuỳ lượt |
 | **T7 Sensitive Data Detector & Sanitizer** | Input và output, xem 6.2 | `domain/security/SensitiveDataSanitizer`, `Pseudonymizer`, `SensitiveField`; `infrastructure/security/` (`SensitiveDataInventoryLoader`, `SanitizerConfig`, `SanitizerHolder`, `JsonSanitizer`); `infrastructure/logging/Sanitizing*Converter`; `resources/sensitive-data-inventory.yaml`, `logback-spring.xml` | `SensitiveDataSanitizerTest` (16), `SensitiveDataInventoryTest`, `SanitizingConvertersTest`, các test S0x ở mục 6.4 | Xem 6.2 |
 | **T8 Fallback** | AI timeout, provider unavailable, invalid response → report từ rule, đánh dấu degraded | `service/AiVerdictService` (mọi đường lỗi), `ChatAnalysisService` (report có phần AI sai schema → dựng lại từ rule) | `AiVerdictServiceTest`, `ChatAnalysisServiceTest::aiFailureIsDegraded`, `EvaluationServiceTest::aiUnavailableIsDegraded` | Chạy không có key: mọi report degraded `NOT_CONFIGURED`, Pipeline Success vẫn 100% |
-| **T9 Evaluation Runner** | Chạy benchmark lặp lại được; đo metric 6.5; chạy lặp đo consistency; nhận bộ case từ file | `cli/EvaluateCommand`, `service/EvaluationService`, `domain/evaluation/`, `infrastructure/evaluation/BenchmarkCaseLoader`, `CaseFileResolver` | `EvaluationScorerTest` (13), `EvaluationServiceTest` (8), `BenchmarkCaseLoaderTest` (6), `CaseFileResolverTest` (5), `TemplateComplianceTest`, `SensitiveValuesTest` | `--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample --repeat=5`: 315 lần chạy, ghi `.md` + `.json` |
+| **T9 Evaluation Runner** | Chạy benchmark lặp lại được; đo metric 6.5; chạy lặp đo consistency; nhận bộ case từ file | `cli/EvaluateCommand`, `service/EvaluationService`, `domain/evaluation/`, `infrastructure/evaluation/BenchmarkCaseLoader`, `CaseFileResolver` | `EvaluationScorerTest` (13), `EvaluationServiceTest` (8), `BenchmarkCaseLoaderTest` (8), `CaseFileResolverTest` (5), `TemplateComplianceTest`, `SensitiveValuesTest` | `--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample --repeat=5`: 315 lần chạy, ghi `.md` + `.json` |
 | **T10 Benchmark `dev`** | Xem 6.3 | `benchmark/dev-cases.yaml`, `scripts/benchmark-variants/make_variants.py` | `BenchmarkCaseLoaderTest::repoDevCases` (kiểm chính file benchmark) | 18 case, 63 câu |
 | T11 So sánh cách dựng context | Nếu kịp | — | — | ⬜ Runner đã ghi token từng lần chạy; khái niệm "semi-structured context" chưa chốt |
 
@@ -116,7 +116,7 @@ tự đặt nhãn; Issue Category Accuracy báo N/A.
 | F03 Các file thuộc Call-ID khác nhau | `FileValidatorTest::f03ForeignCallIdIsRejected`, `::f03CallIdResolvedFromFilesWhenNotGiven`, `::f03TieIsBrokenByFileName`, `CallLogNormalizationServiceTest::foreignEndCallLogIsExcludedFromTimeline`, `::attachedFileWithForeignCallIdIsReported` |
 | F04 File hỏng / vượt giới hạn | `FileValidatorTest::f04OversizedFileIsRejectedWithoutContent`, `::f04LoadedButOversizedIsRejected`, `::f04BinaryFileIsCorrupt`, `::f04MostlyReplacementCharactersIsCorrupt`, `::f04EmptyFileIsRejected`, `CallFolderReaderTest::oversizedFileIsNotLoaded`, `AnalyzeControllerTest::oversizedFileIsRejectedAlone` (qua HTTP) |
 
-Lệnh: `mvn test` → **388 test, 0 lỗi, 0 bỏ qua** (2026-10-06, Docker bật nên 3 test Testcontainers cũng chạy).
+Lệnh: `mvn test` → **390 test, 0 lỗi, 0 bỏ qua** (2026-10-07, Docker bật nên 3 test Testcontainers cũng chạy).
 
 ---
 

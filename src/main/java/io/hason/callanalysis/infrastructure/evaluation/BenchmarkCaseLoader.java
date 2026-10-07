@@ -31,8 +31,13 @@ import java.util.Set;
  * Nhận cả ba cách xếp nhiều case: một case mỗi tài liệu (cách nhau `---`), một danh sách ở gốc, hoặc chỉ
  * một case. Câu hỏi là chuỗi (mẫu 6.3) hoặc {@code {text, expected_intent}} (mở rộng tuỳ chọn).
  *
- * Case sai (thiếu trường, giá trị ngoài taxonomy, trùng case_id) bị loại và NÊU TÊN, các case khác vẫn
- * chạy — một lỗi gõ trong file 50 case không được làm mất cả lượt đánh giá.
+ * Đáp án do người gõ tay nên đọc dễ dãi ở những chỗ không đổi nghĩa: enum không phân biệt hoa thường
+ * ({@code success} = {@code SUCCESS}), {@code files} / {@code expected_evidence} viết một giá trị không đặt
+ * trong {@code [ ]}, cờ chất lượng viết {@code "true"} trong ngoặc kép. Khác Guardrails G03: đầu ra của AI
+ * vẫn phải viết hoa đúng tên — ở đây là file của người chấm, gõ khác kiểu không nên làm mất case.
+ *
+ * Case sai thật (thiếu trường, giá trị ngoài taxonomy, trùng case_id) bị loại và NÊU TÊN, các case khác
+ * vẫn chạy — một lỗi gõ trong file 50 case không được làm mất cả lượt đánh giá.
  */
 @Component
 public class BenchmarkCaseLoader {
@@ -105,14 +110,10 @@ public class BenchmarkCaseLoader {
         if (questions.isEmpty()) {
             throw new IllegalArgumentException("questions rỗng");
         }
-        JsonNode flag = n.path("expected_quality_flag");
-        if (!isAbsent(flag) && !flag.isBoolean()) {
-            throw new IllegalArgumentException("expected_quality_flag phải là true / false, gặp '" + flag.asText() + "'");
-        }
         JsonNode evidence = n.path("expected_evidence");
         return new BenchmarkCase(caseId, callId, files, questions,
                 optionalEnum(n, "expected_verdict", Verdict.class),
-                isAbsent(flag) ? null : flag.booleanValue(),
+                optionalBoolean(n, "expected_quality_flag"),
                 optionalEnum(n, "expected_issue_category", IssueCategory.class),
                 isAbsent(evidence) ? null : texts(evidence, "expected_evidence"),
                 isAbsent(n.path("split")) ? null : n.get("split").asText());
@@ -128,19 +129,42 @@ public class BenchmarkCaseLoader {
         throw new IllegalArgumentException("câu hỏi phải là chuỗi hoặc {text, expected_intent}");
     }
 
-    /** Giá trị enum đúng tên, phân biệt hoa thường — cùng luật với Guardrails G03 ("success" không phải SUCCESS). */
+    /**
+     * Giá trị enum của đáp án, không phân biệt hoa thường ("success" = SUCCESS). Giá trị ngoài taxonomy vẫn bị
+     * loại. Không áp dụng cho đầu ra của AI — Guardrails G03 vẫn đòi đúng tên.
+     */
     private static <E extends Enum<E>> E optionalEnum(JsonNode n, String field, Class<E> type) {
         JsonNode v = n.path(field);
         if (isAbsent(v)) {
             return null;
         }
+        String text = v.asText().strip();
         for (E e : type.getEnumConstants()) {
-            if (e.name().equals(v.asText())) {
+            if (e.name().equalsIgnoreCase(text)) {
                 return e;
             }
         }
-        throw new IllegalArgumentException(field + " '" + v.asText() + "' không thuộc "
+        throw new IllegalArgumentException(field + " '" + text + "' không thuộc "
                 + Arrays.toString(type.getEnumConstants()));
+    }
+
+    /** true / false, kể cả viết trong ngoặc kép ("true") hay khác hoa thường. Giá trị khác là lỗi của case. */
+    private static Boolean optionalBoolean(JsonNode n, String field) {
+        JsonNode v = n.path(field);
+        if (isAbsent(v)) {
+            return null;
+        }
+        if (v.isBoolean()) {
+            return v.booleanValue();
+        }
+        String text = v.asText().strip();
+        if (text.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (text.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new IllegalArgumentException(field + " phải là true / false, gặp '" + text + "'");
     }
 
     private static String requiredText(JsonNode n, String field) {
@@ -151,12 +175,17 @@ public class BenchmarkCaseLoader {
         return v.asText().strip();
     }
 
-    private static List<String> texts(JsonNode array, String field) {
-        if (!array.isArray()) {
+    /** Danh sách chuỗi; một giá trị viết thẳng, không đặt trong [ ], được coi là danh sách một phần tử. */
+    private static List<String> texts(JsonNode value, String field) {
+        if (value.isTextual()) {
+            String text = value.asText().strip();
+            return text.isEmpty() ? List.of() : List.of(text);
+        }
+        if (!value.isArray()) {
             throw new IllegalArgumentException(field + " phải là danh sách");
         }
         List<String> out = new ArrayList<>();
-        array.forEach(v -> out.add(v.asText().strip()));
+        value.forEach(v -> out.add(v.asText().strip()));
         return out;
     }
 
