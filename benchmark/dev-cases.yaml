@@ -1,0 +1,394 @@
+# Benchmark `dev` (MVP mục 6.3) — đầu vào của Evaluation Runner (T9).
+#
+#   python scripts/benchmark-variants/make_variants.py ../ai20k_sample      # một lần: sinh biến thể F02
+#   mvn spring-boot:run -Dspring-boot.run.arguments="--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample"
+#
+# Mỗi case là một tài liệu YAML, cách nhau bằng `---`, đúng các trường của mẫu 6.3.
+# Phần mở rộng, chờ mentor xác nhận (đều TUỲ CHỌN — file chỉ dùng mẫu 6.3 vẫn đọc được):
+#   - Câu hỏi ghi được dạng `{text, expected_intent}` để đo Intent Accuracy (mục 6.5).
+#     Câu chỉ là chuỗi → không tính vào Intent Accuracy.
+#   - Case toàn câu OUT_OF_SCOPE bỏ trống `expected_verdict`: pipeline không được chạy.
+#   - `files: []` hợp lệ: ca chỉ có Call-ID, không đính kèm file.
+#
+# Quy ước:
+#   - `call_id` được runner truyền vào pipeline như khi người dùng ghi Call-ID trong câu hỏi (WebRTC log không
+#     mang Call-ID; 5/13 cuộc chỉ có WebRTC log). Call-ID ghi trong câu hỏi vẫn được ưu tiên.
+#   - `files` tên trần: tìm trong thư mục trùng `call_id`. Có dấu `/`: đường dẫn tương đối tới thư mục log.
+#   - `expected_verdict` lấy từ thư mục `fail/` / `success/` — ground truth duy nhất mentor đưa. Riêng
+#     case-018 (UNKNOWN) là đáp án suy từ luật "thiếu file → UNKNOWN" của MVP mục 4.1, không phải nhãn mentor.
+#   - Trường ground truth không có (`expected_quality_flag`, `expected_issue_category`, `expected_evidence`)
+#     để `null`, KHÔNG tự đặt nhãn. Runner báo metric tương ứng là N/A.
+#   - Câu hỏi viết mới, viết TRƯỚC khi xem hệ thống trả lời; không trùng câu trong KeywordIntentClassifierTest
+#     và ví dụ trong prompts/parse-request.system.txt (câu đã dùng để viết luật / prompt thì đo bị thổi phồng).
+#   - Nhãn intent theo định nghĩa đã chốt (docs/sprint-2-tien-do.md, T4): câu chung về cuộc gọi (ổn không,
+#     lỗi gì, vì sao thất bại) là ANALYZE_CALL; câu nêu một bên / triệu chứng / giai đoạn / chỉ số là
+#     ANALYZE_WITH_FOCUS; nhờ làm việc khác là OUT_OF_SCOPE kể cả khi nhắc tới cuộc gọi.
+#   - Viết câu để có MỘT nhãn duy nhất: câu ANALYZE_CALL chỉ hỏi về cuộc gọi nói chung (kết quả, thành công, ổn,
+#     có lỗi, tổng quan); câu có tên một giai đoạn (đổ chuông, bắt máy, kết nối, KẾT THÚC, cúp máy), một bên,
+#     một triệu chứng hay một chỉ số là ANALYZE_WITH_FOCUS. Câu đọc được cả hai nghĩa (ví dụ "kết thúc ra sao"
+#     = kết cục, hay = giai đoạn kết thúc?) thì giữ dạng chuỗi trần, KHÔNG gắn nhãn: vẫn tính vào Verdict
+#     Accuracy và Consistency, không tính vào Intent Accuracy (quyết định 2026-10-06).
+#
+# Độ phủ các ca MVP mục 6.3 yêu cầu:
+#   SUCCESS bình thường     case-002, 009-014
+#   SUCCESS chất lượng kém  KHÔNG CÓ — data mẫu không có cuộc nào có nhãn (Known Limitations)
+#   FAIL thiết lập          case-004, 007
+#   FAIL media (ICE/TURN)   case-001 (ICE), 005, 006, 008 (TURN)
+#   UNKNOWN do thiếu file   case-018
+#   Bình thường có WARN     mọi case SUCCESS: signaling của cả 7 cuộc có 5-13 event level=WARN
+#   Thiếu file một bên      case-015 (và các cuộc vốn chỉ có log một bên: 001, 006, 008, 009)
+#   Tên file sai loại       case-016; case-013 có sẵn file gõ sai tên `calleer_webrtc.log`
+#   File khác Call-ID       case-017
+#   OUT_OF_SCOPE (≥ 5)      case-003 (5 câu) + 2 câu xen trong case-010, case-012
+
+# ---------------------------------------------------------------- 1. Mỗi cuộc có nhãn một case
+
+# Đúng nguyên mẫu 6.3 (câu hỏi là chuỗi trần, không nhãn intent) — kiểm runner đọc được file của mentor.
+# FAIL media: ICE failed, 0 byte audio dù signaling hoàn hảo. Chỉ có log phía callee.
+case_id: case-001
+call_id: 2D9057AA-C496-48B2-946A-98FA2896D086
+files: [callee_endcall.log, callee_webrtc.log]
+questions:
+  - "Kiểm tra cuộc gọi này giùm em"
+  - "Cuộc gọi này có thành công không?"
+  - "Tại sao người nghe không nghe thấy tiếng gì cả?"
+  - "Kết nối media giữa hai máy có thông không?"
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS bình thường, đủ 4 file log của hai bên; signaling có 13 event WARN.
+case_id: case-002
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: [caller_endcall.log, caller_webrtc.log, callee_endcall.log, callee_webrtc.log]
+questions:
+  - text: "Xem giúp mình cuộc gọi này ổn không"
+    expected_intent: ANALYZE_CALL
+  - text: "Cuoc goi nay co van de gi khong"
+    expected_intent: ANALYZE_CALL
+  - text: "MOS hai bên được bao nhiêu?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Mất bao lâu từ lúc bấm gọi tới lúc kết nối?"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# Toàn câu OUT_OF_SCOPE, có đính kèm log thật: nhờ làm việc khác thì vẫn ngoài phạm vi kể cả khi nhắc
+# tới cuộc gọi. Mong đợi câu từ chối cố định, pipeline không chạy, không gọi AI phân tích.
+case_id: case-003
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: [caller_endcall.log]
+questions:
+  - text: "Soạn tin nhắn xin lỗi khách hàng vì cuộc gọi bị lỗi"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Hôm nay tỷ giá đô la bao nhiêu?"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Kể chuyện cười đi"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Viết giúp mình câu SQL đếm số cuộc gọi lỗi"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Lên lịch họp với đội kỹ thuật chiều mai"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: null
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# FAIL thiết lập: server từ chối ngay ở INIT_CALL (mã 428). Chỉ có log phía caller.
+case_id: case-004
+call_id: 1B009D42-49CD-479E-B26C-3A2994AEB720
+files: [caller_endcall.log, caller_webrtc.log]
+questions:
+  - text: "Cuộc gọi này bị làm sao vậy?"
+    expected_intent: ANALYZE_CALL
+  - text: "cuoc goi nay co on khong"
+    expected_intent: ANALYZE_CALL
+  - text: "Bên được gọi có đổ chuông không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Máy người gọi có gửi được lời mời gọi đi không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# FAIL media: TURN hỏng thật (không cấp phát được relay), có end call log.
+case_id: case-005
+call_id: 703100CF-5742-467E-9E0E-34E45F60FF58
+files: [caller_endcall.log, caller_webrtc.log]
+questions:
+  - text: "Giúp mình xem cuộc gọi này lỗi ở đâu"
+    expected_intent: ANALYZE_CALL
+  - text: "Kết nối tới TURN server có vấn đề gì không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "goi di ma khong ket noi duoc la sao"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# FAIL media: TURN hỏng thật. Chỉ có WebRTC log (không mang Call-ID); một câu ghi Call-ID trong câu hỏi.
+case_id: case-006
+call_id: 7B56D7AD-1FF1-4EDB-B212-06EC12CA73FB
+files: [caller_webrtc.log]
+questions:
+  - text: "Cuộc gọi 7B56D7AD-1FF1-4EDB-B212-06EC12CA73FB có vấn đề gì?"
+    expected_intent: ANALYZE_CALL
+  - text: "Máy gọi có lấy được địa chỉ relay không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "xem giup cuoc goi nay voi"
+    expected_intent: ANALYZE_CALL
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# FAIL thiết lập. callee_webrtc.log của thư mục này thật ra do máy caller ghi (CLAUDE.md bẫy #18).
+case_id: case-007
+call_id: D114749E-BF76-4D25-9B22-B1F2B7DAD170
+files: [caller_endcall.log, callee_webrtc.log]
+questions:
+  - "Cuộc gọi này kết thúc ra sao?"          # nhãn mơ hồ (kết cục hay giai đoạn kết thúc?): không chấm intent
+  - text: "Tại sao bên kia không bắt máy?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "thoi gian tu luc goi den luc bao loi la bao lau"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# FAIL media: TURN hỏng thật. Chỉ có WebRTC log.
+case_id: case-008
+call_id: E9D6C112-20D4-4548-918F-7E6BC4BD1A15
+files: [caller_webrtc.log]
+questions:
+  - text: "Phân tích log cuộc gọi này cho mình"
+    expected_intent: ANALYZE_CALL
+  - text: "Có phải do mạng chặn cổng TURN không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi nay loi gi vay"
+    expected_intent: ANALYZE_CALL
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS, chỉ có một file (caller_webrtc). Ground truth SUCCESS dù thiếu log một bên.
+case_id: case-009
+call_id: 5E0800AE-F9D4-497D-9FA1-CD56C3E901E8
+files: [caller_webrtc.log]
+questions:
+  - text: "Cuộc gọi này diễn ra bình thường chứ?"
+    expected_intent: ANALYZE_CALL
+  - text: "Kết nối ICE của bên gọi có ổn định không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "am thanh ben goi co bi mat goi khong"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS, chỉ có WebRTC log của hai bên.
+case_id: case-010
+call_id: 6A7CE985-4A1A-44D1-84B1-DBB0B0B90448
+files: [caller_webrtc.log, callee_webrtc.log]
+questions:
+  - text: "Đánh giá giúp mình cuộc gọi này"
+    expected_intent: ANALYZE_CALL
+  - text: "Độ trễ giữa hai máy có cao không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi nay on chu"
+    expected_intent: ANALYZE_CALL
+  - text: "Đặt giúp mình lịch gọi lại khách lúc 3 giờ chiều"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS. Có `Failed to send TURN message` lúc đổi Wi-Fi sang 4G — nhiễu, không phải lỗi (CLAUDE.md bẫy #7).
+case_id: case-011
+call_id: 70A1F889-9371-4179-8C27-125ED39BA415
+files: [caller_webrtc.log, callee_endcall.log, callee_webrtc.log]
+questions:
+  - text: "Cuộc gọi này có gặp sự cố gì không?"
+    expected_intent: ANALYZE_CALL
+  - text: "Lúc đổi mạng giữa chừng cuộc gọi có bị gián đoạn không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "ben nhan nghe co ro khong"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Log có lỗi TURN mà sao cuộc gọi vẫn được?"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS. Hai bên cùng iOS, chỉ caller có end call log.
+case_id: case-012
+call_id: C8CF631E-0C6B-46E4-92E7-280E7B6A5394
+files: [caller_endcall.log, caller_webrtc.log, callee_webrtc.log]
+questions:
+  - text: "Tổng quan cuộc gọi này thế nào?"
+    expected_intent: ANALYZE_CALL
+  - text: "Jitter và packet loss phía người gọi bao nhiêu?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "mat bao lau thi ben kia nghe may"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Viết caption Facebook về cuộc gọi này"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS. Có sẵn file gõ sai tên `calleer_webrtc.log` (tên sai, nội dung đúng). Loss cuối 0 nhưng từng
+# lên 3,7 %; INVITE gửi lại theo backoff (CLAUDE.md bẫy #3, #13).
+case_id: case-013
+call_id: EE129C8F-EAD0-4302-AB68-920D32F8B8B7
+files: [caller_endcall.log, calleer_webrtc.log, callee_endcall.log, callee_webrtc.log]
+questions:
+  - text: "Cuộc gọi này có điều gì bất thường không?"
+    expected_intent: ANALYZE_CALL
+  - text: "Giữa cuộc gọi có lúc nào tiếng bị ngắt quãng không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Vì sao lời mời gọi phải gửi lại nhiều lần?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi nay co gi la khong"
+    expected_intent: ANALYZE_CALL
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# SUCCESS, chỉ có WebRTC log của hai bên; một câu ghi Call-ID trong câu hỏi.
+case_id: case-014
+call_id: F3D7914B-7270-4A53-AF2D-225B3AA5E8C6
+files: [caller_webrtc.log, callee_webrtc.log]
+questions:
+  - text: "Xem giùm cuộc gọi F3D7914B-7270-4A53-AF2D-225B3AA5E8C6"
+    expected_intent: ANALYZE_CALL
+  - text: "Chất lượng thoại hai bên có tốt không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "ai la nguoi cup may truoc"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+# ---------------------------------------------------------------- 2. Biến thể file (MVP mục 6.3, 6.4)
+
+---
+# F01 — thiếu file một bên: DE7DD314 chỉ đưa log của caller.
+# Kỳ vọng SUCCESS (hạ tin cậy), theo ground truth của 5E0800AE (cũng chỉ một file mà SUCCESS).
+# Câu hỏi mở với mentor: scenario 5 của MVP mục 10 mong UNKNOWN cho ca này.
+case_id: case-015
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: [caller_endcall.log, caller_webrtc.log]
+questions:
+  - text: "Mình chỉ có log của người gọi, phân tích giúp cuộc gọi này"
+    expected_intent: ANALYZE_CALL
+  - text: "Bên nhận có nghe được tiếng không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi nay the nao ban"
+    expected_intent: ANALYZE_CALL
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# F02 — tên file sai loại: end call log của caller mang tên `caller_webrtc.log`
+# (sinh bằng scripts/benchmark-variants/make_variants.py). Loại file phải nhận theo nội dung.
+case_id: case-016
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: [_variants/F02-sai-loai/caller_webrtc.log, callee_endcall.log, callee_webrtc.log]
+questions:
+  - text: "Phân tích các file log mình gửi giúp nhé"
+    expected_intent: ANALYZE_CALL
+  - text: "Thời gian thiết lập cuộc gọi là bao lâu?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi co thanh cong khong"
+    expected_intent: ANALYZE_CALL
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# F03 — file của cuộc khác: log caller của DE7DD314 cộng end call log callee của EE129C8F.
+# File lạ phải bị loại và nêu ở "Giới hạn dữ liệu"; kết luận vẫn theo DE7DD314.
+case_id: case-017
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files:
+  - caller_endcall.log
+  - caller_webrtc.log
+  - success/EE129C8F-EAD0-4302-AB68-920D32F8B8B7/callee_endcall.log
+questions:
+  - text: "Kiểm tra giúp các log của cuộc gọi này"
+    expected_intent: ANALYZE_CALL
+  - text: "Bên nhận có bắt máy không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "cuoc goi nay co loi khong"
+    expected_intent: ANALYZE_CALL
+expected_verdict: SUCCESS
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# UNKNOWN do thiếu file: chỉ có Call-ID, không đính kèm log nào. Signaling của DE7DD314 hoàn hảo nhưng
+# không có log client để kiểm chứng media → UNKNOWN (MVP mục 4.1). Ground truth của cuộc gọi là SUCCESS;
+# UNKNOWN ở đây là đáp án ĐÚNG cho đầu vào này, suy từ luật của MVP, không phải nhãn của mentor.
+case_id: case-018
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "Cuộc gọi này kết quả thế nào?"
+    expected_intent: ANALYZE_CALL
+  - text: "Bên gọi có nghe rõ không?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "kiem tra cuoc goi nay giup minh"
+    expected_intent: ANALYZE_CALL
+expected_verdict: UNKNOWN
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev

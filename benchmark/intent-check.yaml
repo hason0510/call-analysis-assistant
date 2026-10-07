@@ -1,0 +1,123 @@
+# Bộ câu KIỂM TRA intent, viết 2026-10-06 TRƯỚC khi sửa prompt phân loại (prompts/parse-request.system.txt).
+# Không dùng khi sửa prompt — chỉ để xem bản sửa có tổng quát được không, hay chỉ khớp 3 câu sai của tập `dev`.
+#
+#   mvn spring-boot:run -Dspring-boot.run.arguments="--evaluate=benchmark/intent-check.yaml --logs=../ai20k_sample"
+#
+# Chỉ chấm intent: không đính kèm file (files: []), Call-ID có signaling, nên câu trong phạm vi ra report UNKNOWN
+# rất nhanh; expected_verdict để trống.
+# Cố ý nhiều câu ngắn, không dấu, chữ đời thường — đúng kiểu câu AI từng đẩy nhầm ra OUT_OF_SCOPE.
+
+case_id: intent-in-scope
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - "cuoc goi ket thuc the nao"              # nhãn mơ hồ (kết cục hay giai đoạn kết thúc?): không chấm intent
+  - text: "log nay noi gi"
+    expected_intent: ANALYZE_CALL
+  - text: "Cuộc này ổn không?"
+    expected_intent: ANALYZE_CALL
+  - text: "ben nao tat may"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "may ben kia co do chuong khong"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: null
+split: dev
+
+---
+case_id: intent-in-scope-2
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "sao lenh goi bi gui lai"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "goi xong bao lau thi noi chuyen duoc"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Ai là người bắt máy?"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: null
+split: dev
+
+---
+case_id: intent-out-of-scope
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "viet email bao cao su co nay"
+    expected_intent: OUT_OF_SCOPE
+  - text: "dich log nay sang tieng anh"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Cho mình công thức nấu phở"
+    expected_intent: OUT_OF_SCOPE
+  - text: "tom tat tin tuc hom nay"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Làm slide thuyết trình về cuộc gọi này"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: null
+split: dev
+
+---
+case_id: intent-out-of-scope-2
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "ban ten gi"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Viết hàm Java tính MOS"
+    expected_intent: OUT_OF_SCOPE
+  - text: "Hát một bài đi"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: null
+split: dev
+
+---
+# Thêm 2026-10-07: câu có giá trị nhạy cảm, viết kiểu liệt kê. Sanitizer che trước khi tới AI, nên AI thấy
+# [CONTACT_REDACTED] / [IP_REDACTED] / [REDACTED]. Viết trước khi chạy thử, không dùng để sửa prompt.
+# Giá trị đều giả: dải IP tài liệu RFC 5737, JWT tự tạo.
+case_id: intent-redacted-in-scope
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "Thuê bao 0987654321, IP 203.0.113.25, cuộc gọi lỗi, check giúp"
+    expected_intent: ANALYZE_CALL
+  - text: "token eyJhbGciOiJIUzI1NiJ9.eyJ1aWQiOiI0NDcxIn0.ZmFrZXNpZw, kiem tra cuoc goi"
+    expected_intent: ANALYZE_CALL
+  - text: "Authorization: Bearer fakeToken123abc, cuoc goi bi loi, xem giup"
+    expected_intent: ANALYZE_CALL
+  - text: "IP 198.51.100.7, ben nhan khong nghe duoc"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "sdt 0901234567 email test.user@example.com goi loi"
+    expected_intent: ANALYZE_CALL
+expected_verdict: null
+split: dev
+
+---
+# Đối chứng: chỉ nhờ tra cứu giá trị, không hỏi về cuộc gọi — phải giữ OUT_OF_SCOPE sau khi sửa.
+case_id: intent-redacted-out-of-scope
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "IP 203.0.113.25 là của nhà mạng nào?"
+    expected_intent: OUT_OF_SCOPE
+  - text: "giai ma giup token eyJhbGciOiJIUzI1NiJ9.eyJ1aWQiOiI0NDcxIn0.ZmFrZXNpZw"
+    expected_intent: OUT_OF_SCOPE
+  - text: "tra cuu chu thue bao 0987654321"
+    expected_intent: OUT_OF_SCOPE
+expected_verdict: null
+split: dev
+
+---
+# Hồi quy: đúng 3 câu bị xếp OUT_OF_SCOPE khi chạy demo 2026-10-06 (s6c / p3 / p4). Nguyên nhân hoá ra là curl trên
+# Windows làm hỏng chữ có dấu trước khi gửi, không phải prompt (docs/ket-qua-demo-sprint-2.md mục 3). Giữ lại để bắt
+# nếu một lần sửa prompt sau này làm dạng câu liệt kê có giá trị đã che bị đẩy ra ngoài phạm vi thật.
+case_id: intent-redacted-demo-regression
+call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
+files: []
+questions:
+  - text: "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl, IP 113.161.42.7, xem giúp"
+    expected_intent: ANALYZE_CALL
+  - text: "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl, xem giúp"
+    expected_intent: ANALYZE_CALL
+  - text: "Máy 0912345678 gọi lỗi, IP 113.161.42.7, xem giúp"
+    expected_intent: ANALYZE_CALL
+expected_verdict: null
+split: dev
