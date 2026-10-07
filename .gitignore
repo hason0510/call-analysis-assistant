@@ -25,6 +25,11 @@ ai20k_sample/
 !docs/ai-provider-proposal.md
 !docs/design-decisions.md
 !docs/demo-sprint-1.md
+# Tài liệu Sprint 2 (MVP mục 6.6): minh chứng, cách đo, kịch bản và kết quả demo
+!docs/minh-chung-sprint-2.md
+!docs/evaluation-metrics.md
+!docs/demo-sprint-2.md
+!docs/ket-qua-demo-sprint-2.md
 docs/kiem-thu-tay.md
 docs/ket-qua-demo-sprint-1.md
 docs/ket-qua-for-test.md
