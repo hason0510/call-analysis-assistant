@@ -19,4 +19,26 @@ logging:
     root: WARN
     io.hason.callanalysis: INFO
   pattern:
-    console: "%d{HH:mm:ss} %-5level %-32logger{0} %msg%n"
+    # %smsg / %sex: nội dung log và stack trace đi qua Sensitive Data Sanitizer (logback-spring.xml)
+    console: "%d{HH:mm:ss} %-5level %-32logger{0} %smsg%n%sex"
+
+# File Validator (Sprint 2 T3). File mẫu lớn nhất ~0,9 MB; file vượt giới hạn không được đọc
+# nội dung, bị loại và nêu tên ở "Giới hạn dữ liệu".
+call-analysis:
+  files:
+    max-size-per-file: 20MB
+
+# File .env (springboot3-dotenv). Chép giá trị sang System properties vì SanitizerHolder đọc
+# CALL_ANALYSIS_PSEUDONYM_KEY bằng System.getProperty, không qua Spring: Logback dùng sanitizer
+# trước khi có bean nào (xem SanitizerHolder).
+springdotenv:
+  export-to-system-properties: true
+
+# AI provider (Sprint 2). Key KHÔNG ghi ở đây: đặt biến môi trường OPENAI_API_KEY.
+# Không có key thì mọi phân tích lùi về rule verdict, đánh dấu degraded.
+ai:
+  openai:
+    base-url: https://api.openai.com/v1
+    model: gpt-4o-mini
+    api-key: ${OPENAI_API_KEY:}
+    timeout: 30s

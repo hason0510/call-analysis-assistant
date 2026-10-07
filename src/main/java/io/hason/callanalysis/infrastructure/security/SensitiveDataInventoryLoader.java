@@ -55,6 +55,7 @@ public class SensitiveDataInventoryLoader {
                     pattern == null || pattern.isBlank() ? null : Pattern.compile(pattern),
                     DataClassification.valueOf(node.path("classification").asText()),
                     HandlingPolicy.valueOf(node.path("policy").asText()),
+                    node.path("label").asText(null),
                     node.path("rationale").asText("").strip(),
                     SensitiveField.Origin.valueOf(node.path("origin").asText("SAMPLE_REVIEW"))));
         }

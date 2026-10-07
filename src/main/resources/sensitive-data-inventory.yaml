@@ -1,71 +1,40 @@
 # Sensitive Data Inventory (T9) — MVP mục 5.2
 #
-# Để ở dạng dữ liệu chứ không phải tài liệu, vì Sprint 2 (T7 Sanitizer) sẽ nạp thẳng
-# file này làm Policy Engine. Danh sách gốc của MVP được giữ nguyên, phần BỔ SUNG là
-# kết quả rà soát data mẫu ai20k_sample.
+# Để ở dạng dữ liệu chứ không phải tài liệu: T7 Sanitizer (Sprint 2) nạp thẳng file này làm
+# Policy Engine. Danh sách gốc của MVP được giữ nguyên, phần BỔ SUNG là kết quả rà soát data mẫu.
 #
 # classification: PUBLIC | INTERNAL | SENSITIVE | SECRET
 # policy        : ALLOW | MINIMIZE | MASK | PSEUDONYMIZE | DROP
+# label         : nhãn thay thế — DROP → [REDACTED]; MASK → [LABEL_REDACTED];
+#                 PSEUDONYMIZE → LABEL_a81f2c; MINIMIZE → LABEL_a81f (ngắn hơn, đủ phân biệt để debug)
+# match         : tên trường. Khớp cột / khoá JSON, và dạng tên=giá trị, tên: giá trị trong văn bản tự do
+#                 (chỉ với mục KHÔNG có pattern, hoặc mục DROP).
+# pattern       : regex dò trong văn bản tự do. Có nhóm tên bắt đầu bằng `value` thì CHỈ phần đó bị
+#                 thay, phần còn lại giữ để văn bản vẫn đọc được ("a=ice-pwd:[REDACTED]").
+#
+# THỨ TỰ CÁC MỤC LÀ THỨ TỰ ÁP DỤNG:
+#   1. bí mật (DROP) trước, để không mục nào sau "nhìn thấy" chúng;
+#   2. DTLS fingerprint TRƯỚC IP: 68 chuỗi trông như IPv6 và 29 chuỗi trông như địa chỉ MAC trong
+#      success/ + fail/ đều là mảnh của fingerprint — che IP trước thì băm nát chuỗi fingerprint;
+#   3. chuỗi có cấu trúc (candidate, raddr, TURN :3478, IP nội bộ đã che dở) trước IP chung;
+#   4. định danh (PSEUDONYMIZE) cuối cùng.
+#
+# Rà soát success/ + fail/ (13 cuộc, 2026-10-02): 8 239 IPv4 (8 181 công cộng), 304 IPv6 thật,
+# 17 a=ice-pwd trong SDP, 17 DTLS fingerprint, 196 appUserId trong văn bản tự do của WebRTC log;
+# 0 số điện thoại, 0 email, 0 JWT, 0 Authorization header, 0 API key — S01-S04 dùng dữ liệu tự tạo.
 
 fields:
 
-  # ---------- Từ danh sách gốc của MVP mục 5.2 ----------
-
-  - id: call-quality-metrics
-    match: ["audio.audioMos", "audio.packetLostPercent", "audio.jitter",
-            "transport.currentRttMs", "transport.rttMs", "endCall.duration"]
-    classification: INTERNAL
-    policy: ALLOW
-    rationale: "Chỉ số chất lượng, không định danh ai. Là dữ liệu chính để phân tích."
-    origin: MVP_5_2
-
-  - id: network-context
-    match: ["isp", "asn", "countryCode"]
-    classification: INTERNAL
-    policy: ALLOW
-    rationale: "Ngữ cảnh mạng ở mức nhà mạng/quốc gia, không định danh cá nhân."
-    origin: MVP_5_2
-
-  - id: phone-and-email
-    match: ["phone", "phoneNumber", "email"]
-    pattern: "(\\+?84|0)\\d{9,10}|[\\w.+-]+@[\\w-]+\\.[\\w.]+"
-    classification: SENSITIVE
-    policy: MASK
-    rationale: "Định danh trực tiếp người dùng."
-    origin: MVP_5_2
-
-  - id: client-ip
-    match: ["ip", "address", "resolveIp", "transport.localCandidate.ip",
-            "transport.remoteCandidate.ip"]
-    # IPv4 | IPv6 dạng đầy đủ 8 nhóm | IPv6 rút gọn có "::" (không khớp giờ kiểu 10:00:06).
-    pattern: "\\b\\d{1,3}(\\.\\d{1,3}){3}\\b|\\b[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}\\b|\\b([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){0,5}\\b"
-    classification: SENSITIVE
-    policy: MASK
-    rationale: >-
-      Địa chỉ IP client định danh được vị trí và thuê bao. Phải bắt cả IPv6: data mẫu có
-      305 địa chỉ IPv6 công cộng đầy đủ, không bị che — ngoài cột TSV và trường JSON "ip",
-      có 43 địa chỉ nằm trong văn bản tự do dạng Cand[...:[IPv6]:port:host...] của libwebrtc,
-      nơi không có tên trường để khớp.
-    origin: MVP_5_2
-
-  - id: user-and-device-id
-    match: ["appUserId", "callUserId", "partnerAppUserId", "partnerCallUserId",
-            "userId", "deviceId"]
-    classification: SENSITIVE
-    policy: PSEUDONYMIZE
-    rationale: "Định danh nội bộ. Vẫn cần giữ tính nhất quán để correlate giữa các nguồn."
-    origin: MVP_5_2
-
-  - id: session-id
-    match: ["sessionId", "csid", "callSessionId", "fromTag", "toTag"]
-    classification: SENSITIVE
-    policy: PSEUDONYMIZE
-    rationale: "Cần giữ tính nhất quán vì dùng để ghép sự kiện giữa ba nguồn log."
-    origin: MVP_5_2
+  # ---------- 1. Bí mật: DROP ----------
 
   - id: credentials
-    match: ["authorization", "token", "apiKey", "jwt", "password"]
-    pattern: "(?i)bearer\\s+[\\w.-]+|eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+"
+    match: ["authorization", "token", "apiKey", "api_key", "x-api-key", "accessToken",
+            "access_token", "refreshToken", "refresh_token", "jwt", "password", "secret",
+            "clientSecret", "client_secret"]
+    # Bearer …, JWT, và các dạng API key có tiền tố cố định: sk-… (OpenAI), AKIA… (AWS),
+    # AIza… (Google) — để bắt được cả khi key đứng một mình trong exception (S03).
+    pattern: "(?i)bearer\\s+[\\w.~+/-]+=*|eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+|\\bsk-[A-Za-z0-9_-]{20,}|\\bAKIA[0-9A-Z]{16}\\b|\\bAIza[0-9A-Za-z_-]{35}"
+    label: SECRET
     classification: SECRET
     policy: DROP
     rationale: "Bí mật xác thực. Không được gửi sang AI, không được ghi ra log."
@@ -73,6 +42,7 @@ fields:
 
   - id: turn-credential
     match: ["username", "credential"]
+    label: SECRET
     classification: SECRET
     policy: DROP
     rationale: >-
@@ -81,18 +51,58 @@ fields:
       chỉ có urls và tham số probe), nhưng tập held-out có thể có.
     origin: MVP_5_2
 
-  - id: infrastructure-detail
-    match: ["service", "podName", "hostName"]
-    classification: INTERNAL
-    policy: MINIMIZE
-    rationale: "Lộ cấu trúc hệ thống nội bộ. Giữ đủ để debug, không gửi chi tiết sang AI."
-    origin: MVP_5_2
+  - id: ice-credentials
+    match: ["ufrag", "pwd", "ice-ufrag", "ice-pwd"]
+    # Bốn dạng: "ufrag X" trong chuỗi candidate; "u/p=X" của libwebrtc; "a=ice-ufrag:X" /
+    # "a=ice-pwd:X" trong SDP; và Cand[…:type:relAddr:relPort:UFRAG:PWD:netId:cost:gen] — dạng
+    # ToString của cricket::Candidate, mang CẢ ufrag lẫn mật khẩu.
+    # Bản Sprint 1 chỉ có hai dạng đầu: 17 dòng a=ice-pwd trong SDP của end call log và mật khẩu
+    # trong 690 dòng Cand[] của WebRTC log (success/ + fail/) lọt qua không bị che. Dạng Cand[]
+    # chỉ lộ ra khi quét bản đã làm sạch bằng công cụ độc lập.
+    pattern: "ufrag (?<value>[\\w+/]+)|u/p=(?<value2>[\\w+/]+)|a=ice-(?:ufrag|pwd):(?<value3>[\\w+/]+)|:(?:host|srflx|prflx|relay|local):(?:\\[[^\\]]*\\]|[^:\\[\\]]*):\\d+:(?<value4>[A-Za-z0-9+/]+):(?<value5>[A-Za-z0-9+/]*):\\d+:\\d+:\\d+\\]"
+    label: SECRET
+    classification: SECRET
+    policy: DROP
+    rationale: >-
+      Thông tin xác thực phiên ICE, có thể dùng để chen vào phiên đang chạy. Data mẫu có 262
+      chuỗi "ufrag …", 26 chuỗi "u/p=…", và (success/ + fail/) 17 dòng a=ice-pwd trong SDP cùng
+      690 dòng Cand[] mang ufrag:mật khẩu.
+    origin: SAMPLE_REVIEW
 
-  # ---------- BỔ SUNG sau khi rà soát data mẫu ai20k_sample ----------
+  # ---------- 2. Dấu vết thiết bị trong SDP: phải trước IP ----------
+
+  - id: dtls-fingerprint
+    match: ["fingerprint"]
+    pattern: "(?i)fingerprint:\\s*sha-\\d+\\s+(?<value>[0-9A-F]{2}(?::[0-9A-F]{2})+)"
+    label: FINGERPRINT
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      Vân tay chứng chỉ DTLS trong SDP (17 lần ở success/ + fail/) — định danh ổn định của thiết
+      bị trong phiên, không có giá trị phân tích. Phải xử lý TRƯỚC IP: 68 chuỗi trông như IPv6 và
+      29 chuỗi trông như địa chỉ MAC đều là mảnh của fingerprint.
+    origin: SAMPLE_REVIEW
+
+  # ---------- 3. Địa chỉ: chuỗi có cấu trúc trước, IP chung sau ----------
+
+  - id: user-content-url
+    match: ["url"]
+    # Mọi URL http(s) trừ tài liệu công khai của webrtc.org / ietf.org (324/328 URL của
+    # success/ + fail/ là hai host này).
+    pattern: "https?://(?!(?:www\\.)?(?:webrtc|ietf)\\.org\\b)[^\\s\"'<>\\\\]+"
+    label: URL
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      URL nội dung của người dùng và host nội bộ. Data mẫu có URL ảnh nền cuộc gọi
+      store.abc-api.net/background_call/… — 3 lần đã che sẵn nhưng 1 lần (2D9057AA) để nguyên.
+    origin: SAMPLE_REVIEW
 
   - id: ice-candidate-string
     match: ["sdpCandidate", "candidate"]
-    pattern: "candidate:\\d+ \\d+ \\w+ \\d+ [\\da-fA-F:.]+ \\d+ typ \\w+"
+    # Chỉ thay địa chỉ; giữ "typ relay / srflx / host" vì đó là thông tin phân tích.
+    pattern: "candidate:\\d+ \\d+ \\w+ \\d+ (?<value>[\\da-fA-F:.]+) \\d+ typ \\w+"
+    label: IP
     classification: SENSITIVE
     policy: MASK
     rationale: >-
@@ -102,7 +112,8 @@ fields:
 
   - id: relay-real-address
     match: ["raddr", "rport"]
-    pattern: "raddr [\\da-fA-F:.]+ rport \\d+"
+    pattern: "raddr (?<value>[\\da-fA-F:.]+) rport \\d+"
+    label: IP
     classification: SENSITIVE
     policy: MASK
     rationale: >-
@@ -112,38 +123,123 @@ fields:
 
   - id: turn-server-endpoint
     match: ["turnServer", "Remote"]
-    pattern: "\\b\\d{1,3}(\\.\\d{1,3}){3}:3478\\b"
+    # Chỉ thay địa chỉ, giữ cổng 3478 — cổng là thông tin chẩn đoán TURN.
+    pattern: "\\b(?<value>\\d{1,3}(\\.\\d{1,3}){3}):3478\\b"
+    label: TURN
     classification: INTERNAL
     policy: MINIMIZE
     rationale: >-
-      Địa chỉ TURN server của hệ thống (14.238.152.70:3478, 116.103.111.243:3478...)
-      lộ hạ tầng nội bộ. Trong data mẫu chúng xuất hiện đầy đủ, không bị che.
-    origin: SAMPLE_REVIEW
-
-  - id: ice-credentials
-    match: ["ufrag", "pwd", "ice-ufrag", "ice-pwd"]
-    pattern: "ufrag [\\w+/]+|u/p=[\\w+/]+"
-    classification: SECRET
-    policy: DROP
-    rationale: >-
-      Thông tin xác thực phiên ICE, có thể dùng để chen vào phiên đang chạy. Data mẫu có 262
-      chuỗi "ufrag …" và 26 chuỗi "u/p=…" không bị che.
+      Địa chỉ TURN server của hệ thống (14.238.152.70:3478, 116.103.111.243:3478...) lộ hạ tầng
+      nội bộ. Trong data mẫu chúng xuất hiện đầy đủ, không bị che. MINIMIZE thay bằng mã ngắn ổn
+      định (TURN_a81f) để vẫn phân biệt được các server khi debug.
     origin: SAMPLE_REVIEW
 
   - id: local-network-address
     match: ["Net", "networkType"]
-    pattern: "\\b(192\\.168|10\\.|172\\.(1[6-9]|2\\d|3[01])|29\\.)\\d+"
+    # Đủ 4 octet; octet cuối có thể đã bị che dở thành "x" (data mẫu: 192.168.26.x, 29.0.0.x).
+    pattern: "\\b(?:192\\.168|172\\.(?:1[6-9]|2\\d|3[01]))(?:\\.(?:\\d{1,3}|x)){2}\\b|\\b(?:10|29)(?:\\.(?:\\d{1,3}|x)){3}\\b"
+    label: IP
     classification: SENSITIVE
     policy: MASK
     rationale: >-
-      Địa chỉ mạng nội bộ của thiết bị người dùng. Data mẫu đã che một phần
-      (192.168.26.x) nhưng không được dựa vào việc đó — pipeline phải tự che.
-      Dải 29.x có trong pattern vì nhà mạng di động dùng nó làm địa chỉ nội bộ cho giao diện
-      ccmni (data mẫu: Net[ccmni1:29.0.0.x]), dù về lý thuyết đây không phải dải riêng.
+      Địa chỉ mạng nội bộ của thiết bị người dùng. Data mẫu đã che một phần (192.168.26.x)
+      nhưng không được dựa vào việc đó — pipeline phải tự che. Dải 29.x có trong pattern vì nhà
+      mạng di động dùng nó làm địa chỉ nội bộ cho giao diện ccmni (data mẫu: Net[ccmni1:29.0.0.x]),
+      dù về lý thuyết đây không phải dải riêng.
     origin: SAMPLE_REVIEW
+
+  - id: client-ip
+    match: ["ip", "address", "resolveIp", "transport.localCandidate.ip",
+            "transport.remoteCandidate.ip", "transport.localCandidate.address",
+            "transport.remoteCandidate.address"]
+    # IPv4 | IPv6 dạng đầy đủ 8 nhóm | IPv6 rút gọn có "::" (không khớp giờ kiểu 10:00:06)
+    # | IPv4 / IPv6 đã bị che DỞ ở phần cuối ("22.202.73.x", "2402:800:75d9:x:x:x:x:x"): phần còn
+    # lại vẫn lộ dải mạng của thuê bao — không được dựa vào việc nguồn đã che một phần.
+    pattern: "\\b\\d{1,3}(\\.\\d{1,3}){3}\\b|\\b[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}\\b|\\b([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){0,5}\\b|\\b\\d{1,3}(\\.\\d{1,3}){2}\\.x\\b|\\b[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){1,6}(:x)+\\b"
+    label: IP
+    classification: SENSITIVE
+    policy: MASK
+    rationale: >-
+      Địa chỉ IP client định danh được vị trí và thuê bao. Phải bắt cả IPv6: data mẫu có
+      305 địa chỉ IPv6 công cộng đầy đủ, không bị che — ngoài cột TSV và trường JSON "ip",
+      có 43 địa chỉ nằm trong văn bản tự do dạng Cand[...:[IPv6]:port:host...] của libwebrtc,
+      nơi không có tên trường để khớp.
+    origin: MVP_5_2
+
+  - id: phone-and-email
+    match: ["phone", "phoneNumber", "email"]
+    # Di động VN 10 số đầu 03/05/07/08/09, cố định 11 số đầu 02; +84 / 84 thay số 0.
+    # Có ranh giới hai đầu: bản cũ (\+?84|0)\d{9,10} không ranh giới, khớp nhầm đuôi UUID của
+    # requestId ("…-845071325831") — "số điện thoại" duy nhất nó tìm được trong success/ + fail/ —
+    # và khớp cả timestamp mili giây ("1789700842905" chứa "0700842905").
+    pattern: "(?<![\\w.-])(\\+84|84|0)([35789]\\d{8}|2\\d{9})(?![\\w])|[\\w.+-]+@[\\w-]+\\.[\\w.]+"
+    label: CONTACT
+    classification: SENSITIVE
+    policy: MASK
+    rationale: "Định danh trực tiếp người dùng. Data mẫu không có số điện thoại hay email thật nào."
+    origin: MVP_5_2
+
+  # ---------- 4. Định danh: PSEUDONYMIZE / MINIMIZE ----------
+
+  - id: user-and-device-id
+    match: ["appUserId", "callUserId", "partnerAppUserId", "partnerCallUserId", "userId", "user_id"]
+    label: USER
+    classification: SENSITIVE
+    policy: PSEUDONYMIZE
+    rationale: >-
+      Định danh nội bộ. Vẫn cần giữ tính nhất quán để correlate giữa các nguồn. Giá trị nhận được
+      ở chỗ có cấu trúc phải được thay ở MỌI nơi: appUserId xuất hiện 196 lần trong văn bản tự do
+      của WebRTC log (stream_ids:stream_<appUserId>, 103/103 trùng appUserId của signaling).
+    origin: MVP_5_2
+
+  - id: device-id
+    match: ["deviceId", "device_id"]
+    label: DEVICE
+    classification: SENSITIVE
+    policy: PSEUDONYMIZE
+    rationale: >-
+      MVP mục 5.2. Trong data mẫu nằm ở văn bản tự do của end call log dạng
+      "deviceId=DHV3MGQG53I" (10 lần), không phải cột — phải dò cả dạng tên=giá trị.
+    origin: MVP_5_2
+
+  - id: session-id
+    match: ["sessionId", "csid", "callSessionId", "fromTag", "toTag"]
+    label: SESSION
+    classification: SENSITIVE
+    policy: PSEUDONYMIZE
+    rationale: "Cần giữ tính nhất quán vì dùng để ghép sự kiện giữa ba nguồn log."
+    origin: MVP_5_2
+
+  - id: infrastructure-detail
+    match: ["service", "podName", "hostName"]
+    label: SERVICE
+    classification: INTERNAL
+    policy: MINIMIZE
+    rationale: "Lộ cấu trúc hệ thống nội bộ. Giữ đủ để debug, không gửi chi tiết sang AI."
+    origin: MVP_5_2
+
+  # ---------- 5. Được giữ nguyên: ALLOW ----------
+
+  - id: call-quality-metrics
+    match: ["audio.audioMos", "audio.packetLostPercent", "audio.jitter",
+            "transport.currentRttMs", "transport.rttMs", "endCall.duration"]
+    label: METRIC
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: "Chỉ số chất lượng, không định danh ai. Là dữ liệu chính để phân tích."
+    origin: MVP_5_2
+
+  - id: network-context
+    match: ["isp", "asn", "countryCode"]
+    label: NETWORK
+    classification: INTERNAL
+    policy: ALLOW
+    rationale: "Ngữ cảnh mạng ở mức nhà mạng/quốc gia, không định danh cá nhân."
+    origin: MVP_5_2
 
   - id: user-facing-fail-reason
     match: ["failReason", "codeReason"]
+    label: REASON
     classification: INTERNAL
     policy: ALLOW
     rationale: >-
@@ -153,6 +249,7 @@ fields:
 
   - id: request-correlation-id
     match: ["requestId"]
+    label: REQUEST
     classification: INTERNAL
     policy: ALLOW
     rationale: >-

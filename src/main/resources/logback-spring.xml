@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Log ứng dụng đi qua Sensitive Data Sanitizer (MVP mục 6.2, ca kiểm thử S08).
+  %smsg / %sex thay cho %msg / %ex trong logging.pattern.console (application.yml).
+  Phần còn lại giữ nguyên cấu hình mặc định của Spring Boot.
+-->
+<configuration>
+    <conversionRule conversionWord="smsg"
+                    class="io.hason.callanalysis.infrastructure.logging.SanitizingMessageConverter"/>
+    <conversionRule conversionWord="sex"
+                    class="io.hason.callanalysis.infrastructure.logging.SanitizingThrowableConverter"/>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
