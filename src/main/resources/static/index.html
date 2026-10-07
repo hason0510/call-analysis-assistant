@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phân tích cuộc gọi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 8h3l2-5 4 10 2-5h3' fill='none' stroke='%230f766e' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Phân tích cuộc gọi</span>
+    <span class="topbar-note">Log được làm sạch dữ liệu nhạy cảm trước khi gửi AI</span>
+  </header>
+
+  <main class="layout">
+    <!-- Cột trái: câu hỏi + file. Một câu hỏi, một report — không phải khung chat (MVP mục 9). -->
+    <form id="ask" class="ask" novalidate>
+      <label class="field-label" for="question">Bạn muốn biết gì về cuộc gọi này?</label>
+      <textarea id="question" name="message" rows="4"
+                placeholder="Ví dụ: Vì sao bên nhận không nghe được?"></textarea>
+      <div class="suggestions" aria-label="Câu hỏi gợi ý">
+        <button type="button" class="suggestion">Phân tích cuộc gọi này giúp mình</button>
+        <button type="button" class="suggestion">Vì sao bên nhận không nghe được?</button>
+        <button type="button" class="suggestion">Cuộc gọi có bị mất gói không?</button>
+      </div>
+
+      <span class="field-label" id="files-label">Log cuộc gọi</span>
+      <div id="dropzone" class="dropzone" aria-labelledby="files-label">
+        <p class="dropzone-text">Kéo thả file vào đây hoặc
+          <label class="link-button" for="file-input">chọn file</label></p>
+        <p class="hint">End call log và WebRTC log của caller, callee. Signaling tự lấy theo Call-ID.</p>
+        <input id="file-input" type="file" multiple class="visually-hidden">
+      </div>
+      <ul id="file-list" class="file-list" aria-live="polite"></ul>
+
+      <button id="submit" type="submit" class="primary" aria-describedby="submit-hint">Phân tích</button>
+      <p id="submit-hint" class="hint submit-hint" aria-live="polite"></p>
+
+      <div id="understood" class="understood" hidden>
+        <span class="field-label">Câu hỏi được hiểu là</span>
+        <p id="understood-text"></p>
+      </div>
+    </form>
+
+    <!-- Cột phải: report, hoặc lời từ chối / lỗi. -->
+    <section id="result" class="result" aria-live="polite">
+      <div id="empty" class="empty">
+        <h1>Chưa có report</h1>
+        <p>Đính kèm log, đặt câu hỏi rồi bấm Phân tích. Report gồm:</p>
+        <ol id="empty-sections" class="empty-sections"></ol>
+      </div>
+    </section>
+  </main>
+
+  <template id="banner-template">
+    <div class="banner" role="status">
+      <span class="banner-icon" aria-hidden="true"></span>
+      <div><p class="banner-title"></p><p class="banner-text"></p></div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

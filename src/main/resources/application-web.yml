@@ -1,0 +1,16 @@
+# Profile "web": Chat API + Web UI (Sprint 2 T1, T2).
+#   mvn spring-boot:run -Dspring-boot.run.profiles=web
+# Không bật profile này thì app chạy kiểu CLI như Sprint 1 (web-application-type: none).
+spring:
+  main:
+    web-application-type: servlet
+  servlet:
+    multipart:
+      # Giới hạn của multipart phải LỚN hơn call-analysis.files.max-size-per-file (20 MB): file quá cỡ
+      # cần tới được File Validator để bị loại RIÊNG và nêu tên ở "Giới hạn dữ liệu" (MVP mục 6.4, F04).
+      # Multipart chặn trước thì cả request hỏng, người dùng không biết file nào gây lỗi.
+      max-file-size: 100MB
+      max-request-size: 300MB
+
+server:
+  port: 8080
