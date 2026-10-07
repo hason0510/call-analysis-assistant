@@ -3,7 +3,6 @@ package io.hason.callanalysis.service;
 import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.parse.DetectedLogType;
 import io.hason.callanalysis.domain.parse.EndCallLogParser;
-import io.hason.callanalysis.domain.parse.FileTypeDetector;
 import io.hason.callanalysis.domain.parse.ParseContext;
 import io.hason.callanalysis.domain.parse.ParseResult;
 import io.hason.callanalysis.domain.parse.ParseWarning;
@@ -14,11 +13,17 @@ import io.hason.callanalysis.domain.signaling.SignalingNormalizer;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 import io.hason.callanalysis.domain.timeline.TimelineBuilder;
 import io.hason.callanalysis.domain.timeline.TimelineNote;
+import io.hason.callanalysis.domain.validation.AttachedFile;
+import io.hason.callanalysis.domain.validation.FileValidation;
+import io.hason.callanalysis.domain.validation.FileValidation.RejectedFile;
+import io.hason.callanalysis.domain.validation.FileValidator;
 import io.hason.callanalysis.service.port.SignalingSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.unit.DataSize;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,22 +38,33 @@ import java.util.Map;
 public class CallLogNormalizationService {
 
     private final SignalingSource signalingSource;
+    private final FileValidator fileValidator;
 
-    private final FileTypeDetector detector = new FileTypeDetector();
     private final EndCallLogParser endCallParser = new EndCallLogParser();
     private final WebRtcLogParser webRtcParser = new WebRtcLogParser();
     private final SignalingNormalizer signalingNormalizer = new SignalingNormalizer();
     private final TimelineBuilder timelineBuilder = new TimelineBuilder();
 
+    @Autowired
+    public CallLogNormalizationService(SignalingSource signalingSource,
+                                       @Value("${call-analysis.files.max-size-per-file:20MB}") DataSize maxFileSize) {
+        this.signalingSource = signalingSource;
+        this.fileValidator = new FileValidator(maxFileSize.toBytes());
+    }
+
+    /** Giới hạn kích thước mặc định của {@link FileValidator}. */
     public CallLogNormalizationService(SignalingSource signalingSource) {
         this.signalingSource = signalingSource;
+        this.fileValidator = new FileValidator();
     }
 
     /** Kết quả parse một file đính kèm, kèm loại đã nhận diện được. */
     public record FileOutcome(String fileName, DetectedLogType detectedType, Leg leg,
                               int lineCount, ParseResult result) {}
 
-    public record CallOutcome(String callId, ParseResult signaling, List<FileOutcome> files) {
+    /** @param rejected file bị File Validator loại, kèm lý do — không được parse */
+    public record CallOutcome(String callId, ParseResult signaling, List<FileOutcome> files,
+                              List<RejectedFile> rejected) {
 
         public ParseResult combined() {
             ParseResult all = signaling;
@@ -61,11 +77,22 @@ public class CallLogNormalizationService {
 
     /** Chuẩn hoá rồi dựng luôn timeline — đầu vào cho T6 (chỉ số) và T7 (evidence). */
     public CallTimeline buildTimeline(String callId, Map<String, List<String>> attachedFiles) {
+        return buildTimeline(callId, toAttached(attachedFiles));
+    }
+
+    /**
+     * @param callId Call-ID đang phân tích; null thì lấy Call-ID mà end call log đính kèm khai báo
+     */
+    public CallTimeline buildTimeline(String callId, List<AttachedFile> attachedFiles) {
+        // Kiểm file TRƯỚC khi truy vấn: khi không ai nói Call-ID, chính bước kiểm mới biết nó.
+        FileValidation validation = fileValidator.validate(callId, attachedFiles);
+        callId = validation.callIdOrPlaceholder();
+
         // Truy vấn MỘT lần rồi dùng lại: trước đây hàm này gọi fetchByCallId hai lượt,
         // một lượt cho normalize và một lượt cho leg, tức hai vòng tới Elasticsearch.
         List<TimelineNote> seedNotes = new ArrayList<>();
-        SignalingFetch fetch = fetchSafely(callId, seedNotes);
-        CallOutcome outcome = normalize(callId, attachedFiles, fetch);
+        SignalingFetch fetch = fetchSafely(validation.callId(), seedNotes);
+        CallOutcome outcome = normalize(validation, fetch);
         LegAssignment legs = LegAssignment.fromFirstInitCall(
                 fetch == null ? List.of() : fetch.records());
 
@@ -83,6 +110,12 @@ public class CallLogNormalizationService {
      * UncheckedIOException, còn ES client ném ElasticsearchException cho lỗi phía server.
      */
     private SignalingFetch fetchSafely(String callId, List<TimelineNote> notes) {
+        if (callId == null) {
+            notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
+                    "Không xác định được Call-ID (không được cung cấp, không có end call log hợp lệ)"
+                            + " nên không truy vấn được signaling"));
+            return null;
+        }
         try {
             return signalingSource.fetchByCallId(callId);
         } catch (RuntimeException e) {
@@ -108,15 +141,12 @@ public class CallLogNormalizationService {
      */
     private static List<TimelineNote> attachedFileWarningNotes(CallOutcome outcome) {
         List<TimelineNote> notes = new ArrayList<>();
+        // File bị loại không được phân tích; không báo thì người dùng tưởng file đó đã được
+        // xét (MVP mục 6.4, ca F02-F04).
+        for (RejectedFile file : outcome.rejected()) {
+            notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION, file.message()));
+        }
         for (FileOutcome file : outcome.files()) {
-            // File không nhận diện được bị bỏ qua hoàn toàn; không báo thì người dùng
-            // tưởng file đó đã được phân tích (MVP mục 6.4, ca F02 / F04).
-            if (file.detectedType() == DetectedLogType.UNKNOWN) {
-                notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION,
-                        file.fileName() + ": " + (file.lineCount() == 0 ? "file rỗng" : "không nhận diện được loại log")
-                                + " (không phải end call log hay WebRTC log), đã bỏ qua"));
-                continue;
-            }
             List<ParseWarning> warnings = file.result().warnings();
             if (warnings.isEmpty()) {
                 continue;
@@ -177,19 +207,24 @@ public class CallLogNormalizationService {
     }
 
     public CallOutcome normalize(String callId, Map<String, List<String>> attachedFiles) {
-        return normalize(callId, attachedFiles, signalingSource.fetchByCallId(callId));
+        return normalize(callId, toAttached(attachedFiles));
     }
 
-    private CallOutcome normalize(String callId, Map<String, List<String>> attachedFiles,
-                                  SignalingFetch fetch) {
+    public CallOutcome normalize(String callId, List<AttachedFile> attachedFiles) {
+        FileValidation validation = fileValidator.validate(callId, attachedFiles);
+        return normalize(validation, validation.callId() == null
+                ? null : signalingSource.fetchByCallId(validation.callId()));
+    }
+
+    private CallOutcome normalize(FileValidation validation, SignalingFetch fetch) {
+        String callId = validation.callIdOrPlaceholder();
         ParseResult signaling = signalingNormalizer.normalize(fetch);
 
         List<FileOutcome> outcomes = new ArrayList<>();
-        for (Map.Entry<String, List<String>> entry : orderedByName(attachedFiles).entrySet()) {
-            String fileName = entry.getKey();
-            List<String> lines = entry.getValue();
-
-            DetectedLogType type = detector.detect(lines);
+        for (FileValidation.ValidFile file : validation.accepted()) {
+            String fileName = file.name();
+            List<String> lines = file.lines();
+            DetectedLogType type = file.type();
             // Signaling KHÔNG lấy từ file đính kèm mà truy vấn từ Elasticsearch.
             //
             // MVP mục 1.2 phân vai rõ: end call log và WebRTC log là "người dùng đính kèm",
@@ -213,13 +248,12 @@ public class CallLogNormalizationService {
             };
             outcomes.add(new FileOutcome(fileName, type, leg, lines.size(), result));
         }
-        return new CallOutcome(callId, signaling, List.copyOf(outcomes));
+        return new CallOutcome(callId, signaling, List.copyOf(outcomes), validation.rejected());
     }
 
-    private static Map<String, List<String>> orderedByName(Map<String, List<String>> files) {
-        Map<String, List<String>> ordered = new LinkedHashMap<>();
-        files.keySet().stream().sorted().forEach(k -> ordered.put(k, files.get(k)));
-        return ordered;
+    /** Nội dung đã đọc sẵn (test, lệnh cũ): kích thước tính lại từ nội dung. */
+    private static List<AttachedFile> toAttached(Map<String, List<String>> files) {
+        return files.entrySet().stream().map(e -> AttachedFile.of(e.getKey(), e.getValue())).toList();
     }
 
     /**

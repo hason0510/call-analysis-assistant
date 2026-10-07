@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "qualityFlag", "issueCategory", "confidenceLevel", "summary", "evidenceIds", "analysis", "suggestions"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["SUCCESS", "FAIL", "UNKNOWN"] },
+    "qualityFlag": { "type": "boolean" },
+    "issueCategory": {
+      "type": "string",
+      "enum": ["NETWORK_PACKET_LOSS", "NETWORK_DELAY_JITTER", "ICE_FAILURE", "TURN_FAILURE", "SIGNALING_FAILURE", "UNKNOWN", "NONE"],
+      "description": "NONE khi verdict SUCCESS và qualityFlag false"
+    },
+    "confidenceLevel": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+    "summary": { "type": "string", "description": "1-2 câu tiếng Việt" },
+    "evidenceIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Chỉ dùng ID có trong context, dạng EV01"
+    },
+    "analysis": { "type": "string" },
+    "suggestions": { "type": "array", "items": { "type": "string" } }
+  }
+}

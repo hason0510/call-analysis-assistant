@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intent", "focus"],
+  "properties": {
+    "intent": { "type": "string", "enum": ["ANALYZE_CALL", "ANALYZE_WITH_FOCUS", "OUT_OF_SCOPE"] },
+    "focus": {
+      "type": "string",
+      "description": "Khía cạnh được hỏi, chép theo chữ của người dùng, ngắn gọn. Chuỗi rỗng khi intent khác ANALYZE_WITH_FOCUS"
+    }
+  }
+}

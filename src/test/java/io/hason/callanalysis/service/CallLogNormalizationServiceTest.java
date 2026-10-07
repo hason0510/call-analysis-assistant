@@ -94,12 +94,14 @@ class CallLogNormalizationServiceTest {
     @Test
     @DisplayName("401 rồi allocate thành công là bắt tay chuẩn -> KHÔNG gắn cờ TURN hỏng")
     void turnErrorThenSuccessIsNotFlagged() {
-        RuleSignals s = signalsFrom(Map.of("caller_webrtc.log", List.of(
+        Map<String, List<String>> files = Map.of("caller_webrtc.log", List.of(
                 turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
                 turnLine("000:102", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
-                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65"))));
+                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65")));
 
-        assertThat(s.turnAllocationFailed()).isFalse();
+        assertThat(signalsFrom(files).turnAllocationFailed()).isFalse();
+        // và không trích dòng TURN nào làm căn cứ lỗi
+        assertThat(basisFrom(files)).isEmpty();
     }
 
     /** Dòng TURN theo format Android thật (703100CF); IP thay bằng dải tài liệu 203.0.113.0/24. */
@@ -240,16 +242,6 @@ class CallLogNormalizationServiceTest {
             assertThat(e.sourceRef().lineNumber()).isEqualTo(3);
             assertThat(e.attribute("message")).contains("Failed to send TURN message, error: 65");
         });
-    }
-
-    @Test
-    @DisplayName("TURN có lỗi 401 rồi thành công -> KHÔNG trích dòng TURN nào làm căn cứ lỗi")
-    void healthyTurnGivesNoBasis() {
-        assertThat(basisFrom(Map.of("caller_webrtc.log", List.of(
-                turnLine("000:070", "TURN allocate request sent, id=5a6778756b6a"),
-                turnLine("000:102", "Received TURN allocate error response, id=5a6778756b6a, code=401, rtt=32"),
-                turnLine("000:137", "TURN allocate requested successfully, id=57354a677079, code=0, rtt=65")))))
-                .isEmpty();
     }
 
     @Test
@@ -402,14 +394,7 @@ class CallLogNormalizationServiceTest {
 
         assertThat(limitations).anyMatch(s -> s.contains("Thiếu end call log của callee"));
         assertThat(limitations).anyMatch(s -> s.contains("Thiếu WebRTC log của cả hai bên"));
-    }
-
-    @Test
-    @DisplayName("đính kèm đủ log của một bên thì không báo thiếu bên đó")
-    void presentLogIsNotReportedAsMissing() {
-        List<String> limitations = limitationsOf(
-                Map.of("caller_endcall.log", endCallLog("CALL-1")));
-
+        // bên đã đính kèm đủ thì không bị báo thiếu
         assertThat(limitations).noneMatch(s -> s.contains("end call log của caller"));
     }
 
@@ -481,5 +466,55 @@ class CallLogNormalizationServiceTest {
             assertThat(q.mosBelowThreshold()).isZero();
             assertThat(q.mediaPoor()).isZero();
         });
+    }
+
+    @Test
+    @DisplayName("ca F03: end call log của cuộc gọi khác bị LOẠI — không event nào của nó lọt vào timeline")
+    void foreignEndCallLogIsExcludedFromTimeline() {
+        // Sprint 1 chỉ cảnh báo rồi vẫn parse file này, nên log của cuộc gọi khác góp vào verdict.
+        CallTimeline timeline = new CallLogNormalizationService(
+                new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
+                .buildTimeline("CALL-1", Map.of(
+                        "caller_endcall.log", endCallLog("CALL-1"),
+                        "callee_endcall.log", endCallLog("CALL-KHAC")));
+
+        assertThat(timeline.allEvents())
+                .noneMatch(e -> e.sourceRef().fileName().equals("callee_endcall.log"))
+                .anyMatch(e -> e.sourceRef().fileName().equals("caller_endcall.log"));
+        assertThat(timeline.notes()).extracting(TimelineNote::message)
+                .anyMatch(m -> m.contains("callee_endcall.log") && m.contains("đã loại khỏi phân tích"));
+    }
+
+    @Test
+    @DisplayName("không truyền Call-ID -> lấy theo end call log và vẫn truy vấn được signaling")
+    void callIdIsResolvedFromEndCallLogWhenNotGiven() {
+        java.util.List<String> asked = new java.util.ArrayList<>();
+        SignalingSource recording = callId -> {
+            asked.add(callId);
+            return new SignalingFetch(callId, healthyCall(), false, 4, 4);
+        };
+
+        CallTimeline timeline = new CallLogNormalizationService(recording)
+                .buildTimeline((String) null, Map.of("caller_endcall.log", endCallLog("CALL-1")));
+
+        assertThat(asked).containsExactly("CALL-1");
+        assertThat(timeline.callId()).isEqualTo("CALL-1");
+    }
+
+    @Test
+    @DisplayName("không xác định được Call-ID -> không truy vấn signaling, nêu lý do, không crash")
+    void unknownCallIdSkipsSignalingQuery() {
+        SignalingSource mustNotBeCalled = callId -> {
+            throw new AssertionError("không được truy vấn khi chưa biết Call-ID");
+        };
+
+        CallTimeline timeline = new CallLogNormalizationService(mustNotBeCalled)
+                .buildTimeline((String) null, Map.of("caller_webrtc.log",
+                        List.of(turnLine("000:100", "TURN allocate request sent"))));
+
+        assertThat(timeline.callId()).isEqualTo("(không xác định)");
+        assertThat(timeline.allEvents()).isNotEmpty();
+        assertThat(timeline.notes()).extracting(TimelineNote::message)
+                .anyMatch(m -> m.contains("Không xác định được Call-ID"));
     }
 }

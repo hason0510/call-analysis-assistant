@@ -10,6 +10,7 @@ import io.hason.callanalysis.domain.metrics.MetricsCalculator;
 import io.hason.callanalysis.domain.metrics.MetricValue;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
 import io.hason.callanalysis.domain.rule.TurnFailure;
+import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
 import io.hason.callanalysis.domain.taxonomy.IssueTaxonomy;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
@@ -22,10 +23,82 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Ráp report từ kết quả các bước trước. Sprint 1 dùng hoàn toàn rule; Sprint 2 sẽ thay
- * phần summary/analysis/suggestions bằng đầu ra của AI nhưng giữ nguyên bố cục này.
+ * Ráp report từ kết quả các bước trước. Sprint 1 dùng hoàn toàn rule; Sprint 2 thay phần
+ * tóm tắt / phân tích / đề xuất bằng chữ của AI nhưng giữ nguyên bố cục này.
  */
 public class ReportBuilder {
+
+    /**
+     * Report cuối của luồng có AI (MVP mục 3.2: AI chỉ điền field, code dựng bố cục).
+     *
+     * Ai viết phần nào:
+     * - AI dùng được và khớp rule: tóm tắt, phân tích, đề xuất của AI; kết luận, chỉ số, evidence của code.
+     * - AI lệch rule (G04): tóm tắt và đề xuất do CODE viết — chữ của AI bênh vực kết luận đã bị bác,
+     *   in ra sẽ mâu thuẫn với dòng "Kết luận". Phần phân tích của AI vẫn giữ để người kiểm tra đọc.
+     * - Fallback: toàn bộ từ rule, kèm lý do ở "Giới hạn dữ liệu".
+     *
+     * Độ tin cậy theo MVP mục 7.2: AI khớp rule → giữ mức của rule (đã xét evidence và file thiếu);
+     * AI lệch rule → LOW; không có AI để đối chiếu (degraded) → tối đa MEDIUM.
+     *
+     * @param extraLimitations ghi chú từ bước trước pipeline (ví dụ câu hỏi nêu hai Call-ID)
+     */
+    public CallReport build(CallTimeline timeline, CallMetrics metrics, List<Evidence> evidence,
+                            RuleVerdict rule, IssueTaxonomy taxonomy, ReportDecision decision,
+                            List<String> extraLimitations) {
+        boolean verdictChanged = decision.verdict() != rule.verdict();
+        boolean sameConclusion = !verdictChanged && decision.issueCategory() == rule.issueCategory()
+                && decision.qualityFlag() == rule.qualityFlag();
+        // Kết luận đổi (lệch verdict → UNKNOWN) thì căn cứ riêng của rule (kiểu TURN hỏng, causeBasis)
+        // không còn đúng với kết luận mới.
+        RuleVerdict effective = sameConclusion ? rule : new RuleVerdict(decision.verdict(), decision.qualityFlag(),
+                decision.issueCategory(), rule.confidence(), rule.reasoning(), rule.dataLimitations());
+        CallReport base = build(timeline, metrics, evidence, effective, taxonomy);
+
+        List<String> limitations = new ArrayList<>(base.dataLimitations());
+        limitations.addAll(extraLimitations == null ? List.of() : extraLimitations);
+        ConfidenceLevel confidence = rule.confidence();
+        String summary = base.summary();
+        List<String> suggestions = base.suggestions();
+        String analysis = null;
+
+        if (decision.needsReview()) {
+            confidence = ConfidenceLevel.LOW;
+            limitations.add("Cần kiểm tra: " + String.join("; ", decision.reviewNotes())
+                    + " — độ tin cậy hạ xuống LOW vì AI và rule không thống nhất");
+            if (verdictChanged) {
+                summary = "Không đủ căn cứ để kết luận: " + String.join("; ", decision.reviewNotes())
+                        + ". Lý do của rule: " + rule.reasoning() + ".";
+                suggestions = new ArrayList<>(suggestions(rule));
+                suggestions.add("Đối chiếu evidence bên dưới với kết luận của rule và của AI để xác định kết luận đúng.");
+            }
+            analysis = blankToNull(decision.analysis());
+        } else if (decision.source() == CallReport.AnalysisSource.AI) {
+            summary = isBlank(decision.summary()) ? summary : decision.summary();
+            suggestions = decision.suggestions().isEmpty() ? suggestions : decision.suggestions();
+            analysis = blankToNull(decision.analysis());
+        } else if (decision.degraded()) {
+            if (confidence == ConfidenceLevel.HIGH) {
+                confidence = ConfidenceLevel.MEDIUM;
+            }
+            limitations.add("Phân tích bằng AI không dùng được (" + decision.fallbackReason()
+                    + "): report dựng từ rule, độ tin cậy tối đa MEDIUM vì không có AI để đối chiếu");
+        }
+
+        return new CallReport(base.callId(), base.verdict(), base.qualityFlag(), base.issueCategory(), confidence,
+                summary, base.evidence(), base.metrics(), base.possibleCauses(), suggestions,
+                List.copyOf(new LinkedHashSet<>(limitations)), decision.degraded(), analysis,
+                decision.source(), decision.needsReview(),
+                decision.degraded() ? decision.fallbackReason() : null,
+                analysis == null ? List.of() : decision.citedEvidenceIds());
+    }
+
+    private static boolean isBlank(String text) {
+        return text == null || text.isBlank();
+    }
+
+    private static String blankToNull(String text) {
+        return isBlank(text) ? null : text.strip();
+    }
 
     public CallReport build(CallTimeline timeline, CallMetrics metrics,
                             List<Evidence> evidence, RuleVerdict verdict,
@@ -175,8 +248,12 @@ public class ReportBuilder {
         return List.copyOf(suggestions);
     }
 
-    private static List<String> dataLimitations(CallTimeline timeline, CallMetrics metrics,
-                                                RuleVerdict verdict, IssueTaxonomy taxonomy) {
+    /**
+     * Mục "Giới hạn dữ liệu". Public vì AI context gửi đúng danh sách này: AI kết luận UNKNOWN
+     * hay hạ tin cậy dựa trên cùng những thiếu hụt mà report sẽ in ra.
+     */
+    public static List<String> dataLimitations(CallTimeline timeline, CallMetrics metrics,
+                                               RuleVerdict verdict, IssueTaxonomy taxonomy) {
         Set<String> limitations = new LinkedHashSet<>(verdict.dataLimitations());
 
         limitations.addAll(missingClientLogs(timeline));

@@ -71,6 +71,7 @@ public class ParseCallCommand implements ApplicationRunner {
             printSection(String.format("%s  [%s, leg=%s, %d dòng]",
                     file.fileName(), file.detectedType(), file.leg(), file.lineCount()), file.result());
         }
+        outcome.rejected().forEach(r -> log.info("--- BỊ LOẠI  {}", r.message()));
 
         ParseResult combined = outcome.combined();
         log.info("");
@@ -82,7 +83,7 @@ public class ParseCallCommand implements ApplicationRunner {
         List<Path> calls = findCallFolders(root);
         log.info("Tìm thấy {} cuộc gọi dưới {}", calls.size(), root);
         log.info("");
-        log.info("{}", String.format("%-10s %-26s %7s %7s %9s %9s", "NHÓM", "CALL-ID", "DÒNG", "EVENT", "CẢNH BÁO", "KHÔNG NB"));
+        log.info("{}", String.format("%-10s %-26s %7s %7s %9s %9s", "NHÓM", "CALL-ID", "DÒNG", "EVENT", "CẢNH BÁO", "BỊ LOẠI"));
         log.info("{}", "-".repeat(76));
 
         int totalLines = 0;
@@ -91,14 +92,12 @@ public class ParseCallCommand implements ApplicationRunner {
         int totalUnrecognised = 0;
 
         for (Path folder : calls) {
-            Map<String, List<String>> files = reader.readAll(folder);
-            CallOutcome outcome = normalizationService.normalize(folder.getFileName().toString(), files);
+            CallOutcome outcome = normalizationService.normalize(folder.getFileName().toString(),
+                    reader.readAll(folder));
             ParseResult combined = outcome.combined();
 
             int lines = outcome.files().stream().mapToInt(FileOutcome::lineCount).sum();
-            long unrecognised = outcome.files().stream()
-                    .filter(f -> f.detectedType() == io.hason.callanalysis.domain.parse.DetectedLogType.UNKNOWN)
-                    .count();
+            long unrecognised = outcome.rejected().size();
 
             totalLines += lines;
             totalEvents += combined.events().size();
@@ -114,7 +113,7 @@ public class ParseCallCommand implements ApplicationRunner {
         log.info("Tổng dòng file đính kèm  : {}", totalLines);
         log.info("Tổng event sinh ra       : {}", totalEvents);
         log.info("Tổng cảnh báo            : {}", totalWarnings);
-        log.info("File không nhận diện được: {}", totalUnrecognised);
+        log.info("File bị loại khi kiểm    : {}", totalUnrecognised);
     }
 
     private List<Path> findCallFolders(Path root) throws IOException {

@@ -1,6 +1,9 @@
 package io.hason.callanalysis.infrastructure.file;
 
+import io.hason.callanalysis.domain.validation.AttachedFile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.util.unit.DataSize;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -9,9 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -23,16 +24,41 @@ import java.util.stream.Stream;
 @Component
 public class CallFolderReader {
 
-    public Map<String, List<String>> readAll(Path folder) {
+    private final long maxBytesPerFile;
+
+    /** Cùng khoá cấu hình với CallLogNormalizationService: đọc và kiểm theo một giới hạn. */
+    public CallFolderReader(@Value("${call-analysis.files.max-size-per-file:20MB}") DataSize maxFileSize) {
+        this.maxBytesPerFile = maxFileSize.toBytes();
+    }
+
+    /**
+     * Đọc mọi file trong thư mục. File vượt giới hạn KHÔNG được nạp nội dung — chỉ báo kích
+     * thước để File Validator loại và nêu tên (MVP mục 6.4, ca F04). Đọc hết rồi mới kiểm thì
+     * giới hạn không bảo vệ được bộ nhớ.
+     */
+    public List<AttachedFile> readAll(Path folder) {
         try (Stream<Path> files = Files.list(folder)) {
-            Map<String, List<String>> result = new LinkedHashMap<>();
-            files.filter(Files::isRegularFile)
+            return files.filter(Files::isRegularFile)
                     .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .forEach(p -> result.put(p.getFileName().toString(), readLines(p)));
-            return result;
+                    .map(this::read)
+                    .toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Không đọc được thư mục " + folder, e);
         }
+    }
+
+    /** Một file, cùng quy tắc giới hạn kích thước với {@link #readAll}. Evaluation Runner đọc theo danh sách của case. */
+    public AttachedFile read(Path file) {
+        String name = file.getFileName().toString();
+        long size;
+        try {
+            size = Files.size(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Không đọc được file " + file, e);
+        }
+        return size > maxBytesPerFile
+                ? AttachedFile.notLoaded(name, size)
+                : new AttachedFile(name, size, readLines(file));
     }
 
     /**
@@ -48,6 +74,20 @@ public class CallFolderReader {
         } catch (IOException e) {
             throw new UncheckedIOException("Không đọc được file " + file, e);
         }
+    }
+
+    /** Giới hạn kích thước mỗi file — Chat API dùng cùng giới hạn để không đọc file quá cỡ vào bộ nhớ. */
+    public long maxBytesPerFile() {
+        return maxBytesPerFile;
+    }
+
+    /**
+     * Nội dung file tải lên (Chat API) → dòng, cùng cách tách dòng với {@link #readLines}: \n, \r\n, \r.
+     * Byte không phải UTF-8 hợp lệ bị thay bằng U+FFFD, không ném lỗi — File Validator dựa vào chính
+     * ký tự này để nhận ra file hỏng.
+     */
+    public static List<String> decode(byte[] bytes) {
+        return new String(bytes, StandardCharsets.UTF_8).lines().toList();
     }
 
     private List<String> decodeLenient(Path file) {

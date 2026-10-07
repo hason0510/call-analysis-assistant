@@ -66,6 +66,8 @@ class ReportBuilderTest {
 
         assertThat(s.getFirst()).contains("Đã gửi 40 request").contains("cổng 3478/udp");
         assertThat(s).anyMatch(line -> line.contains("bị chặn") && line.contains("TURN server có hoạt động"));
+        // không có VPN thì không nhắc tới VPN
+        assertThat(s).noneMatch(line -> line.contains("VPN"));
     }
 
     @Test
@@ -88,15 +90,6 @@ class ReportBuilderTest {
                 .satisfies(line -> assertThat(line)
                         .contains("tun0")
                         .contains("chưa đủ để kết luận VPN là nguyên nhân"));
-    }
-
-    @Test
-    @DisplayName("không có VPN thì không nhắc tới VPN")
-    void noVpnMeansNoVpnSuggestion() {
-        List<String> s = suggestionsFor(new TurnFailure(
-                TurnFailure.Kind.NO_RESPONSE, 40, 0, null, "3478/udp", null));
-
-        assertThat(s).noneMatch(line -> line.contains("VPN"));
     }
 
     @Test

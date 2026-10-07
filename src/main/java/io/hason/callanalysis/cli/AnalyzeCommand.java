@@ -1,6 +1,7 @@
 package io.hason.callanalysis.cli;
 
 import io.hason.callanalysis.domain.report.CallReport;
+import io.hason.callanalysis.domain.report.ReportRenderer;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
 import io.hason.callanalysis.infrastructure.file.CallFolderReader;
 import io.hason.callanalysis.infrastructure.report.ReportSchemaValidator;
@@ -37,6 +38,7 @@ public class AnalyzeCommand implements ApplicationRunner {
     private final AnalyzeCallService analyzeService;
     private final ReportSchemaValidator validator;
     private final ConfigurableApplicationContext context;
+    private final ReportRenderer renderer = new ReportRenderer();
 
     public AnalyzeCommand(CallFolderReader reader,
                           AnalyzeCallService analyzeService,
@@ -65,46 +67,10 @@ public class AnalyzeCommand implements ApplicationRunner {
                 folder.getFileName().toString(), reader.readAll(folder));
         CallReport r = analysis.report();
 
-        log.info("# Báo cáo phân tích cuộc gọi");
-        log.info("Call-ID: {}", r.callId());
-        log.info("Kết luận: {}", r.verdict());
-        // Theo mẫu MVP 4.5: category chỉ ghi ở dòng này khi cờ BẬT. Với cuộc FAIL, category là
-        // nguyên nhân cuộc gọi hỏng, không phải của cờ chất lượng — đã có ở mục "Chính:" bên dưới.
-        log.info("Cờ chất lượng: {}", r.qualityFlag() ? "Có - " + r.issueCategory() : "Không");
-        log.info("Độ tin cậy: {}", r.confidenceLevel());
-        log.info("Tóm tắt: {}", r.summary());
-
-        log.info("");
-        log.info("## Evidence chính");
-        int[] no = {0};
-        r.evidence().forEach(e -> log.info("{}. [{}][{}] {}",
-                ++no[0], e.id(), e.sourceRef(), e.description()));
-
-        log.info("");
-        log.info("## Chỉ số cuộc gọi");
-        log.info("{}", String.format("| %-40s | %-52s | %-9s |", "Chỉ số", "Giá trị", "Nguồn"));
-        r.metrics().forEach(m -> log.info("{}", String.format("| %-40s | %-52s | %-9s |",
-                m.name(),
-                m.value() == null ? "N/A (" + m.naReason() + ")"
-                        : m.value() + (m.unit() == null || m.unit().isBlank() ? "" : " " + m.unit()),
-                m.source())));
-
-        log.info("");
-        log.info("## Vấn đề chất lượng / nguyên nhân khả dĩ");
-        log.info("- Chính: {}", r.possibleCauses().primary() == null ? "không xác định"
-                : r.possibleCauses().primary());
-        r.possibleCauses().alternatives().forEach(a -> log.info("- Khả dĩ khác: {}", a));
-
-        log.info("");
-        log.info("## Đề xuất");
-        r.suggestions().forEach(s -> log.info("- {}", s));
-
-        log.info("");
-        log.info("## Giới hạn dữ liệu");
-        r.dataLimitations().forEach(d -> log.info("- {}", d));
+        // Cùng renderer với Chat API: CLI và web in ra một bố cục (mẫu MVP mục 4.5)
+        log.info("\n{}", renderer.render(r));
 
         ReportSchemaValidator.Result result = validator.validate(r);
-        log.info("");
         log.info("Report hợp lệ theo schema v1: {}", result.valid() ? "CÓ" : "KHÔNG");
         result.errors().forEach(e -> log.warn("   {}", e));
     }

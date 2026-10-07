@@ -7,7 +7,8 @@
   "additionalProperties": false,
   "required": [
     "callId", "verdict", "qualityFlag", "confidenceLevel", "summary",
-    "evidence", "metrics", "possibleCauses", "suggestions", "dataLimitations", "degraded"
+    "evidence", "metrics", "possibleCauses", "suggestions", "dataLimitations", "degraded",
+    "analysis", "analysisSource", "needsReview", "fallbackReason", "citedEvidenceIds"
   ],
 
   "properties": {
@@ -114,6 +115,48 @@
     "degraded": {
       "type": "boolean",
       "description": "Sprint 2: đặt true khi phải lui về rule verdict do AI lỗi."
+    },
+
+    "analysis": {
+      "type": ["string", "null"],
+      "description": "Phần phân tích của AI, ưu tiên trọng tâm câu hỏi. null khi report dựng từ rule."
+    },
+
+    "analysisSource": {
+      "enum": ["AI", "RULE"],
+      "description": "AI: kết luận đi qua AI + Guardrails. RULE: chỉ rule (CLI Sprint 1 hoặc fallback)."
+    },
+
+    "needsReview": {
+      "type": "boolean",
+      "description": "AI lệch rule (Guardrails G04) — gắn cờ cần kiểm tra (MVP mục 3.2)."
+    },
+
+    "fallbackReason": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z_]+$",
+      "description": "Mã lý do lùi về rule, không phải văn bản tự do. null khi không degraded."
+    },
+
+    "citedEvidenceIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^EV[0-9]{2,}$" },
+      "uniqueItems": true,
+      "description": "Evidence AI dùng làm căn cứ cho phần phân tích (MVP mục 3.3). Rỗng khi report dựng từ rule."
     }
-  }
+  },
+
+  "allOf": [
+    {
+      "description": "Report từ rule không có phần phân tích của AI.",
+      "if": { "properties": { "analysisSource": { "const": "RULE" } } },
+      "then": { "properties": { "analysis": { "type": "null" }, "citedEvidenceIds": { "maxItems": 0 } } }
+    },
+    {
+      "description": "degraded khi và chỉ khi có lý do fallback.",
+      "if": { "properties": { "degraded": { "const": true } } },
+      "then": { "properties": { "fallbackReason": { "type": "string" }, "analysisSource": { "const": "RULE" } } },
+      "else": { "properties": { "fallbackReason": { "type": "null" } } }
+    }
+  ]
 }
