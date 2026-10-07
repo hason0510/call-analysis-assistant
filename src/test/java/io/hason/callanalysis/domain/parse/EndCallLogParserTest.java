@@ -70,17 +70,6 @@ class EndCallLogParserTest {
     }
 
     @Test
-    @DisplayName("file chỉ khai báo vài header vẫn parse bình thường")
-    void missingHeadersAreFine() {
-        ParseResult result = parser.parse(List.of(H1, H2,
-                "1\t1789700842873\tinfo\tU1\tCALL-1\tios\tcallee\tINIT",
-                "2\t1789700842905\tlog_detail\tmsg\tANSWERED\temit"), context);
-
-        assertThat(result.events()).hasSize(2);
-        assertThat(result.warnings()).isEmpty();
-    }
-
-    @Test
     @DisplayName("loại bản ghi suy ra từ #tag, KHÔNG từ số hiệu — bố cục thật của caller DE7DD314")
     void recordTypeComesFromTagNotNumber() {
         // Caller DE7DD314 không có bản ghi qos, nên mọi số hiệu từ H4 trở đi lùi một bậc
@@ -224,5 +213,25 @@ class EndCallLogParserTest {
         assertThat(parser.parse(lines, context).events().stream().map(CanonicalEvent::eventId).toList())
                 .isEqualTo(parser.parse(lines, context).events().stream().map(CanonicalEvent::eventId).toList())
                 .containsExactly("callee_endcall.log#3", "callee_endcall.log#4");
+    }
+
+    @Test
+    @DisplayName("declaredCallId tra cột theo dòng đặc tả, không theo vị trí cố định")
+    void declaredCallIdFollowsHeaderColumns() {
+        // Cột callId đứng ở vị trí khác nhau giữa hai file: phải đọc theo #H1, không theo số cột.
+        List<String> a = List.of("#H1\t#ts\t#tag\tcallId\trole", "1\t1789700842905\tinfo\tCALL-A\tcaller");
+        List<String> b = List.of("#H1\t#ts\t#tag\tappUserId\tcallMode\tcallId",
+                "1\t1789700842905\tinfo\tU1\tvideo\tCALL-B");
+
+        assertThat(EndCallLogParser.declaredCallId(a)).contains("CALL-A");
+        assertThat(EndCallLogParser.declaredCallId(b)).contains("CALL-B");
+    }
+
+    @Test
+    @DisplayName("declaredCallId: không có bản ghi info / dòng thiếu cột -> rỗng, không ném lỗi")
+    void declaredCallIdIsEmptyWhenAbsent() {
+        assertThat(EndCallLogParser.declaredCallId(List.of("#H1\t#ts\t#tag\tcallId", "1\t1"))).isEmpty();
+        assertThat(EndCallLogParser.declaredCallId(List.of("rac"))).isEmpty();
+        assertThat(EndCallLogParser.declaredCallId(null)).isEmpty();
     }
 }

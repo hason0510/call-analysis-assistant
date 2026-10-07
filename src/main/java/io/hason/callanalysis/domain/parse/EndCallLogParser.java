@@ -31,6 +31,45 @@ public class EndCallLogParser {
     private static final String COL_TIMESTAMP = "#ts";
     private static final String COL_TAG = "#tag";
     private static final String TAG_INFO = "info";
+    private static final String COL_CALL_ID = "callId";
+
+    /**
+     * Call-ID mà file tự khai ở bản ghi `info` đầu tiên — để File Validator kiểm các file cùng
+     * Call-ID (MVP mục 6.1 T3) mà không phải parse cả file.
+     *
+     * Hai bước, giống parse():
+     * 1. Dòng đặc tả `#Hn` chỉ dùng để biết VỊ TRÍ CỘT (`#tag`, `callId` nằm ở cột mấy) của
+     *    dòng dữ liệu mở đầu bằng `n` — bộ cột khác nhau theo loại bản ghi và theo file.
+     * 2. LOẠI bản ghi nhận bằng giá trị cột `#tag` (== "info"), không bằng số `n`: cùng là
+     *    `stats` mà file này đánh H5, file kia H7 (bẫy #2 trong CLAUDE.md).
+     */
+    public static java.util.Optional<String> declaredCallId(List<String> lines) {
+        if (lines == null) {
+            return java.util.Optional.empty();
+        }
+        Map<String, List<String>> schemas = new HashMap<>();
+        for (String line : lines) {
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            String[] cols = line.split("\t", -1);
+            if (cols[0].startsWith(HEADER_PREFIX)) {
+                schemas.put(cols[0].substring(HEADER_PREFIX.length()), List.of(cols).subList(1, cols.length));
+                continue;
+            }
+            List<String> schema = schemas.get(cols[0]);
+            if (schema == null) {
+                continue;
+            }
+            int tag = schema.indexOf(COL_TAG) + 1;
+            int callId = schema.indexOf(COL_CALL_ID) + 1;
+            if (tag > 0 && tag < cols.length && TAG_INFO.equals(cols[tag])
+                    && callId > 0 && callId < cols.length && !cols[callId].isBlank()) {
+                return java.util.Optional.of(cols[callId].strip());
+            }
+        }
+        return java.util.Optional.empty();
+    }
 
     public ParseResult parse(List<String> lines, ParseContext context) {
         if (lines == null || lines.isEmpty()) {
