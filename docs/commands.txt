@@ -34,3 +34,23 @@ Kết quả đúng là 1 059 document / 20 cuộc gọi. Chạy lại nhiều l�
 # --analyze / --analyze-all: chạy cả pipeline, kiểm schema, in report theo mẫu mục 4.5
 .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086"
 .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze-all=../ai20k_sample"
+
+# --ai-context / --ai-context-all: in ĐÚNG phần dữ liệu cuộc gọi sẽ gửi cho AI (đã làm sạch), không gọi AI
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Vi sao goi khong duoc?'"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context-all=../ai20k_sample --out=<thư-mục-ra>"
+# Quét bản -all bằng script kiểm chứng độc lập của Sanitizer:
+python scripts/verify-sanitizer/verify_sanitized.py ../ai20k_sample <thư-mục-ra>
+
+# --parse-request: Request Parser (T4) — intent, trọng tâm, Call-ID. Không có OPENAI_API_KEY thì đi đường lui từ khoá
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments='--parse-request=Vi sao ben nhan khong nghe duoc?'"
+# --ai-analyze / --ai-analyze-all: T4 + T5 với AI THẬT (tốn tiền: 2 lời gọi API mỗi cuộc, ~0,0007 USD)
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-analyze=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Vi sao goi khong duoc?'"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-analyze-all=../ai20k_sample/fail"
+# Web UI (T1) + Chat API (T2): bật server profile "web", mở http://localhost:8080/ (hoặc cổng đã đặt)
+# PowerShell: tham số -D... PHẢI nằm trong nháy kép, nếu không sẽ lỗi "Unknown lifecycle phase .run.profiles=web"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.profiles=web"
+# Cổng mặc định 8080; máy đang bận cổng đó thì thêm "-Dspring-boot.run.arguments=--server.port=8089"
+curl -X POST localhost:8080/api/analyze -F "message=Vì sao bên nhận không nghe được?" -F "files=@callee_endcall.log" -F "files=@callee_webrtc.log"
+# Tham số có khoảng trắng phải nằm trong nháy đơn, nếu không Maven tách thành nhiều tham số.
+# Trên Windows, chữ có dấu ngoài bảng mã ANSI (ỏ, ậ, ư…) bị đổi thành "?" trước khi tới JVM: thử bằng câu
+# không dấu, hoặc bật "Use Unicode UTF-8 for worldwide language support" của Windows.

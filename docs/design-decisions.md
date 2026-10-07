@@ -43,10 +43,10 @@ không sinh bản ghi trùng. Nếu để Elasticsearch tự sinh `_id`, mỗi l
 Không dùng hash nội dung vì data mẫu có nhiều event **giống hệt nhau về nội dung** (ví dụ 10
 event `INIT_CALL` liên tiếp) — hash sẽ gộp chúng lại và làm mất dữ liệu thật.
 
-**Đánh đổi.** Nếu mentor xuất lại file với thứ tự event khác, `_id` sẽ đổi. Chấp nhận được với
+**Đánh đổi.** Nếu bản export được xuất lại với thứ tự event khác, `_id` sẽ đổi. Chấp nhận được với
 data mẫu tĩnh dùng cho phát triển local.
 
-**Cập nhật Sprint 2 — gửi theo lô (theo nhận xét mentor).** Bản Sprint 1 gom mọi document vào
+**Cập nhật Sprint 2 — gửi theo lô (theo góp ý review Sprint 1).** Bản Sprint 1 gom mọi document vào
 **một** bulk request. Với 1 059 document thì ổn, nhưng data lớn hơn sẽ đụng giới hạn
 `http.max_content_length` của Elasticsearch (mặc định 100 MB) và giữ toàn bộ trong heap — chặn
 đường cho Batch Analysis ở Sprint 3. Nay importer đọc từng file và gửi theo lô 500 document.
@@ -251,7 +251,7 @@ Tín hiệu mạnh nhất là `audio.bytesReceived = 0`, không phải MOS: MOS 
 
 1. **Sprint 2 nạp thẳng vào prompt.** Taxonomy là đầu vào của AI Analysis Engine; inventory
    là Policy Engine của Sanitizer. Nếu hard-code thì phải viết lại lần nữa.
-2. **Mentor review được mà không cần đọc Java.**
+2. **Người review đọc được mà không cần đọc Java.**
 3. **Đổi ngưỡng không cần build lại.**
 
 Mỗi issue category có thêm trường `calibration` ghi rõ điều kiện phát hiện đã được kiểm chứng
@@ -337,7 +337,7 @@ tương đối của log), và luật nền tảng gán nó đúng cho caller.
 
 ## 21. Độ tin cậy theo mức dữ liệu nhìn được; thiếu căn cứ thì `UNKNOWN`
 
-**Quyết định.** Ba luật, cập nhật ở Sprint 2 theo nhận xét mentor:
+**Quyết định.** Ba luật, cập nhật ở Sprint 2 theo góp ý review Sprint 1:
 
 1. **Không đủ căn cứ để nói `SUCCESS` → `UNKNOWN`**, không phải `SUCCESS` hạ tin cậy:
    - không có log client nào (chỉ có signaling);
@@ -383,7 +383,7 @@ Mỗi điều kiện bịt một lỗ hổng cụ thể:
   chưa từng gửi `INVITE`, callee không hề tham gia, nên thiếu log callee không làm kết luận yếu đi
   → giữ `HIGH`.
 
-Mentor nhận xét: *"Độ tin cậy ở 311A9B6A đang là HIGH trong khi thiếu log callee. Nên hạ xuống
+Góp ý review Sprint 1: *"Độ tin cậy ở 311A9B6A đang là HIGH trong khi thiếu log callee. Nên hạ xuống
 theo mức dữ liệu cho phép"* và *"Thiếu log client vẫn ra SUCCESS, và không thấy BYE cũng vẫn
 SUCCESS"*. Lập luận Sprint 1 sai ở chỗ: nó dùng chính kết luận để phán phần dữ liệu thiếu là
 "không liên quan". Độ tin cậy phải đi theo dữ liệu đã nhìn thấy, đúng như MVP mục 7.2: *"thiếu một
@@ -391,7 +391,7 @@ phần file → MEDIUM"*.
 
 **Vì sao giữ ngoại lệ 428.** Kết luận dựa trên câu trả lời của **chính server** — `ACK` của
 `INIT_CALL` kèm `callErrorCode: 428 … privacy_restricted`, đọc nguyên văn. Không log client nào
-bổ sung hay phản bác được nó. **Ngoại lệ này chưa được mentor xác nhận.**
+bổ sung hay phản bác được nó. **Ngoại lệ này chưa được xác nhận.**
 
 **Kết quả trên 20 cuộc** (`--analyze-all`, 2026-10-01). Verdict vẫn **13/13**: không cuộc nào
 trong data rơi vào hai nhánh `UNKNOWN` mới — mọi cuộc đạt `OK_ACK_OK` đều có `BYE`, mọi cuộc đều
@@ -444,11 +444,153 @@ evidence yếu hoặc mơ hồ → `LOW`.
 
 ---
 
+# Sprint 2
+
+## 22. Cloud AI `gpt-4o-mini`, Structured Outputs `strict`, temperature 0
+
+**Quyết định.** Gọi OpenAI `gpt-4o-mini` qua Chat Completions, đầu ra ép theo JSON Schema (`strict: true`),
+`temperature 0`, timeout 30 s. Key đọc từ `.env`; không có key thì app vẫn chạy và lùi về rule.
+
+**Lý do.** AI Provider Proposal được duyệt ngày 2026-10-05. Structured output strict nghĩa là model không trả được
+trường lạ hay sai kiểu — Guardrails chỉ còn phải kiểm *nội dung*. `temperature 0` phục vụ Consistency ≥ 95% (MVP 6.5).
+Chi phí đo thật: ≈ 0,0007 USD mỗi câu hỏi (2 lời gọi), cả benchmark 5 lần ≈ 0,20 USD — vừa ngân sách ~6 USD.
+
+**Đánh đổi.** Kết luận ổn định qua 5 lần lặp, nhưng **phần chữ** thì không (cùng câu hỏi, có lần trích 22/22 evidence,
+lần khác 14/22). Chấp nhận vì kết luận cuối do rule + Guardrails quyết (mục 23).
+
+---
+
+## 23. AI lệch rule thì kết luận là `UNKNOWN` — chọn cách chặt trong hai cách MVP cho phép
+
+**Quyết định.** MVP 3.2 cho hai lựa chọn khi verdict AI lệch rule: "`UNKNOWN` hoặc gắn cờ cần kiểm tra". Code chọn
+`UNKNOWN` + cờ cần kiểm tra + độ tin cậy LOW; tóm tắt do code viết ("Không đủ căn cứ để kết luận: AI kết luận …, rule
+kết luận …"), không lấy chữ AI. Cùng verdict nhưng khác category thì giữ category của rule.
+
+**Lý do.** Rule đúng 13/13 trên data có nhãn, AI chưa có bằng chứng tự suy luận đúng (AI thấy kết luận rule trong
+context). In tóm tắt của AI cạnh dòng "Kết luận: UNKNOWN" thì report tự mâu thuẫn.
+
+**Đánh đổi.** AI không bao giờ "cứu" được ca rule bó tay (ví dụ C02 trong bảng AI vs Rule của MVP 6.5: rule `UNKNOWN`,
+AI `FAIL`, đúng là `FAIL`). Chưa có ca như vậy trong data để biết mất gì. Lựa chọn giữa hai cách còn để mở.
+
+---
+
+## 24. Context gửi AI là đối tượng có kiểu, chỉ `AiContextBuilder` tạo được
+
+**Quyết định.** `AiContext` có constructor package-private; mọi chuỗi trong nó đi qua một phiên Sanitizer. Adapter tự
+chọn định dạng gửi (JSON gọn). Guardrails lấy evidence ID và văn bản căn cứ cho G05 từ **chính context đã gửi**.
+
+**Lý do.** Không lời gọi AI nào đi vòng qua bước làm sạch được — kiểu dữ liệu đảm bảo, không cần nhớ. Nếu bên gọi tự
+truyền một danh sách evidence riêng cho Guardrails, hai danh sách có thể lệch: Guardrails kiểm theo thứ AI chưa từng thấy.
+
+**Đánh đổi.** Không gửi được "thêm một trường nhanh" cho AI mà không sửa builder. Đó chính là điểm muốn có.
+
+---
+
+## 25. G05 khớp số nguyên văn; đổi đơn vị và làm tròn cũng là số không có trong input
+
+**Quyết định.** G05 tách mọi con số trong chữ AI và đòi mỗi số có nguyên văn trong context đã gửi. `10942 ms` viết thành
+`10.942` (giây) hay MOS `4.42397` viết thành `4.4` đều bị chặn. Prompt dặn chép nguyên văn số và đơn vị (quy tắc 4), và
+với câu hỏi về khoảng thời gian thì không tự trừ mốc thời gian (quy tắc 4b).
+
+**Lý do.** MVP 3.2 ("số liệu… giống nhau mọi lần chạy"), 3.3 ("AI không được tự tạo số liệu"), 6.5 ("khớp input"). Cùng
+một câu hỏi, AI từng viết `10.942` (đổi đúng) và `11.942` (bịa) ở hai lần chạy — phép kiểm muốn cho đổi đơn vị thì phải
+tự làm toán mới phân biệt được.
+
+**Đánh đổi.** Đôi khi chặn nhầm một câu đúng → report lùi về rule (degraded): người dùng mất phần chữ AI, không bao giờ
+thấy số sai. Đo được: 0-3% đầu ra thô bị chặn tuỳ lượt. Cách triệt để (Sprint 3): AI trích mã chỉ số `{Mxx}`, code điền.
+
+---
+
+## 26. Call-ID bằng regex, intent bằng AI có đường lui, câu từ chối cố định
+
+**Quyết định.** Call-ID trích bằng regex UUID (hai Call-ID khác nhau thì không đoán). Intent và trọng tâm do AI phân
+loại; AI lỗi hay trả sai thì lùi về bộ từ khoá (so trên chữ đã bỏ dấu). Câu `OUT_OF_SCOPE` nhận câu từ chối viết sẵn.
+
+**Lý do.** MVP 3.2: tính được bằng code thì không giao AI; hiểu câu hỏi tự nhiên giao AI. Câu từ chối cố định thì không
+bao giờ lỡ trả lời luôn câu ngoài phạm vi, và giống hệt nhau mọi lần.
+
+**Đánh đổi.** Bộ từ khoá yếu hơn AI nhiều (83% so với 100% trên benchmark). Prompt phân loại từng đẩy nhầm câu ngắn,
+không dấu ra ngoài phạm vi; đã sửa ngày 2026-10-06 và kiểm trên bộ câu mới viết trước khi sửa (`benchmark/intent-check.yaml`).
+
+---
+
+## 27. File lỗi bị loại riêng và nêu tên, không làm hỏng cả request
+
+**Quyết định.** `FileValidator` xét từng file: quá lớn → rỗng → hỏng → không nhận diện được → end call log lệch Call-ID.
+File không đạt bị loại khỏi phân tích và nêu tên ở "Giới hạn dữ liệu". File quá giới hạn không được nạp nội dung. Giới
+hạn multipart của web (100 MB) đặt lớn hơn giới hạn mỗi file (20 MB).
+
+**Lý do.** Một file sai không được làm mất phân tích của các file đúng (MVP 3.3: parser không được crash). Giới hạn
+multipart nhỏ hơn thì cả request hỏng trước khi tới validator, người dùng không biết file nào gây lỗi.
+
+**Đánh đổi.** WebRTC log không mang Call-ID nên không phát hiện được WebRTC log của cuộc khác.
+
+---
+
+## 28. Một Sanitizer cho cả ứng dụng; mã giả bằng HMAC; nhớ định danh trước rồi mới thay
+
+**Quyết định.** Một instance Sanitizer dùng chung cho AI, report và Logback (`SanitizerHolder`). Định danh thay bằng mã
+ổn định bằng HMAC có khoá (`CALL_ANALYSIS_PSEUDONYM_KEY`). Mỗi lần làm sạch mở một phiên: nhớ mọi định danh có cấu trúc
+(thuộc tính event, cột TSV, khoá JSON) trước, rồi mới thay — cả trong văn bản tự do.
+
+**Lý do.** Cùng một appUserId phải ra cùng một mã ở log lẫn report thì mới đối chiếu được. Hash trần thì không gian
+appUserId nhỏ, ai cũng tính ngược được. Định danh xuất hiện lần đầu trong văn bản tự do (không có tên trường) thì regex
+không nhận ra — phải nhớ từ chỗ có cấu trúc.
+
+**Đánh đổi.** Logback khởi tạo trước Spring nên phải có một holder tĩnh. Đo leakage bằng một bộ đọc riêng (mục 31), không
+tin vào chính Sanitizer.
+
+---
+
+## 29. Report luôn qua schema trước khi render; bố cục do code
+
+**Quyết định.** Report JSON qua `report-v1.schema.json` (thêm ràng buộc chéo: kết luận từ rule thì không có phần phân tích
+AI; degraded khi và chỉ khi có lý do fallback) rồi mới render. Report có phần AI mà sai schema → dựng lại từ rule. Bố cục
+mẫu 4.5 nằm trong `ReportRenderer`; Web UI lấy nhãn và thứ tự mục qua `GET /api/report-layout`.
+
+**Lý do.** MVP 6.1 T2: "render report theo template từ JSON đã validate". AI chỉ điền trường (MVP 3.2), không thể làm đổi
+bố cục. Web và bản text cùng một nguồn bố cục thì không lệch nhau.
+
+**Đánh đổi.** Thêm một vòng dựng lại report khi phần AI hỏng schema. Hiếm, và rẻ.
+
+---
+
+## 30. Evaluation Runner chạy qua đúng luồng Chat API, và dùng `call_id` của case
+
+**Quyết định.** Mỗi câu hỏi của benchmark đi qua `ChatAnalysisService` như người dùng web. `call_id` của case được truyền
+vào như khi người dùng ghi Call-ID trong câu hỏi; Call-ID ghi trong câu hỏi vẫn ưu tiên. Runner kiểm signaling trước khi
+chạy và cảnh báo nếu ES tắt hoặc chưa nạp.
+
+**Lý do.** Hệ thống được chấm phải là hệ thống người dùng dùng, không phải một đường riêng cho benchmark. WebRTC log không
+mang Call-ID; không truyền `call_id` thì 5/13 cuộc mẫu (chỉ có WebRTC log) luôn ra `UNKNOWN`, và tập `held-out`
+cũng có thể có ca như vậy. Không kiểm signaling trước thì ES tắt cho cả lượt toàn `UNKNOWN` mà không ai biết vì sao.
+
+**Đánh đổi.** Đo trong điều kiện "đã biết Call-ID", thuận lợi hơn người dùng thật một chút. Điểm này còn chờ xác nhận.
+
+---
+
+## 31. Benchmark: không tự đặt nhãn, câu hỏi viết mới, đo leakage bằng giá trị gốc
+
+**Quyết định.**
+- Ground truth thiếu (category, evidence) để trống; metric tương ứng báo `N/A (lý do)`, không ghi 0%.
+- Câu hỏi viết mới, viết trước khi xem hệ thống trả lời, không trùng câu dùng khi viết luật từ khoá hay prompt. Câu đọc
+  được hai nghĩa thì không gắn nhãn intent.
+- Security Leakage đo bằng cách gom **giá trị nhạy cảm gốc** của case bằng bộ đọc riêng rồi tra trong dữ liệu gửi AI và
+  phản hồi — không dùng regex của Sanitizer.
+
+**Lý do.** Tự ra đề rồi tự chấm thì con số vô nghĩa. Câu đã dùng để viết luật thì đo trên chính nó sẽ thổi phồng kết quả.
+Dùng chung regex thì Sanitizer bỏ sót dạng nào, phép đo cũng bỏ sót đúng dạng đó.
+
+**Đánh đổi.** Issue Category Accuracy chưa đo được cho tới khi ground truth có nhãn category. Phép đo leakage chưa gom IPv6 và giá
+trị nằm trong câu hỏi.
+
+---
+
 ## Còn để mở
 
 Năm mục từng để mở ở bản trước nay đã chốt — xem mục 11, 17, 19, 20, 21.
 
-Những thứ còn lại, để sang Sprint 2:
+Từ Sprint 1, vẫn còn mở:
 
 - **Neo WebRTC log vào giờ tuyệt đối.** End call log có các dòng `onIceConnectionChange`,
   `onIceCandidate` lặp lại cùng nội dung với WebRTC log nhưng kèm timestamp tuyệt đối — ghép
@@ -459,3 +601,11 @@ Những thứ còn lại, để sang Sprint 2:
   giây chờ candidate (`_waitingCandidateTimer with error`, rồi `_emitFailed … code: 421`). Các
   cuộc CANCEL không có end call log chỉ có cùng dấu vân tay trong WebRTC log. Cuộc nào WebRTC log cho thấy TURN không
   cấp phát được lần nào thì xếp `TURN_FAILURE`; còn lại vẫn là `SIGNALING_FAILURE`.
+
+Mở thêm ở Sprint 2 (chi tiết: README, mục Known Limitations):
+
+- **AI lệch rule nên `UNKNOWN` hay giữ kết luận AI kèm cờ** (mục 23).
+- **AI trích mã chỉ số `{Mxx}`** thay vì tự viết số, để G05 hết việc (mục 25).
+- **Đề xuất: rule giữ, AI bổ sung** — trên `for_test/`, đề xuất của rule tốt hơn ở 4/7 cuộc.
+- **"Semi-structured context" của T11 nghĩa là gì** — chưa chốt.
+- **Rule `NETWORK_DELAY_JITTER`** chưa cài; cần cuộc gọi có nhãn chất lượng kém.
