@@ -99,8 +99,11 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("TURN không cấp phát được nhưng thiếu end call log (7B56D7AD) -> TURN_FAILURE, MEDIUM")
-    void turnFailureWithoutEndCallLogIsMedium() {
+    @DisplayName("TURN không cấp phát được, không thấy hết giờ chờ candidate (7B56D7AD) -> TURN_FAILURE, MEDIUM")
+    void turnFailureWithoutCandidateTimeoutIsMedium() {
+        // MEDIUM vì không có tín hiệu hết giờ chờ candidate (RuleVerdictEngine: candidateTimeout ? HIGH : MEDIUM),
+        // không phải vì thiếu end call log. Ở 7B56D7AD, thiếu end call log là lý do không thấy tín hiệu đó:
+        // dòng _waitingCandidateTimer chỉ có trong end call log.
         RuleVerdict v = engine.decide(signals(b -> {
             b.sentInvite = false;
             b.reachedConfirmed = false;
@@ -371,15 +374,6 @@ class RuleVerdictEngineTest {
     }
 
     @Test
-    @DisplayName("bản export signaling bị cắt bớt được ghi vào giới hạn dữ liệu")
-    void truncatedExportIsRecorded() {
-        // Cuộc gọi DE7DD314: truncated=true, trả về 200/201 event.
-        RuleVerdict v = engine.decide(signals(b -> b.signalingTruncated = true));
-
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("cắt bớt"));
-    }
-
-    @Test
     @DisplayName("bản export bị cắt bớt thì KHÔNG được báo độ tin cậy HIGH")
     void truncatedExportLowersConfidence() {
         // Cùng một cuộc gọi khoẻ mạnh, chỉ khác ở chỗ nguồn trả thiếu event.
@@ -388,8 +382,10 @@ class RuleVerdictEngineTest {
         assertThat(engine.decide(signals(b -> { })).confidence())
                 .isEqualTo(ConfidenceLevel.HIGH);
 
-        assertThat(engine.decide(signals(b -> b.signalingTruncated = true)).confidence())
-                .isEqualTo(ConfidenceLevel.MEDIUM);
+        // Cuộc gọi DE7DD314: truncated=true, trả về 200/201 event.
+        RuleVerdict truncated = engine.decide(signals(b -> b.signalingTruncated = true));
+        assertThat(truncated.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+        assertThat(truncated.dataLimitations()).anyMatch(s -> s.contains("cắt bớt"));
     }
 
     @Test

@@ -114,19 +114,12 @@ class CanonicalEventTest {
     }
 
     @Test
-    @DisplayName("SourceRef đúng định dạng trích dẫn của mẫu report mục 4.5")
-    void sourceRefCitation() {
-        assertThat(new SourceRef("callee_endcall.log", 142, "...").citation())
-                .isEqualTo("callee_endcall.log:142");
-        assertThat(new SourceRef(SourceRef.SIGNALING, 0, "...").citation())
-                .isEqualTo("signaling");
-    }
-
-    @Test
-    @DisplayName("signaling trích dẫn bằng THỨ TỰ sự kiện (signaling#87), không giả làm số dòng của file")
+    @DisplayName("trích dẫn: file đính kèm là tên:dòng; signaling là THỨ TỰ sự kiện (signaling#87), không giả làm số dòng")
     void signalingCitationIsEventOrderNotFileLine() {
         assertThat(new SourceRef(SourceRef.SIGNALING, 87, "...").citation()).isEqualTo("signaling#87");
-        // file log đính kèm vẫn giữ dạng tên file : số dòng
+        assertThat(new SourceRef(SourceRef.SIGNALING, 0, "...").citation()).isEqualTo("signaling");
+        // file log đính kèm giữ dạng tên file : số dòng (mẫu report mục 4.5)
         assertThat(new SourceRef("caller_webrtc.log", 208, "...").citation()).isEqualTo("caller_webrtc.log:208");
+        assertThat(new SourceRef("callee_endcall.log", 142, "...").citation()).isEqualTo("callee_endcall.log:142");
     }
 }

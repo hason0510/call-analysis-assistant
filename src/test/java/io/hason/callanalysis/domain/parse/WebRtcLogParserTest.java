@@ -121,7 +121,8 @@ class WebRtcLogParserTest {
     @Test
     @DisplayName("dòng nối tiếp được gộp vào bản ghi trước, không sinh event riêng")
     void continuationLinesAreFolded() {
-        // 22% số dòng trong data mẫu (5 966/26 712) là dòng nối tiếp kiểu này.
+        // 6,2% số dòng WebRTC log trong data mẫu (1 649/26 695) là dòng nối tiếp kiểu này.
+        // (Con số 22% ghi trước đây đếm bằng regex \d{3}, sai theo đúng bẫy #5 — xem CLAUDE.md bẫy #6.)
         ParseResult result = parser.parse(List.of(
                 "[000:002][259] (RTCLogging.mm:34): Previous route: <AVAudioSessionRouteDescription: 0x127a93c30,",
                 "inputs = (",

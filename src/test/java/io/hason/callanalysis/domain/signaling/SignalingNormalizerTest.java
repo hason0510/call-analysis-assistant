@@ -53,17 +53,6 @@ class SignalingNormalizerTest {
     }
 
     @Test
-    @DisplayName("cảnh báo bản export bị cắt nêu nguồn signaling, không nêu số dòng giả")
-    void truncationWarningNamesSourceWithoutFakeLine() {
-        ParseResult result = normalizer.normalize(new SignalingFetch("CALL-1", List.of(
-                record(0, "2026-09-21T08:44:28.000000000Z", "INIT_CALL", "U-CALLER", "INFO")),
-                true, 200, 201));
-
-        assertThat(result.warnings()).singleElement().satisfies(w -> assertThat(w.describe())
-                .startsWith("signaling — ").contains("200/201"));
-    }
-
-    @Test
     @DisplayName("leg suy ra từ appUserId của INIT_CALL đầu tiên — signaling không có trường leg")
     void legDerivedFromFirstInitCall() {
         ParseResult result = normalizer.normalize(fetch(List.of(
@@ -109,6 +98,8 @@ class SignalingNormalizerTest {
         assertThat(result.warnings()).hasSize(1);
         assertThat(result.warnings().getFirst().reason())
                 .contains("cắt bớt").contains("200/201").contains("thiếu 1");
+        // nêu nguồn signaling, không nêu số dòng giả (signaling đến từ ES, không từ file)
+        assertThat(result.warnings().getFirst().describe()).startsWith("signaling — ");
     }
 
     @Test

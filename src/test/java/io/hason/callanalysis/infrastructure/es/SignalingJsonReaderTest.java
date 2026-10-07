@@ -104,11 +104,7 @@ class SignalingJsonReaderTest {
         assertThat(first).containsExactly(
                 "1B009D42-49CD-479E-B26C-3A2994AEB720:0",
                 "1B009D42-49CD-479E-B26C-3A2994AEB720:1");
-    }
-
-    @Test
-    @DisplayName("ordinal giữ thứ tự gốc trong file, dùng làm tie-break khi timestamp trùng")
-    void ordinalPreservesOriginalOrder() throws Exception {
+        // ordinal giữ thứ tự gốc trong file, dùng làm tie-break khi timestamp trùng
         assertThat(reader.read(SAMPLE)).extracting(SignalingDocument::ordinal).containsExactly(0, 1);
     }
 

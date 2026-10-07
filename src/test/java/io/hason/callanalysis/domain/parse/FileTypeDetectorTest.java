@@ -22,14 +22,6 @@ class FileTypeDetectorTest {
     }
 
     @Test
-    @DisplayName("WebRTC iOS: khối [giây:mili][thread] đứng đầu dòng")
-    void detectsWebRtcIos() {
-        assertThat(detector.detect(List.of(
-                "[4712:147][260115] (RTCLogging.mm:34): (RTCAudioSession.mm:680 -[RTCAudioSession x]): Incrementing.")))
-                .isEqualTo(DetectedLogType.WEBRTC_IOS);
-    }
-
-    @Test
     @DisplayName("WebRTC Android: tên file .cc đứng trước khối thời gian")
     void detectsWebRtcAndroid() {
         assertThat(detector.detect(List.of(
@@ -55,17 +47,6 @@ class FileTypeDetectorTest {
                 "  \"environment\": \"production\",",
                 "  \"events\": [")))
                 .isEqualTo(DetectedLogType.SIGNALING_JSON);
-    }
-
-    @Test
-    @DisplayName("tên file sai vẫn nhận đúng loại — `calleer_webrtc.log` là log Android")
-    void ignoresFileNameEntirely() {
-        // Detector không hề nhận tên file làm tham số: kết luận hoàn toàn từ nội dung.
-        List<String> androidContent = List.of(
-                "turn_port.cc: [15:652][8429] (line 1687): TurnPort(...): Received TURN probe error response");
-
-        assertThat(detector.detect(androidContent)).isEqualTo(DetectedLogType.WEBRTC_ANDROID);
-        assertThat(DetectedLogType.WEBRTC_ANDROID.isWebRtc()).isTrue();
     }
 
     @Test

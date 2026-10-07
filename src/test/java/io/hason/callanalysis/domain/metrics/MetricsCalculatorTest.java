@@ -118,15 +118,17 @@ class MetricsCalculatorTest {
     @Test
     @DisplayName("một lần gửi duy nhất với nhiều dòng log -> 0 lần gửi lại")
     void singleTransmissionMeansZeroRetransmissions() {
-        // Tái hiện 1B009D42: 10 sự kiện INIT_CALL trong 16 ms — một lần gửi.
+        // Một lần gửi sinh nhiều dòng log (bẫy #13): 10 dòng INVITE trong 18 ms vẫn là một lần gửi.
+        // Bản trước tạo INIT_CALL thay vì INVITE, nên N/A đến từ nhánh "không đạt tới INVITE",
+        // không hề đi qua bước gom cụm.
         List<CanonicalEvent> events = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
-            events.add(sigAt(i * 2L, "INIT_CALL", Leg.CALLER));
+            events.add(sigAt(i * 2L, "INVITE", Leg.CALLER));
         }
 
         assertThat(calculator.calculate(timelineOf(events))
-                .valueOf(MetricKey.INVITE_RETRANSMISSIONS))
-                .isInstanceOf(MetricValue.NotAvailable.class);
+                .valueOf(MetricKey.INVITE_RETRANSMISSIONS).display())
+                .isEqualTo("0 lần");
     }
 
     @Test
@@ -177,14 +179,14 @@ class MetricsCalculatorTest {
                         "audio.packetsReceived", "0",
                         "transport.localStunResponse", "0")))));
 
+        // Lý do ngắn, nêu ĐÚNG tên trường đầy đủ trong log; câu giải thích "số 0 là giá trị trống"
+        // nằm ở Giới hạn dữ liệu, không lặp trong từng ô.
         for (MetricKey key : List.of(MetricKey.MOS, MetricKey.PACKET_LOSS, MetricKey.JITTER)) {
             assertThat(metrics.find(key, Leg.CALLEE)).get()
-                    .extracting(m -> m.value().display()).asString()
-                    .startsWith("N/A").contains("packetsReceived = 0");
+                    .extracting(m -> m.value().display()).isEqualTo("N/A (audio.packetsReceived = 0)");
         }
         assertThat(metrics.find(MetricKey.RTT, Leg.CALLEE)).get()
-                .extracting(m -> m.value().display()).asString()
-                .startsWith("N/A").contains("localStunResponse = 0");
+                .extracting(m -> m.value().display()).isEqualTo("N/A (transport.localStunResponse = 0)");
     }
 
     @Test
@@ -348,24 +350,6 @@ class MetricsCalculatorTest {
 
         assertThat(metrics.availableCount()).isZero();
         assertThat(metrics.unavailableCount()).isEqualTo(metrics.metrics().size());
-    }
-
-    @Test
-    @DisplayName("lý do N/A của leg chưa có media: ngắn, nêu ĐÚNG tên trường đầy đủ trong log")
-    void zeroFilledReasonNamesFullLogField() {
-        // Câu giải thích "số 0 là giá trị trống" nằm ở Giới hạn dữ liệu, không lặp trong từng ô
-        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
-                sigAt(0, "INIT_CALL", Leg.CALLER),
-                summary(Leg.CALLEE, Map.of(
-                        "audio.audioMos", "0",
-                        "transport.currentRttMs", "0",
-                        "audio.packetsReceived", "0",
-                        "transport.localStunResponse", "0")))));
-
-        assertThat(metrics.find(MetricKey.MOS, Leg.CALLEE)).get()
-                .extracting(m -> m.value().display()).isEqualTo("N/A (audio.packetsReceived = 0)");
-        assertThat(metrics.find(MetricKey.RTT, Leg.CALLEE)).get()
-                .extracting(m -> m.value().display()).isEqualTo("N/A (transport.localStunResponse = 0)");
     }
 
     @Test
