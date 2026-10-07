@@ -8,6 +8,54 @@ Dự án OJT AI 20K — 6 tuần, 3 sprint. **Đã xong Sprint 2:** Web UI, Chat
 
 ---
 
+## Dành cho người chấm
+
+Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerShell trên Windows** và đã chạy thử ngày 2026-10-07
+(macOS / Linux: dùng `./mvnw` thay cho `.\build.ps1`, đặt `JAVA_HOME` trỏ tới JDK 21).
+
+**Chuẩn bị (một lần)**
+
+- Cài JDK 21 và Docker Desktop. `build.ps1` tự tìm JDK 21; JDK đặt ở chỗ khác thì đặt `$env:JAVA_HOME_21` trước khi chạy.
+- Đặt thư mục data mẫu **cạnh repo, tên `ai20k_sample`** — mọi lệnh dùng đường dẫn `../ai20k_sample`:
+
+  ```
+  <thư mục bất kỳ>/
+  ├── call-analysis-assistant/   ← repo
+  └── ai20k_sample/              ← data mẫu: fail/, success/, for_test/
+  ```
+
+- Key OpenAI là tuỳ chọn: chép `.env.example` thành `.env` và điền `OPENAI_API_KEY`. Không có key thì mọi report lùi
+  về rule (degraded) nhưng vẫn đi đủ luồng.
+- Bật Elasticsearch và nạp signaling của data mẫu (phải ra **1 059 document**):
+
+  ```powershell
+  docker compose up -d elasticsearch
+  .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_sample"
+  ```
+
+**1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8080/, rồi làm theo 6 kịch bản trong
+[`docs/demo-sprint-2.md`](docs/demo-sprint-2.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì):
+
+```powershell
+.\build.ps1 spring-boot:run "-Dspring-boot.run.profiles=web"
+```
+
+**2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
+
+**3. Chạy test** — `.\build.ps1 test` → **390 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+
+**Lỗi thường gặp**
+
+| Hiện tượng | Nguyên nhân | Cách xử lý |
+|---|---|---|
+| Mọi report ra `UNKNOWN`, giới hạn dữ liệu ghi *"Không truy vấn được signaling"* | Elasticsearch chưa bật hoặc chưa nạp | `docker compose up -d elasticsearch`, chạy lại lệnh nạp |
+| `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như lệnh mẫu |
+| Web không mở được, cổng 8080 đang bị chiếm | Chương trình khác dùng cổng 8080 | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"`, mở http://localhost:8089/ |
+| Banner vàng *"Report dựng từ rule vì AI không dùng được"* | Chưa có key, hết hạn mức, hoặc AI lỗi | Đúng thiết kế (fallback); muốn có phần phân tích của AI thì điền key |
+| Thử API bằng curl, câu tiếng Việt bị xếp ngoài phạm vi | curl trên Windows làm hỏng chữ có dấu trước khi gửi | Gõ không dấu, hoặc gửi từ file UTF-8: `-F "message=<cau-hoi.txt"` |
+
+---
+
 ## Yêu cầu môi trường
 
 | | Phiên bản | Ghi chú |
