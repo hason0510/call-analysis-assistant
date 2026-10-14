@@ -43,18 +43,37 @@ class ReportDecisionTest {
     }
 
     @Test
-    @DisplayName("AI khớp rule -> tóm tắt / phân tích / đề xuất của AI, độ tin cậy giữ mức của rule")
+    @DisplayName("AI khớp rule ở ca FAIL -> tóm tắt do CODE viết từ lý do của rule; phân tích của AI; đề xuất chuẩn GIỮ")
     void agreeingAiFillsTheText() {
         CallReport r = build(ai(Verdict.FAIL, IssueCategory.ICE_FAILURE, false), List.of());
 
         assertThat(r.analysisSource()).isEqualTo(CallReport.AnalysisSource.AI);
-        assertThat(r.summary()).isEqualTo("ICE thất bại phía callee.");
+        // AI từng mở đầu tóm tắt ca FAIL bằng "không thiết lập được" cho cuộc ĐÃ thiết lập (70C388AD, FE4EF5E7)
+        assertThat(r.summary()).isEqualTo("Cuộc gọi không thành công. ICE chuyển sang failed và không bao giờ đạt connected.")
+                .doesNotContain("ICE thất bại phía callee.");
         assertThat(r.analysis()).isEqualTo("Không có gói audio nào được truyền.");
-        assertThat(r.suggestions()).containsExactly("Kiểm tra TURN.");
+        assertThat(r.suggestions()).isEqualTo(ReportBuilder.standardSuggestions(RULE));      // MVP 7.1 T2
+        assertThat(r.aiSuggestions()).containsExactly("Kiểm tra TURN.");
         assertThat(r.confidenceLevel()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(r.confidenceReasons()).last().isEqualTo("AI khớp rule");
         assertThat(r.citedEvidenceIds()).containsExactly("EV01");
         assertThat(r.degraded()).isFalse();
         assertThat(r.needsReview()).isFalse();
+    }
+
+    @Test
+    @DisplayName("AI khớp rule ở ca SUCCESS -> tóm tắt vẫn là chữ AI (chỉ ca FAIL do code viết)")
+    void agreeingAiOnSuccessKeepsAiSummary() {
+        RuleVerdict success = new RuleVerdict(Verdict.SUCCESS, false, null, ConfidenceLevel.HIGH,
+                "Đã đạt OK_ACK_OK, kết thúc bằng BYE, không có dấu hiệu lỗi media", List.of());
+        ReportDecision decision = new ReportDecision(CallReport.AnalysisSource.AI, Verdict.SUCCESS, false, null, false,
+                null, "Cuộc gọi bình thường, bên nhận nghe rõ.", "Không có dấu hiệu lỗi media.", List.of(), List.of(),
+                List.of("EV01"));
+        CallReport r = new ReportBuilder().build(TIMELINE, new MetricsCalculator().calculate(TIMELINE), List.of(),
+                success, new TaxonomyLoader().load(), decision, List.of());
+
+        assertThat(SCHEMA.validate(r).errors()).isEmpty();
+        assertThat(r.summary()).isEqualTo("Cuộc gọi bình thường, bên nhận nghe rõ.");
     }
 
     @Test
@@ -71,6 +90,9 @@ class ReportDecisionTest {
         assertThat(r.suggestions()).last().asString().contains("Đối chiếu evidence");
         assertThat(r.analysis()).isEqualTo("Không có gói audio nào được truyền.");     // giữ cho người kiểm tra
         assertThat(r.dataLimitations()).anyMatch(l -> l.startsWith("Cần kiểm tra: AI kết luận SUCCESS"));
+        // Lý do độ tin cậy ở dòng "Độ tin cậy", không lặp lại ở Giới hạn dữ liệu
+        assertThat(r.confidenceReasons().getFirst()).isEqualTo("AI và rule không thống nhất");
+        assertThat(r.dataLimitations()).noneMatch(l -> l.toLowerCase().contains("độ tin cậy"));
     }
 
     @Test
@@ -98,6 +120,48 @@ class ReportDecisionTest {
         assertThat(r.confidenceLevel()).isEqualTo(ConfidenceLevel.MEDIUM);
         assertThat(r.summary()).startsWith("Cuộc gọi không thành công.");
         assertThat(r.dataLimitations()).anyMatch(l -> l.contains("(TIMEOUT)"));
+        assertThat(r.confidenceReasons().getFirst()).isEqualTo("không có AI để đối chiếu (TIMEOUT)");
+        assertThat(r.dataLimitations()).noneMatch(l -> l.toLowerCase().contains("độ tin cậy"));
+    }
+
+    @Test
+    @DisplayName("T2 — đề xuất AI trùng bộ chuẩn (khác hoa thường, dấu câu) bị bỏ; tối đa 3 câu bổ sung")
+    void aiSuggestionsAreOnlyAdditions() {
+        List<String> standard = List.of("Xác nhận TURN server có cấp phát được relay không.");
+
+        List<String> extra = ReportBuilder.additionalSuggestions(List.of(
+                "xác nhận TURN server có cấp phát được relay không", "Một", "Hai", "", "Ba", "Bốn"), standard);
+
+        assertThat(extra).containsExactly("Một", "Hai", "Ba");
+    }
+
+    @Test
+    @DisplayName("T2 — AI lệch rule hoặc fallback: không có đề xuất AI; schema chặn report RULE mang đề xuất AI")
+    void noAiSuggestionsWithoutUsableAi() {
+        CallReport flagged = build(ai(Verdict.UNKNOWN, IssueCategory.UNKNOWN, true, "AI kết luận SUCCESS, rule kết luận FAIL"),
+                List.of());
+        CallReport fallback = build(new ReportDecision(CallReport.AnalysisSource.RULE, Verdict.FAIL, false,
+                IssueCategory.ICE_FAILURE, false, "TIMEOUT", null, null, List.of("x"), List.of(), List.of()), List.of());
+        CallReport ruleWithAiSuggestion = new CallReport(fallback.callId(), fallback.verdict(), fallback.qualityFlag(),
+                fallback.issueCategory(), fallback.confidenceLevel(), fallback.confidenceReasons(), fallback.summary(),
+                fallback.evidence(), fallback.metrics(), fallback.possibleCauses(), fallback.suggestions(),
+                fallback.dataLimitations(), true, null, CallReport.AnalysisSource.RULE, false, "TIMEOUT", List.of(),
+                List.of("chữ của AI"));
+
+        assertThat(flagged.aiSuggestions()).isEmpty();
+        assertThat(fallback.aiSuggestions()).isEmpty();
+        assertThat(fallback.suggestions()).isEqualTo(ReportBuilder.standardSuggestions(RULE));
+        assertThat(SCHEMA.validate(ruleWithAiSuggestion).valid()).isFalse();
+    }
+
+    @Test
+    @DisplayName("T2 — AI lệch verdict: 'vì sao kết luận' nói AI và rule không thống nhất, kèm lý do của rule")
+    void changedVerdictExplainsWhy() {
+        CallReport r = build(ai(Verdict.UNKNOWN, IssueCategory.UNKNOWN, true, "AI kết luận SUCCESS, rule kết luận FAIL"),
+                List.of());
+
+        assertThat(r.possibleCauses().reasoning()).startsWith("AI và rule không thống nhất (AI kết luận SUCCESS")
+                .contains("ICE chuyển sang failed");
     }
 
     @Test
@@ -114,11 +178,11 @@ class ReportDecisionTest {
     void schemaRejectsInconsistentFlags() {
         CallReport ok = build(ai(Verdict.FAIL, IssueCategory.ICE_FAILURE, false), List.of());
         CallReport degradedNoReason = new CallReport(ok.callId(), ok.verdict(), ok.qualityFlag(), ok.issueCategory(),
-                ok.confidenceLevel(), ok.summary(), ok.evidence(), ok.metrics(), ok.possibleCauses(), ok.suggestions(),
-                ok.dataLimitations(), true, null, CallReport.AnalysisSource.RULE, false, null, List.of());
+                ok.confidenceLevel(), ok.confidenceReasons(), ok.summary(), ok.evidence(), ok.metrics(), ok.possibleCauses(), ok.suggestions(),
+                ok.dataLimitations(), true, null, CallReport.AnalysisSource.RULE, false, null, List.of(), List.of());
         CallReport ruleWithAnalysis = new CallReport(ok.callId(), ok.verdict(), ok.qualityFlag(), ok.issueCategory(),
-                ok.confidenceLevel(), ok.summary(), ok.evidence(), ok.metrics(), ok.possibleCauses(), ok.suggestions(),
-                ok.dataLimitations(), false, "chữ của AI", CallReport.AnalysisSource.RULE, false, null, List.of());
+                ok.confidenceLevel(), ok.confidenceReasons(), ok.summary(), ok.evidence(), ok.metrics(), ok.possibleCauses(), ok.suggestions(),
+                ok.dataLimitations(), false, "chữ của AI", CallReport.AnalysisSource.RULE, false, null, List.of(), List.of());
 
         assertThat(SCHEMA.validate(degradedNoReason).valid()).isFalse();
         assertThat(SCHEMA.validate(ruleWithAnalysis).valid()).isFalse();

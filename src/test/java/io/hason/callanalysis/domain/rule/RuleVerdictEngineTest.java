@@ -46,12 +46,13 @@ class RuleVerdictEngineTest {
         Set<LogSource> sources = ALL_SOURCES;
         Set<Leg> legsWithClientLog = Set.of(Leg.CALLER, Leg.CALLEE);
         List<LegQuality> qualityByLeg = List.of();
+        boolean partnerLostNetwork = false;
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
                     qualityDegraded, signalingTruncated, turnFailure, candidateTimeout,
-                    initCallRejection, clientFailure, sources, legsWithClientLog, qualityByLeg);
+                    initCallRejection, clientFailure, sources, legsWithClientLog, qualityByLeg, partnerLostNetwork);
         }
     }
 
@@ -192,6 +193,8 @@ class RuleVerdictEngineTest {
         assertThat(v.qualityFlag()).isFalse();
         assertThat(v.issueCategory()).isNull();
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.HIGH);
+        assertThat(v.confidenceReasons()).containsExactly(
+                "bằng chứng rõ: ICE đạt connected, kết thúc bằng BYE, không thấy lỗi media");
         assertThat(v.turnFailure()).isEqualTo(TurnFailure.NONE);
     }
 
@@ -274,6 +277,78 @@ class RuleVerdictEngineTest {
     }
 
     @Test
+    @DisplayName("media đã chạy rồi mới mất (FE4EF5E7, 70C388AD) -> vẫn FAIL / ICE_FAILURE, lý do nói rõ đã có rồi mới mất")
+    void mediaLostMidCallKeepsVerdictButExplainsIt() {
+        RuleVerdict lost = engine.decide(signals(b -> {
+            b.iceEverConnected = true;
+            b.mediaFailFlag = true;
+            b.partnerLostNetwork = true;
+        }));
+        RuleVerdict flagOnly = engine.decide(signals(b -> {
+            b.iceEverConnected = true;
+            b.mediaFailFlag = true;
+        }));
+
+        // Kết luận, loại lỗi, độ tin cậy KHÔNG đổi so với trước — chỉ câu giải thích đổi
+        assertThat(lost.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(lost.issueCategory()).isEqualTo(IssueCategory.ICE_FAILURE);
+        assertThat(lost.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
+        assertThat(lost.reasoning()).contains("đã nhận được một phần âm thanh, sau đó không còn nhận được dữ liệu")
+                .contains("network_lost")
+                .doesNotContain("mất mạng");   // network_lost không chứng minh bên kia mất mạng (70C388AD)
+        assertThat(flagOnly.reasoning()).contains("không còn nhận được dữ liệu").doesNotContain("network_lost");
+    }
+
+    private static LegQuality delayLeg(io.hason.callanalysis.domain.event.Leg leg, long packets, String avgRtt,
+                                       String avgJitter) {
+        return new LegQuality(leg, 15, 0, null, 0, new java.math.BigDecimal("3.9"), 0, packets,
+                avgRtt == null ? null : new java.math.BigDecimal(avgRtt),
+                avgJitter == null ? null : new java.math.BigDecimal(avgJitter));
+    }
+
+    @Test
+    @DisplayName("RTT trung bình > 500 ms trên luồng > 500 gói (FC3187B4) -> SUCCESS + NETWORK_DELAY_JITTER, LOW, căn cứ ghi số đo")
+    void sustainedHighRttFlagsDelayJitter() {
+        RuleVerdict v = engine.decide(signals(b -> b.qualityByLeg = List.of(
+                delayLeg(io.hason.callanalysis.domain.event.Leg.CALLER, 736, "538.4", "5.7"),
+                delayLeg(io.hason.callanalysis.domain.event.Leg.CALLEE, 697, "547.2", "5.7"))));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.SUCCESS);
+        assertThat(v.qualityFlag()).isTrue();
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.NETWORK_DELAY_JITTER);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.LOW);
+        assertThat(v.causeBasis()).contains("caller có RTT trung bình 538 ms").contains("736 gói nhận")
+                .contains("RTT trung bình > 500 ms hoặc jitter trung bình > 30 ms, luồng trên 500 gói");
+        assertThat(v.dataLimitations()).anyMatch(l -> l.contains("Teams CQD"));
+    }
+
+    @Test
+    @DisplayName("ngưỡng độ trễ: đúng 500 ms không bật; jitter > 30 ms bật; luồng <= 500 gói không xét (Teams: Unclassified)")
+    void delayThresholdBoundaries() {
+        var caller = io.hason.callanalysis.domain.event.Leg.CALLER;
+        assertThat(delayLeg(caller, 700, "500", "5").delayDegraded()).isFalse();
+        assertThat(delayLeg(caller, 700, "500.1", "5").delayDegraded()).isTrue();
+        assertThat(delayLeg(caller, 700, "80", "30.1").delayDegraded()).isTrue();
+        assertThat(delayLeg(caller, 700, "80", "30").delayDegraded()).isFalse();
+        // FE4E4BDC: RTT ~690 ms nhưng cuộc 9 giây, 255 gói — Teams không phân loại, mình cũng không bật cờ
+        assertThat(delayLeg(caller, 255, "693", "14").delayDegraded()).isFalse();
+        assertThat(delayLeg(caller, 700, null, null).delayDegraded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("vừa mất gói vừa trễ -> NETWORK_PACKET_LOSS (MVP mục 10 scenario 2: packet loss ↑, RTT ↑)")
+    void lossWinsOverDelay() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.qualityDegraded = true;
+            b.qualityByLeg = List.of(new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 15, 4,
+                    new java.math.BigDecimal("12"), 0, new java.math.BigDecimal("3.9"), 0, 736,
+                    new java.math.BigDecimal("540"), new java.math.BigDecimal("6")));
+        }));
+
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.NETWORK_PACKET_LOSS);
+    }
+
+    @Test
     @DisplayName("chất lượng kém -> SUCCESS kèm cờ, kèm ghi chú ngưỡng chưa kiểm chứng")
     void degradedQualityIsSuccessWithFlag() {
         RuleVerdict v = engine.decide(signals(b -> b.qualityDegraded = true));
@@ -346,7 +421,9 @@ class RuleVerdictEngineTest {
         assertThat(v.verdict()).isEqualTo(Verdict.FAIL);
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.SIGNALING_FAILURE);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("thiếu log client của callee"));
+        assertThat(v.confidenceReasons()).anyMatch(s -> s.contains("thiếu log client của callee"));
+        // Lý do nằm ở confidenceReasons (dòng "Độ tin cậy" của report), không lặp ở Giới hạn dữ liệu
+        assertThat(v.dataLimitations()).noneMatch(s -> s.contains("Độ tin cậy"));
     }
 
     @Test
@@ -356,7 +433,7 @@ class RuleVerdictEngineTest {
 
         assertThat(v.verdict()).isEqualTo(Verdict.SUCCESS);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.MEDIUM);
-        assertThat(v.dataLimitations()).anyMatch(s -> s.contains("thiếu log client của caller"));
+        assertThat(v.confidenceReasons()).anyMatch(s -> s.contains("thiếu log client của caller"));
     }
 
     @Test
@@ -491,5 +568,32 @@ class RuleVerdictEngineTest {
 
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.ICE_FAILURE);
         assertThat(v.causeBasis()).isNull();
+    }
+
+    @Test
+    @DisplayName("T2 — SIGNALING_FAILURE mang nguyên nhân con; đề xuất chuẩn khác nhau theo nguyên nhân")
+    void signalingCauseDrivesSuggestions() {
+        RuleVerdict rejected = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.initCallRejection = "428 call.outgoing.error.privacy_restricted";
+        }));
+        RuleVerdict timeout = engine.decide(signals(b -> {
+            b.sentInvite = false;
+            b.reachedConfirmed = false;
+            b.terminatedNormally = false;
+            b.candidateTimeout = true;
+        }));
+        RuleVerdict healthy = engine.decide(signals(b -> { }));
+
+        assertThat(rejected.signalingCause()).isEqualTo(SignalingCause.INIT_CALL_REJECTED);
+        assertThat(timeout.signalingCause()).isEqualTo(SignalingCause.CANDIDATE_TIMEOUT);
+        assertThat(healthy.signalingCause()).isNull();
+        var rejectedSuggestions = io.hason.callanalysis.domain.report.ReportBuilder.standardSuggestions(rejected);
+        assertThat(rejectedSuggestions).anyMatch(s -> s.contains("không phải lỗi mạng"))
+                .noneMatch(s -> s.contains("timeout"));
+        assertThat(rejectedSuggestions)
+                .isNotEqualTo(io.hason.callanalysis.domain.report.ReportBuilder.standardSuggestions(timeout));
     }
 }

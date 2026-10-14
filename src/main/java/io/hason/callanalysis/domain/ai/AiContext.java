@@ -25,9 +25,16 @@ public final class AiContext {
     private final String focus;
     private final Payload payload;
     private final Map<String, Integer> redactions;
+    private final String logCallId;
 
     AiContext(String requestId, String question, String focus, Payload payload, Map<String, Integer> redactions) {
+        this(requestId, question, focus, payload, redactions, null);
+    }
+
+    AiContext(String requestId, String question, String focus, Payload payload, Map<String, Integer> redactions,
+              String logCallId) {
         this.requestId = Objects.requireNonNull(requestId, "requestId");
+        this.logCallId = logCallId;
         this.question = question;
         this.focus = focus;
         this.payload = Objects.requireNonNull(payload, "payload");
@@ -37,6 +44,11 @@ public final class AiContext {
 
     public String requestId() {
         return requestId;
+    }
+
+    /** Call-ID đã mã giả, chỉ để ghi log ({@code call_id}, MVP mục 6.2). Không gửi cho AI; null khi chưa biết. */
+    public String logCallId() {
+        return logCallId;
     }
 
     /** Câu hỏi đã làm sạch; có thể null (phân tích không kèm câu hỏi). */
@@ -66,6 +78,11 @@ public final class AiContext {
         return payload.evidence().stream().map(EvidenceItem::id).toList();
     }
 
+    /** Mã chỉ số AI được phép nhắc (Guardrails G05). */
+    public List<String> metricIds() {
+        return payload.metrics().stream().map(MetricItem::id).toList();
+    }
+
     /**
      * Mọi văn bản của context đã gửi AI: số nào xuất hiện ở đây thì AI được phép nhắc lại (G05).
      *
@@ -77,6 +94,9 @@ public final class AiContext {
         RuleSummary rule = payload.ruleVerdict();
         add(texts, rule.reasoning());
         add(texts, rule.causeBasis());
+        // Bộ đề xuất chuẩn cũng là input đã gửi (Sprint 3 T2): thiếu nó thì AI nhắc lại "cổng 3478" của đề xuất TURN
+        // bị G05 coi là số bịa — case-008 (E9D6C112) bị chặn 3/3 lần ở lượt đo đầu của T2.
+        texts.addAll(rule.standardSuggestions());
         payload.evidence().forEach(e -> {
             add(texts, e.time());
             add(texts, e.description());
@@ -119,15 +139,30 @@ public final class AiContext {
     }
 
     /** Kết luận của rule — mốc đối chiếu. issueCategory là {@link AiAnalysis#NO_ISSUE} khi không có vấn đề. */
+    /**
+     * @param standardSuggestions bộ đề xuất chuẩn mà report luôn in (MVP 7.1 T2) — AI chỉ viết phần bổ sung, không lặp
+     */
     public record RuleSummary(String verdict, boolean qualityFlag, String issueCategory, String confidence,
-                              String reasoning, String causeBasis) {}
+                              String reasoning, String causeBasis, List<String> standardSuggestions) {
 
-    /** @param time mốc tuyệt đối (ISO-8601) hoặc tương đối "+123ms (tương đối)" — hai loại không so thứ tự được */
+        public RuleSummary {
+            standardSuggestions = standardSuggestions == null ? List.of() : List.copyOf(standardSuggestions);
+        }
+    }
+
+    /**
+     * @param time      mốc tuyệt đối (ISO-8601) hoặc tương đối "+123ms (tương đối)" — hai loại không so thứ tự được
+     * @param ruleBasis dòng căn cứ của tín hiệu mà rule dùng để kết luận (Sprint 3 T1b): AI biết dòng nào là căn cứ,
+     *                  dòng nào chỉ là mốc bình thường của cuộc gọi
+     */
     public record EvidenceItem(String id, String source, String leg, String time, String description,
-                               String citation) {}
+                               String citation, boolean ruleBasis) {}
 
-    /** @param value dạng hiển thị của report: "63 ms", hoặc "N/A (lý do)" — không bao giờ là 0 thay cho N/A */
-    public record MetricItem(String name, String value, String source) {}
+    /**
+     * @param id    mã AI dùng để nhắc chỉ số ({@code {MOS_CALLER}}), xem {@link MetricCodes}
+     * @param value dạng hiển thị của report: "63 ms", hoặc "N/A (lý do)" — không bao giờ là 0 thay cho N/A
+     */
+    public record MetricItem(String id, String name, String value, String source) {}
 
     /** @param timeBase ABSOLUTE (signaling, end call log) hoặc RELATIVE (WebRTC log, không có giờ tuyệt đối) */
     public record LogFile(String file, String source, String leg, String timeBase) {}

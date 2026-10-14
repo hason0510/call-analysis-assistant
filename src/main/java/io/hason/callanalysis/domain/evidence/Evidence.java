@@ -9,9 +9,12 @@ import io.hason.callanalysis.domain.event.LogSource;
  * MVP mục 8.2: "mọi evidence trace được về dòng log gốc". Mẫu report mục 4.5 in ra
  * dạng [EV05][callee_endcall.log 10:00:41.000], nên Evidence phải giữ cả nguồn lẫn
  * vị trí dòng.
+ *
+ * @param ruleBasis dòng căn cứ của một tín hiệu mà rule dùng để kết luận (SignalExtractor.basis), không phải
+ *                  mốc chọn cố định (INIT_CALL, ICE, call summary…)
  */
 public record Evidence(String id, LogSource source, String timeLabel,
-                       String description, CanonicalEvent event) {
+                       String description, CanonicalEvent event, boolean ruleBasis) {
 
     /** Dạng trích dẫn trong report: [EV05][callee_endcall.log:142]. */
     public String citation() {

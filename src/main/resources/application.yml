@@ -20,7 +20,8 @@ logging:
     io.hason.callanalysis: INFO
   pattern:
     # %smsg / %sex: nội dung log và stack trace đi qua Sensitive Data Sanitizer (logback-spring.xml)
-    console: "%d{HH:mm:ss} %-5level %-32logger{0} %smsg%n%sex"
+    # %skvp: trường key-value của SLF4J (request_id, latency_ms…) in sau thông điệp, đã làm sạch (Sprint 3 T5)
+    console: "%d{HH:mm:ss} %-5level %-32logger{0} %smsg%skvp%n%sex"
 
 # File Validator (Sprint 2 T3). File mẫu lớn nhất ~0,9 MB; file vượt giới hạn không được đọc
 # nội dung, bị loại và nêu tên ở "Giới hạn dữ liệu".
@@ -42,3 +43,11 @@ ai:
     model: gpt-4o-mini
     api-key: ${OPENAI_API_KEY:}
     timeout: 30s
+    # Thử lại có kiểm soát (Sprint 3 T8): chỉ lỗi tạm thời (quá giờ, mạng, 5xx), tối đa 2 lần, trong ngân sách 45 s
+    # cho cả một lời gọi — lần thử sau chỉ dùng phần ngân sách còn lại. Trình duyệt chờ 150 s (app.js) > tổng
+    # ngân sách các bước: AI phân loại 45 s + Elasticsearch 5 + 30 s + AI phân tích 45 s = 125 s.
+    retry:
+      max-attempts: 2
+      backoff: 500ms
+      budget: 45s
+      min-attempt-timeout: 2s

@@ -34,6 +34,7 @@ class GuardrailsTest {
             CallMetric.of(MetricKey.PACKET_LOSS, Leg.CALLER, MetricValue.unavailable("leg chưa có media"))));
 
     private static final List<String> EVIDENCE = List.of("EV01", "EV02", "EV03");
+    private static final List<String> METRIC_IDS = List.of("SETUP_TIME", "MOS_CALLER", "PACKET_LOSS_CALLER");
     private static final List<String> GROUNDING = List.of("[EV02] ACK kèm callErrorCode: 428");
 
     private static AiAnalysis ai(String verdict, String category, List<String> evidence, String analysis) {
@@ -42,7 +43,7 @@ class GuardrailsTest {
     }
 
     private GuardrailResult check(AiAnalysis ai) {
-        return guardrails.check(ai, RULE_ICE_FAIL, EVIDENCE, METRICS, GROUNDING);
+        return guardrails.check(ai, RULE_ICE_FAIL, EVIDENCE, METRIC_IDS, METRICS, GROUNDING);
     }
 
     private static List<String> codes(GuardrailResult r) {
@@ -151,5 +152,18 @@ class GuardrailsTest {
 
         assertThat(r.status()).isEqualTo(Status.REJECTED);
         assertThat(codes(r)).containsExactly("G05");
+    }
+
+    @Test
+    @DisplayName("G05 — mã chỉ số có trong bảng hợp lệ; mã lạ ({MOS_CALLEE} khi bảng không có) -> REJECTED")
+    void g05ChecksMetricCodes() {
+        assertThat(check(ai("FAIL", "ICE_FAILURE", List.of("EV01"),
+                "MOS vẫn tốt: {MOS_CALLER}; mất gói {PACKET_LOSS_CALLER}.")).status()).isEqualTo(Status.PASSED);
+
+        GuardrailResult r = check(ai("FAIL", "ICE_FAILURE", List.of("EV01"), "MOS {MOS_CALLEE}, {MOS_CALLER}."));
+
+        assertThat(r.status()).isEqualTo(Status.REJECTED);
+        assertThat(r.violations()).extracting(Violation::toString)
+                .containsExactly("G05: mã chỉ số không tồn tại: {MOS_CALLEE}");
     }
 }

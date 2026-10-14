@@ -13,4 +13,17 @@ spring:
       max-request-size: 300MB
 
 server:
-  port: 8080
+  port: 8081
+
+# Log JSON có làm sạch (Sprint 3 T5, MVP 7.1 "structured log"). logback-spring.xml chỉ dùng định dạng này ở profile web;
+# thêm profile "plain-log" để xem log chữ.
+logging:
+  structured:
+    format:
+      console: io.hason.callanalysis.infrastructure.logging.SanitizedJsonLogFormatter
+
+# Ghi bản ghi mỗi request vào Elasticsearch, index analysis-requests, để xem trên Kibana (Sprint 3 T9). Chỉ bật ở
+# profile web: lượt benchmark và lệnh CLI không ghi. Bản ghi chỉ có mã, số, cờ — không chữ tự do.
+call-analysis:
+  request-log:
+    enabled: true

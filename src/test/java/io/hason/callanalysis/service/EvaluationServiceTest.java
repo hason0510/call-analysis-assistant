@@ -11,6 +11,7 @@ import io.hason.callanalysis.domain.request.Intent;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
 import io.hason.callanalysis.domain.validation.AttachedFile;
 import io.hason.callanalysis.service.port.AiAnalyzer;
+import io.hason.callanalysis.service.port.ApplicationLogTap;
 import io.hason.callanalysis.service.port.SignalingSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ class EvaluationServiceTest {
     }
 
     private EvaluationService service(SignalingSource source, AiAnalyzer ai) {
-        return new EvaluationService(ChatPipelineFixture.chat(source, ai), new ObjectMapper());
+        return new EvaluationService(ChatPipelineFixture.chat(source, ai), new ObjectMapper(), ApplicationLogTap.NONE);
     }
 
     private static BenchmarkCase caseOf(BenchmarkCase.Question... questions) {
@@ -135,6 +136,43 @@ class EvaluationServiceTest {
         assertThat(run.sensitiveValues()).isPositive();             // UCALLERUSER1, UCALLEEUSER2
         assertThat(run.aiInputLeaks()).isEmpty();
         assertThat(run.outputLeaks()).isEmpty();
+        assertThat(run.logLeaks()).isNull();                         // ApplicationLogTap.NONE: chưa đo, không phải 0
+    }
+
+    @Test
+    @DisplayName("Security Leakage: số điện thoại / token / IP trong CÂU HỎI được tính, không tới AI, không ra phản hồi")
+    void questionValuesMeasured() {
+        String question = "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl, IP 198.51.100.23";
+        BenchmarkCase c = caseOf(new BenchmarkCase.Question(question, null));
+        int fromLogs = service(signaling, AGREEING_AI).runCase(caseOf(new BenchmarkCase.Question("Phân tích giúp", null)),
+                bothEndCallLogs(), List.of(), 1).getFirst().sensitiveValues();
+
+        EvaluationRun run = service(signaling, AGREEING_AI).runCase(c, bothEndCallLogs(), List.of(), 1).getFirst();
+
+        assertThat(run.sensitiveValues()).isEqualTo(fromLogs + 3);
+        assertThat(run.aiInputLeaks()).isEmpty();
+        assertThat(run.outputLeaks()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Security Leakage của application log: quét đúng phần log thu được trong lần chạy")
+    void logLeaksMeasured() {
+        ApplicationLogTap leakyLog = new ApplicationLogTap() {
+            @Override
+            public void start() {
+            }
+
+            @Override
+            public String stop() {
+                return "12:00:00 WARN  X  gọi lại cho 0912345678";          // log giả lộ số điện thoại của câu hỏi
+            }
+        };
+        BenchmarkCase c = caseOf(new BenchmarkCase.Question("Máy 0912345678 gọi lỗi", null));
+
+        EvaluationRun run = new EvaluationService(ChatPipelineFixture.chat(signaling, AGREEING_AI), new ObjectMapper(),
+                leakyLog).runCase(c, bothEndCallLogs(), List.of(), 1).getFirst();
+
+        assertThat(run.logLeaks()).isEqualTo(java.util.Map.of("contact", 1));
     }
 
     @Test

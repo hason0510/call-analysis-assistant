@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "@timestamp":        { "type": "date" },
+      "request_id":        { "type": "keyword" },
+      "result_status":     { "type": "keyword" },
+      "call_id":           { "type": "keyword" },
+      "intent":            { "type": "keyword" },
+      "intent_source":     { "type": "keyword" },
+      "garbled_question":  { "type": "boolean" },
+      "files_attached":    { "type": "integer" },
+      "verdict":           { "type": "keyword" },
+      "issue_category":    { "type": "keyword" },
+      "quality_flag":      { "type": "boolean" },
+      "confidence":        { "type": "keyword" },
+      "analysis_source":   { "type": "keyword" },
+      "degraded":          { "type": "boolean" },
+      "fallback_reason":   { "type": "keyword" },
+      "needs_review":      { "type": "boolean" },
+      "latency_ms":        { "type": "long" },
+      "intent_ms":         { "type": "long" },
+      "analysis_ms":       { "type": "long" },
+      "ai_ms":             { "type": "long" },
+      "report_ms":         { "type": "long" },
+      "prompt_tokens":     { "type": "integer" },
+      "completion_tokens": { "type": "integer" },
+      "error":             { "type": "keyword" }
+    }
+  }
+}

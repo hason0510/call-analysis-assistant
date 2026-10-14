@@ -4,6 +4,7 @@ import io.hason.callanalysis.domain.ai.AiUnavailableException;
 import io.hason.callanalysis.domain.ai.AiUnavailableException.Reason;
 import io.hason.callanalysis.domain.ai.TokenUsage;
 import io.hason.callanalysis.domain.request.AiIntent;
+import io.hason.callanalysis.domain.request.GarbledText;
 import io.hason.callanalysis.domain.request.Intent;
 import io.hason.callanalysis.domain.request.ParsedRequest;
 import io.hason.callanalysis.domain.request.ParsedRequest.Source;
@@ -77,6 +78,25 @@ class RequestParserServiceTest {
         assertThat(r.intent()).isEqualTo(Intent.OUT_OF_SCOPE);
     }
 
+    /** U+FFFD viết bằng mã số, không viết ký tự vào mã nguồn. */
+    private static final String REPLACEMENT = Character.toString(0xFFFD);
+
+    @Test
+    @DisplayName("câu hỏi hỏng mã hoá -> đánh dấu, ghi chú cho Giới hạn dữ liệu; câu từ chối kèm lời nhắc gửi lại")
+    void garbledQuestionIsFlagged() {
+        ParsedRequest r = parse("M" + REPLACEMENT + "y b" + REPLACEMENT + "n kia g?i l?i",
+                (id, q) -> new AiIntent("OUT_OF_SCOPE", ""));
+        ParsedRequest clean = parse("Viết giúp mình một email", (id, q) -> new AiIntent("OUT_OF_SCOPE", ""));
+
+        assertThat(r.garbled()).isTrue();
+        assertThat(r.notes()).contains(GarbledText.NOTE);
+        assertThat(r.intent()).isEqualTo(Intent.OUT_OF_SCOPE);          // vẫn từ chối, không đoán câu gốc
+        assertThat(r.outOfScopeReply()).startsWith(ParsedRequest.OUT_OF_SCOPE_REPLY).contains(GarbledText.NOTE);
+        assertThat(clean.garbled()).isFalse();
+        assertThat(clean.notes()).isEmpty();
+        assertThat(clean.outOfScopeReply()).isEqualTo(ParsedRequest.OUT_OF_SCOPE_REPLY);
+    }
+
     @Test
     @DisplayName("adapter ném lỗi không lường trước -> vẫn lùi về từ khoá")
     void unexpectedExceptionFallsBack() {
@@ -106,6 +126,17 @@ class RequestParserServiceTest {
         assertThat(sentToAi).singleElement().satisfies(sent -> assertThat(sent)
                 .doesNotContain("0912345678").doesNotContain("203.0.113.7").doesNotContain("eyJ"));
         assertThat(r.question()).doesNotContain("0912345678").doesNotContain("203.0.113.7").doesNotContain("eyJ");
+    }
+
+    @Test
+    @DisplayName("câu hỏi dán bí mật rồi viết tiếp: AI nhận bản đã che NHƯNG còn phần yêu cầu để phân loại")
+    void questionWithInlineSecretKeepsRequest() {
+        ParsedRequest r = parse("api_key=sk-FAKEquestion12345 phan tich cuoc goi nay giup minh",
+                (id, q) -> new AiIntent("ANALYZE_CALL", ""));
+
+        assertThat(sentToAi).singleElement().satisfies(sent -> assertThat(sent)
+                .doesNotContain("sk-FAKEquestion12345").contains("phan tich cuoc goi nay giup minh"));
+        assertThat(r.question()).isEqualTo("api_key=[REDACTED] phan tich cuoc goi nay giup minh");
     }
 
     @Test

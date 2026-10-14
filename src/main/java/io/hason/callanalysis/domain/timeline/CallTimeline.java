@@ -6,6 +6,7 @@ import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.signaling.LegAssignment;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -72,12 +73,51 @@ public record CallTimeline(
                 .count();
     }
 
-    /** Bản ghi call summary (tag `endcall`) của một leg, nếu leg đó có end call log. */
+    /**
+     * Bản ghi call summary (tag `endcall`) của một leg, nếu leg đó có end call log.
+     *
+     * Một leg có thể có NHIỀU end call log: người nhận đăng nhập nhiều thiết bị, mọi máy cùng đổ chuông, một
+     * máy bắt máy, máy kia dừng với `_emitFailed … another_device.accepted … code: 490` (fc3187b4,
+     * ai20k_new_dataset). Khi đó lấy summary của máy CÓ âm thanh (bytesReceived lớn nhất). Lấy summary đầu tiên
+     * theo thời gian thì ra máy không bắt máy (dừng sớm hơn): chỉ số callee N/A "packetsReceived = 0" dù bên
+     * nhận nghe bình thường. Không máy nào có âm thanh thì giữ summary đầu tiên như trước.
+     */
     public Optional<CanonicalEvent> callSummary(Leg leg) {
-        return allEvents().stream()
+        List<CanonicalEvent> summaries = allEvents().stream()
                 .filter(e -> e.type() == EventType.CALL_SUMMARY)
                 .filter(e -> e.leg() == leg)
-                .findFirst();
+                .toList();
+        return summaries.stream()
+                .filter(e -> bytesReceived(e) > 0)
+                .max(Comparator.comparingLong(CallTimeline::bytesReceived))
+                .or(() -> summaries.stream().findFirst());
+    }
+
+    /** End call log của máy có âm thanh mà {@link #callSummary} chọn; rỗng khi không máy nào có âm thanh. */
+    public Optional<String> audioFile(Leg leg) {
+        return callSummary(leg).filter(s -> bytesReceived(s) > 0).map(s -> s.sourceRef().fileName());
+    }
+
+    /** End call log của một leg, theo thứ tự trên timeline. Nhiều hơn một nghĩa là bên đó dùng nhiều thiết bị. */
+    public List<String> endCallFiles(Leg leg) {
+        return mainTrack.stream()
+                .filter(e -> e.source() == LogSource.ENDCALL && e.leg() == leg)
+                .map(e -> e.sourceRef().fileName())
+                .distinct()
+                .toList();
+    }
+
+    /** Số byte âm thanh đã nhận; thiếu hoặc không phải số thì coi là 0 (không có âm thanh để chọn). */
+    public static long bytesReceived(CanonicalEvent event) {
+        String value = event.attribute("audio.bytesReceived");
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Long.parseLong(value.strip());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public boolean hasSource(LogSource source) {

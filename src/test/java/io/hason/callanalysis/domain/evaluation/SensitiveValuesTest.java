@@ -52,6 +52,78 @@ class SensitiveValuesTest {
     }
 
     @Test
+    @DisplayName("IPv6 unicast toàn cầu ở ba dạng có trong data: cột TSV, SDP, Cand[…[addr]:port…] — kể cả rút gọn ::")
+    void collectsIpv6InRealShapes() {
+        // 2001:db8::/32 là dải dành cho tài liệu (RFC 3849) — cùng hình dạng với địa chỉ thật trong data mẫu
+        SensitiveValues v = SensitiveValues.collect(List.of(AttachedFile.of("callee_webrtc.log", List.of(
+                "6\t1789978902987\tremote_candidate\t\thost\t1540719183\tIbw4MX2rd\t2001:db8:6f0:d3b8:5a20:6a57:d877:931b\tcellular",
+                "candidate:1540719183 1 udp 2122262784 2001:db8:44a:e88b:1d59:cf68:6eee:a1b6 51625 typ host",
+                "UseCandidate: Cand[:1430443554:1:udp:2122262784:[2001:db8:c31:ed45::aadc:a181]:43957:host::0:VPqG::6:900:0]"))),
+                List.of());
+
+        assertThat(v.foundIn("2001:db8:6f0:d3b8:5a20:6a57:d877:931b · 2001:db8:44a:e88b:1d59:cf68:6eee:a1b6 · "
+                + "[2001:db8:c31:ed45::aadc:a181]")).isEqualTo(Map.of("ip", 3));
+        assertThat(v.count()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("chuỗi chỉ TRÔNG như IPv6 trong log WebRTC không bị gom: Port[…:host, WRVMC::, fingerprint, giờ, địa chỉ đã che")
+    void ignoresIpv6LookAlikes() {
+        SensitiveValues v = SensitiveValues.collect(List.of(AttachedFile.of("caller_webrtc.log", List.of(
+                "OnPortReady: UDPPort(Port[6449f700:0:1:0:host:Net[rmnet0:2001:db8:c31:x:x:x:x:x/64:Cellular:id=6]])",
+                "WRVMC::SetOutputVolume({ssrc=553571615}, {volume=1.00})",
+                "AudioOptions {aec: 1, agc: 1, ns: 1, hf: 1, swap: 0, }",
+                "Port[0a00::0:0:relay] fingerprint:sha-256 AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+                "[10:00:06.320] link-local fe80::1c2b:3aff:fe4d:5e6f, loopback ::1"))), List.of());
+
+        assertThat(v.foundIn("6449f700:0:1:0 0a00::0:0 fe80::1c2b:3aff:fe4d:5e6f ::1 10:00:06")).isEmpty();
+        assertThat(v.count()).isEqualTo(1);                              // chỉ còn fingerprint
+    }
+
+    @Test
+    @DisplayName("parser IPv6: đúng cú pháp RFC 4291, chỉ 2000::/3")
+    void ipv6Parser() {
+        assertThat(SensitiveValues.isGlobalIpv6("2001:db8:0:0:0:0:0:1")).isTrue();
+        assertThat(SensitiveValues.isGlobalIpv6("2001:db8::1")).isTrue();
+        assertThat(SensitiveValues.isGlobalIpv6("3fff::")).isTrue();
+        assertThat(SensitiveValues.isGlobalIpv6("2001:db8:0:0:0:0:1")).isFalse();      // 7 nhóm, không "::"
+        assertThat(SensitiveValues.isGlobalIpv6("2001::db8::1")).isFalse();            // hai "::"
+        assertThat(SensitiveValues.isGlobalIpv6("2001:::1")).isFalse();
+        assertThat(SensitiveValues.isGlobalIpv6("2001:db8:12345::1")).isFalse();       // nhóm 5 chữ số
+        assertThat(SensitiveValues.isGlobalIpv6("2001:db8:0:0:0:0:0:1:")).isFalse();
+        assertThat(SensitiveValues.isGlobalIpv6("fe80::1")).isFalse();                 // link-local
+        assertThat(SensitiveValues.isGlobalIpv6("::ffff:1")).isFalse();
+    }
+
+    @Test
+    @DisplayName("bí mật và liên hệ trong log: JWT, Bearer, API key, token=…, số điện thoại, email")
+    void collectsSecretsAndContacts() {
+        SensitiveValues v = SensitiveValues.collect(List.of(AttachedFile.of("caller_endcall.log", List.of(
+                "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl",
+                "provider rejected key sk-FAKEfake1234567890 for api_key=Zx81Qp0LmN3",
+                "{\"accessToken\":\"tok_9f8e7d6c5b4a\",\"phone\":\"0912345678\",\"email\":\"test.user@example.com\"}",
+                "callback +84987654321 · request 1789978896018 · id 0899238150123"))), List.of());
+
+        assertThat(v.foundIn("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl sk-FAKEfake1234567890 Zx81Qp0LmN3"))
+                .isEqualTo(Map.of("secret", 3));
+        assertThat(v.foundIn("0912345678 test.user@example.com +84987654321")).isEqualTo(Map.of("contact", 3));
+        assertThat(v.foundIn("1789978896018 0899238150123")).isEmpty();               // số dài hơn: không phải SĐT
+    }
+
+    @Test
+    @DisplayName("giá trị nhạy cảm trong CÂU HỎI được tính, và không làm mất giá trị của log")
+    void questionValues() {
+        SensitiveValues fromLog = SensitiveValues.collect(List.of(AttachedFile.of("x.log", List.of(
+                "peer 113.161.42.7"))), List.of());
+
+        SensitiveValues v = fromLog.withQuestion("Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl, IP 198.51.100.23");
+
+        assertThat(v.foundIn("0912345678 eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl 198.51.100.23 113.161.42.7"))
+                .isEqualTo(Map.of("contact", 1, "secret", 1, "ip", 2));
+        assertThat(fromLog.count()).isEqualTo(1);                                       // bản gốc không đổi
+    }
+
+    @Test
     @DisplayName("giá trị đã che / quá ngắn không gom; file không nạp nội dung bỏ qua")
     void skipsMaskedShortAndUnloaded() {
         SensitiveValues v = SensitiveValues.collect(List.of(

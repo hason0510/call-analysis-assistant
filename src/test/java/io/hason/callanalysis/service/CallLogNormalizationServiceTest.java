@@ -230,6 +230,19 @@ class CallLogNormalizationServiceTest {
     }
 
     @Test
+    @DisplayName("T1b — ICE chuyển sang failed là căn cứ của ICE_FAILURE; chuyển sang connected thì không")
+    void iceFailedTransitionIsBasis() {
+        List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("callee_webrtc.log", List.of(
+                "peer_connection.cc: [20:195][8431] (line 2032): Changing IceConnectionState new => checking",
+                "peer_connection.cc: [26:200][8431] (line 2032): Changing IceConnectionState checking => failed")));
+
+        assertThat(basis).singleElement().satisfies(e -> {
+            assertThat(e.sourceRef().lineNumber()).isEqualTo(2);
+            assertThat(e.attribute("iceStateTo")).isEqualTo("failed");
+        });
+    }
+
+    @Test
     @DisplayName("căn cứ của TURN hỏng là dòng TURN báo lỗi đầu tiên của file, bỏ qua dòng 401 bắt tay")
     void turnBasisIsFirstErrorLineOfFailedFile() {
         List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("caller_webrtc.log", List.of(
@@ -339,6 +352,26 @@ class CallLogNormalizationServiceTest {
         assertThat(timeline.notes())
                 .noneMatch(n -> n.kind() == TimelineNote.Kind.SIGNALING_TRUNCATED);
         assertThat(extractor.extract(timeline).signalingTruncated()).isFalse();
+    }
+
+    @Test
+    @DisplayName("--parse-*: Elasticsearch tắt -> vẫn parse log đính kèm, nêu lý do thiếu signaling")
+    void parseSurvivesSignalingOutage() {
+        SignalingSource down = callId -> {
+            throw new java.io.UncheckedIOException(new java.net.ConnectException("Connection refused"));
+        };
+        CallLogNormalizationService.CallOutcome outcome = new CallLogNormalizationService(down)
+                .normalize("CALL-1", Map.of("caller_endcall.log", endCallLog("CALL-1")));
+        CallLogNormalizationService.CallOutcome healthy = new CallLogNormalizationService(
+                new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
+                .normalize("CALL-1", Map.of("caller_endcall.log", endCallLog("CALL-1")));
+
+        assertThat(outcome.files()).singleElement()
+                .satisfies(f -> assertThat(f.result().events()).isNotEmpty());
+        assertThat(outcome.signaling().events()).isEmpty();
+        assertThat(outcome.signalingNotes()).singleElement()
+                .satisfies(n -> assertThat(n.message()).contains("Không truy vấn được signaling"));
+        assertThat(healthy.signalingNotes()).isEmpty();
     }
 
     @Test

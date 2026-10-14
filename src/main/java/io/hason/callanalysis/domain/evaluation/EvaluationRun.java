@@ -34,8 +34,14 @@ import java.util.TreeMap;
  * @param sensitiveValues     số giá trị nhạy cảm GỐC trong đầu vào của case (file + signaling thô), xem {@link SensitiveValues}
  * @param aiInputLeaks        giá trị gốc còn nguyên văn trong chuỗi gửi AI, đếm theo loại; null khi lỗi
  * @param outputLeaks         giá trị gốc còn nguyên văn trong phản hồi trả người dùng, đếm theo loại; null khi lỗi
+ * @param logLeaks            giá trị gốc còn nguyên văn trong application log ghi ra trong lần chạy (đúng định dạng
+ *                            console, sau converter làm sạch), đếm theo loại; null khi không thu được log
  * @param intentTokens        token của lời gọi AI phân loại câu hỏi; null khi không gọi hoặc AI không trả lời
  * @param analysisTokens      token của lời gọi AI phân tích; null khi không gọi hoặc AI không trả lời
+ * @param metricMentions      AI nhắc chỉ số qua mã ({@code {MOS_CALLER}}) hay tự chép số, đếm trên đầu ra thô; null
+ *                            khi AI không trả lời, hoặc lượt chạy trước Sprint 3 T1a
+ * @param evidenceCitation    evidence AI trích (đầu ra thô, trước Guardrails) so với evidence có trong context; null
+ *                            khi AI không trả lời, hoặc lượt chạy trước Sprint 3 T1b
  * @param latencyMs           end-to-end, từ lúc nhận câu hỏi tới khi có response
  */
 public record EvaluationRun(
@@ -66,8 +72,11 @@ public record EvaluationRun(
         int sensitiveValues,
         Map<String, Integer> aiInputLeaks,
         Map<String, Integer> outputLeaks,
+        Map<String, Integer> logLeaks,
         TokenUsage intentTokens,
         TokenUsage analysisTokens,
+        MetricMentions metricMentions,
+        EvidenceCitation evidenceCitation,
         long latencyMs
 ) {
 
@@ -78,6 +87,16 @@ public record EvaluationRun(
         violations = violations == null ? List.of() : List.copyOf(violations);
         aiInputLeaks = aiInputLeaks == null ? null : new TreeMap<>(aiInputLeaks);
         outputLeaks = outputLeaks == null ? null : new TreeMap<>(outputLeaks);
+        logLeaks = logLeaks == null ? null : new TreeMap<>(logLeaks);
+    }
+
+    /** Bản sao với nhãn intent mới — chấm lại ({@link RunAlignment}) dùng nhãn của file case hiện tại. */
+    public EvaluationRun withExpectedIntent(Intent expected) {
+        return new EvaluationRun(caseId, questionIndex, question, repeat, expected, error, type, intent, intentSource,
+                verdict, qualityFlag, issueCategory, confidenceLevel, ruleVerdict, ruleIssueCategory, aiVerdict,
+                aiIssueCategory, analysisSource, degraded, fallbackReason, needsReview, violations, templateCompliant,
+                metricsMatchCalculator, sensitiveValues, aiInputLeaks, outputLeaks, logLeaks, intentTokens, analysisTokens,
+                metricMentions, evidenceCitation, latencyMs);
     }
 
     /** Mã vi phạm (G01-G05), mỗi mã một lần. */

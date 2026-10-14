@@ -24,7 +24,8 @@ public final class SafeQuestion {
     }
 
     public static SafeQuestion of(String question, SensitiveDataSanitizer sanitizer) {
-        SensitiveDataSanitizer.Result result = sanitizer.sanitize(question == null ? "" : question.strip());
+        // Chế độ câu hỏi: bí mật tên=giá trị chỉ che đúng giá trị, giữ phần yêu cầu người dùng viết tiếp.
+        SensitiveDataSanitizer.Result result = sanitizer.sanitizeQuestion(question == null ? "" : question.strip());
         return new SafeQuestion(result.text(), result.findings());
     }
 

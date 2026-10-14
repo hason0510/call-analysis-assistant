@@ -30,6 +30,13 @@ ai20k_sample/
 !docs/evaluation-metrics.md
 !docs/demo-sprint-2.md
 !docs/ket-qua-demo-sprint-2.md
+# Tài liệu Sprint 3 (MVP mục 7.4): bàn giao, Security Evaluation Report, phân tích lỗi T1, số đo mốc
+!docs/runbook.md
+!docs/architecture-security-design.md
+!docs/bao-cao-bao-mat.md
+!docs/phan-tich-loi-dev.md
+!docs/moc-sprint-3.md
+!docs/demo-sprint-3.md
 docs/kiem-thu-tay.md
 docs/ket-qua-demo-sprint-1.md
 docs/ket-qua-for-test.md

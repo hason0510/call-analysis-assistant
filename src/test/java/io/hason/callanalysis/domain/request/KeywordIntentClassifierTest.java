@@ -31,6 +31,14 @@ class KeywordIntentClassifierTest {
             ANALYZE_WITH_FOCUS | Jitter của caller có cao không?
             ANALYZE_WITH_FOCUS | ICE có kết nối được không?
             ANALYZE_WITH_FOCUS | Tiếng bị giật, trễ là do mạng à?
+            ANALYZE_CALL       | Vì sao gọi không được?
+            ANALYZE_CALL       | vi sao goi khong duoc
+            ANALYZE_CALL       | Gọi mãi không thành công là sao?
+            ANALYZE_WITH_FOCUS | Máy gọi có lấy được địa chỉ relay không?
+            ANALYZE_WITH_FOCUS | Độ trễ giữa hai máy có cao không?
+            OUT_OF_SCOPE       | Gọi món gì ngon?
+            OUT_OF_SCOPE       | Gói quà giúp mình
+            OUT_OF_SCOPE       | Đặt giúp mình lịch gọi lại khách lúc 3 giờ chiều
             OUT_OF_SCOPE       | Viết giúp mình một email
             OUT_OF_SCOPE       | Viết email báo lỗi cuộc gọi này cho sếp
             OUT_OF_SCOPE       | Dịch đoạn này sang tiếng Anh

@@ -7,6 +7,7 @@ import io.hason.callanalysis.domain.evaluation.EvaluationRun;
 import io.hason.callanalysis.domain.evaluation.EvaluationScorer;
 import io.hason.callanalysis.domain.evaluation.EvaluationSummary;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
+import io.hason.callanalysis.infrastructure.ai.AiPromptFingerprint;
 import io.hason.callanalysis.infrastructure.evaluation.BenchmarkCaseLoader;
 import io.hason.callanalysis.infrastructure.evaluation.CaseFileResolver;
 import io.hason.callanalysis.service.EvaluationService;
@@ -46,6 +47,8 @@ import java.util.Map;
  * đọc case, tìm file, chấm điểm. Signaling lấy từ Elasticsearch: bật ES và nạp signaling trước.
  *
  * Kết quả: evaluation-<thời điểm>.md (metric + bảng AI vs Rule) và .json (từng lần chạy, để audit).
+ * Dòng "Prompt AI" của báo cáo là dấu vân tay prompt + schema AI ({@link AiPromptFingerprint}).
+ * Chấm lại file .json mà không gọi AI: {@link RescoreCommand}.
  */
 @Component
 public class EvaluateCommand implements ApplicationRunner {
@@ -129,6 +132,7 @@ public class EvaluateCommand implements ApplicationRunner {
         setup.put("Thư mục log", logRoot.toString());
         setup.put("Signaling", signalingStatus);
         setup.put("AI", aiConfigured ? model : "không dùng (chưa có key) — mọi report từ rule");
+        setup.put("Prompt AI", AiPromptFingerprint.summary());
         String markdown = new EvaluationReportRenderer().render(summary, setup);
 
         Files.createDirectories(outDir);

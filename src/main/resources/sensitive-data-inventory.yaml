@@ -8,7 +8,10 @@
 # label         : nhãn thay thế — DROP → [REDACTED]; MASK → [LABEL_REDACTED];
 #                 PSEUDONYMIZE → LABEL_a81f2c; MINIMIZE → LABEL_a81f (ngắn hơn, đủ phân biệt để debug)
 # match         : tên trường. Khớp cột / khoá JSON, và dạng tên=giá trị, tên: giá trị trong văn bản tự do
-#                 (chỉ với mục KHÔNG có pattern, hoặc mục DROP).
+#                 (chỉ với mục KHÔNG có pattern, hoặc mục DROP). Mục DROP: trong log giá trị được che TỚI HẾT
+#                 DÒNG ("Authorization: Basic xxx" không lộ phần sau khoảng trắng); trong chữ người dùng gõ
+#                 (câu hỏi) chỉ che một từ, hoặc scheme + một từ, để giữ phần yêu cầu viết tiếp sau bí mật
+#                 (quyết định 2026-10-10 — SensitiveDataSanitizer.sanitizeQuestion).
 # pattern       : regex dò trong văn bản tự do. Có nhóm tên bắt đầu bằng `value` thì CHỈ phần đó bị
 #                 thay, phần còn lại giữ để văn bản vẫn đọc được ("a=ice-pwd:[REDACTED]").
 #

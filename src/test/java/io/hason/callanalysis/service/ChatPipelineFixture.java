@@ -11,6 +11,7 @@ import io.hason.callanalysis.infrastructure.security.SensitiveDataInventoryLoade
 import io.hason.callanalysis.infrastructure.taxonomy.TaxonomyLoader;
 import io.hason.callanalysis.service.port.AiAnalyzer;
 import io.hason.callanalysis.service.port.IntentClassifier;
+import io.hason.callanalysis.service.port.RequestRecordSink;
 import io.hason.callanalysis.service.port.SignalingSource;
 import org.springframework.util.unit.DataSize;
 
@@ -50,13 +51,22 @@ public final class ChatPipelineFixture {
 
     /** @param maxFileSize phải trùng giới hạn của bên đọc file — khi chạy thật hai bên đọc cùng một khoá cấu hình */
     public static ChatAnalysisService chat(SignalingSource source, AiAnalyzer ai, DataSize maxFileSize) {
+        return chat(source, ai, maxFileSize, RequestRecordSink.NONE);
+    }
+
+    static ChatAnalysisService chat(SignalingSource source, AiAnalyzer ai, RequestRecordSink records) {
+        return chat(source, ai, DataSize.ofMegabytes(20), records);
+    }
+
+    private static ChatAnalysisService chat(SignalingSource source, AiAnalyzer ai, DataSize maxFileSize,
+                                            RequestRecordSink records) {
         SensitiveDataSanitizer sanitizer = new SensitiveDataSanitizer(
                 new SensitiveDataInventoryLoader().load(), new Pseudonymizer(new byte[32]));
         return new ChatAnalysisService(
                 new RequestParserService(KEYWORDS_ONLY, sanitizer),
                 new AnalyzeCallService(new CallLogNormalizationService(source, maxFileSize), new TaxonomyLoader(), sanitizer),
                 new AiVerdictService(ai, sanitizer),
-                new ReportSchemaValidator(new ObjectMapper()));
+                new ReportSchemaValidator(new ObjectMapper()), records);
     }
 
     private static RawSignalingRecord record(String callId, int ordinal, String ts, String cmd, String user) {

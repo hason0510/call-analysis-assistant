@@ -1,6 +1,14 @@
 package io.hason.callanalysis.domain.report;
 
 import io.hason.callanalysis.domain.metrics.MetricsCalculator;
+import io.hason.callanalysis.domain.event.CanonicalEvent;
+import io.hason.callanalysis.domain.event.ClockDomain;
+import io.hason.callanalysis.domain.event.EventTime;
+import io.hason.callanalysis.domain.event.EventType;
+import io.hason.callanalysis.domain.event.Leg;
+import io.hason.callanalysis.domain.event.LogSource;
+import io.hason.callanalysis.domain.event.Severity;
+import io.hason.callanalysis.domain.event.SourceRef;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
 import io.hason.callanalysis.domain.rule.TurnFailure;
 import io.hason.callanalysis.domain.signaling.LegAssignment;
@@ -36,6 +44,32 @@ class ReportBuilderTest {
                 .build(timeline, new MetricsCalculator().calculate(timeline), List.of(), verdict,
                         new IssueTaxonomy(List.of()))
                 .suggestions();
+    }
+
+    @Test
+    @DisplayName("callee hai thiết bị: Giới hạn dữ liệu nêu máy dùng tính chỉ số và lý do NGUYÊN VĂN của máy kia")
+    void multiDeviceLegIsExplained() {
+        String reason = "_emitFailed with originator: 1 reason: call.incoming.another_device.accepted endReason: 0"
+                + " code: 490 open:true";
+        CallTimeline twoDevices = new TimelineBuilder().build("CALL-1", List.of(
+                endCall("callee_b_endcall.log", "2026-09-21T08:00:10Z", EventType.CALL_SUMMARY,
+                        java.util.Map.of("audio.bytesReceived", "0")),
+                endCall("callee_b_endcall.log", "2026-09-21T08:00:10.001Z", EventType.STATE_CHANGE,
+                        java.util.Map.of("msg", reason)),
+                endCall("callee_a_endcall.log", "2026-09-21T08:00:30Z", EventType.CALL_SUMMARY,
+                        java.util.Map.of("audio.bytesReceived", "47747"))), LegAssignment.unknown());
+
+        assertThat(ReportBuilder.multiDeviceLegs(twoDevices)).containsExactly(
+                "Leg callee có 2 end call log (nhiều thiết bị cùng đổ chuông): chỉ số callee lấy từ"
+                        + " callee_a_endcall.log (thiết bị có âm thanh); callee_b_endcall.log không có âm thanh ("
+                        + reason + ")");
+        assertThat(ReportBuilder.multiDeviceLegs(timeline)).isEmpty();
+    }
+
+    private static CanonicalEvent endCall(String file, String isoTime, EventType type, java.util.Map<String, String> fields) {
+        return new CanonicalEvent(file + "#" + isoTime, "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(java.time.Instant.parse(isoTime), ClockDomain.CLIENT_CALLEE),
+                type, type.name(), fields, Severity.INFO, new SourceRef(file, 1, "raw"));
     }
 
     @Test

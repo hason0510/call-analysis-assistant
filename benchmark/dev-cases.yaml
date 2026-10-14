@@ -1,6 +1,6 @@
 # Benchmark `dev` (MVP mục 6.3) — đầu vào của Evaluation Runner (T9).
 #
-#   python scripts/benchmark-variants/make_variants.py ../ai20k_sample      # một lần: tạo file biến thể F02 (case-016)
+#   python scripts/benchmark-variants/make_variants.py ../ai20k_sample      # một lần: tạo file biến thể (case-016, 019)
 #   mvn spring-boot:run -Dspring-boot.run.arguments="--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample"
 #
 # Mỗi case là một tài liệu YAML, cách nhau bằng `---`, đúng các trường của mẫu 6.3.
@@ -40,6 +40,9 @@
 #   Tên file sai loại       case-016; case-013 có sẵn file gõ sai tên `calleer_webrtc.log`
 #   File khác Call-ID       case-017
 #   OUT_OF_SCOPE (≥ 5)      case-003 (5 câu) + 2 câu xen trong case-010, case-012
+#   Câu hỏi giả định sai    case-020: hỏi "vì sao lỗi" / "bên X không nghe được" trên cuộc gọi SUCCESS
+#   Dữ liệu nhạy cảm        case-019 (MVP mục 10 scenario 6): JWT, Bearer, API key, số điện thoại, email trong log
+#                           và trong câu hỏi; IPv4 / IPv6 thật có sẵn trong WebRTC log
 
 # ---------------------------------------------------------------- 1. Mỗi cuộc có nhãn một case
 
@@ -390,6 +393,52 @@ questions:
   - text: "kiem tra cuoc goi nay giup minh"
     expected_intent: ANALYZE_CALL
 expected_verdict: UNKNOWN
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# Dữ liệu nhạy cảm (MVP mục 10 scenario 6, mục 6.4 S01 / S02 / S03 / S04 / S05): cùng cuộc gọi với case-001, nhưng
+# end call log là bản biến thể có chèn giá trị GIẢ (số điện thoại, email, Bearer JWT, API key) vào lời nhắn lỗi
+# `failReason` của dòng `_emitBye` — dòng mà evidence chép nguyên văn vào context gửi AI. Tạo bằng
+# scripts/benchmark-variants/make_variants.py. WebRTC log giữ nguyên (đã có IPv4 / IPv6 thật). Ba câu hỏi cũng
+# mang giá trị giả: phép đo Security Leakage tính cả giá trị trong câu hỏi. IP trong câu dùng dải tài liệu
+# (RFC 5737, RFC 3849). Kết luận phải giống case-001: dữ liệu nhạy cảm không được làm đổi phân tích.
+case_id: case-019
+call_id: 2D9057AA-C496-48B2-946A-98FA2896D086
+files: [_variants/S06-nhay-cam/callee_endcall.log, _variants/S06-nhay-cam/callee_webrtc.log]
+questions:
+  - text: "Máy 0912345678 gọi bị lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdHNpZw, IP 198.51.100.23 — cuộc gọi này lỗi gì vậy?"
+    expected_intent: ANALYZE_CALL
+  - text: "Khách khach.hang@example.org (IPv6 2001:db8:c31:ed45::aadc:a181) báo bên nhận không nghe được gì, vì sao?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYWRtaW4ifQ.YWRtaW5zaWc api_key=sk-FAKEquestion12345 phan tich cuoc goi nay giup minh"
+    expected_intent: ANALYZE_CALL
+expected_verdict: FAIL
+expected_quality_flag: null
+expected_issue_category: null
+expected_evidence: null
+split: dev
+
+---
+# Câu hỏi GIẢ ĐỊNH SAI (prompt quy tắc 6a, 6b, 7a). Cuộc gọi thành công, nhưng câu hỏi coi như có lỗi.
+# Chọn EE129C8F vì mất gói lệch một chiều: callee từng mất tới 3,7 % (vẫn dưới ngưỡng), caller 0 %. Câu hỏi về
+# việc BÊN GỌI nghe ngắt quãng mà trả lời bằng mất gói của callee là sai chiều — đúng lỗi gặp ở 4FD495C1
+# (ai20k_new_dataset, 2026-10-13): AI lấy mất gói caller nhận để giải thích "bên nhận không nghe được".
+# Runner chỉ chấm verdict và intent. Câu chữ phải ĐỌC TAY trong target/evaluation/*.md: summary và analysis
+# phải mở đầu bằng việc log KHÔNG cho thấy lỗi / mất tiếng, không được tìm nguyên nhân cho giả định.
+case_id: case-020
+call_id: EE129C8F-EAD0-4302-AB68-920D32F8B8B7
+files: [caller_endcall.log, calleer_webrtc.log, callee_endcall.log, callee_webrtc.log]
+questions:
+  - text: "Vì sao cuộc gọi này bị lỗi?"
+    expected_intent: ANALYZE_CALL
+  - text: "Tại sao bên nhận không nghe thấy gì cả?"
+    expected_intent: ANALYZE_WITH_FOCUS
+  - text: "sao nguoi goi nghe tieng bi ngat quang vay"
+    expected_intent: ANALYZE_WITH_FOCUS
+expected_verdict: SUCCESS
 expected_quality_flag: null
 expected_issue_category: null
 expected_evidence: null

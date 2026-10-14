@@ -5,6 +5,7 @@ import io.hason.callanalysis.domain.ai.AiContext;
 import io.hason.callanalysis.domain.ai.AiUnavailableException;
 import io.hason.callanalysis.domain.report.CallReport;
 import io.hason.callanalysis.domain.report.ReportRenderer;
+import io.hason.callanalysis.domain.request.GarbledText;
 import io.hason.callanalysis.domain.request.ParsedRequest;
 import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
@@ -57,6 +58,91 @@ class ChatAnalysisServiceTest {
         assertThat(sentToAi).isEmpty();
     }
 
+    /** U+FFFD viết bằng mã số: ký tự này nằm trực tiếp trong mã nguồn thì dễ bị editor đổi mà không ai thấy. */
+    private static final String REPLACEMENT = Character.toString(0xFFFD);
+
+    @Test
+    @DisplayName("câu hỏi hỏng mã hoá: còn hiểu được -> report nêu ở Giới hạn dữ liệu; bị từ chối -> câu từ chối nhắc gửi lại")
+    void garbledQuestionIsReported() {
+        Response understood = ask("Ki?m tra log n?y gi?p m?nh", bothEndCallLogs(), agreeingAi);
+        // Ca demo 2026-10-06: mất gần hết chữ, đường lui từ khoá (fixture không có AI) xếp ngoài phạm vi
+        Response refused = ask("Ph" + REPLACEMENT + "n t" + REPLACEMENT + "ch cu?c g?i n" + REPLACEMENT + "y", bothEndCallLogs(), agreeingAi);
+
+        assertThat(understood.type()).isEqualTo(Type.REPORT);
+        assertThat(understood.report().dataLimitations()).contains(GarbledText.NOTE);
+        assertThat(refused.type()).isEqualTo(Type.OUT_OF_SCOPE);
+        assertThat(refused.message()).startsWith(ParsedRequest.OUT_OF_SCOPE_REPLY).contains(GarbledText.NOTE);
+    }
+
+    @Test
+    @DisplayName("T5 — dòng 'Request done' có latency từng bước và call_id đã mã giả; MDC request_id được dọn sau request")
+    void requestLogHasStepLatencies() {
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ChatAnalysisService.class);
+        logger.addAppender(appender);
+        try {
+            Response r = ask("Phân tích cuộc gọi này giúp mình", bothEndCallLogs(), agreeingAi);
+
+            var done = appender.list.stream().filter(e -> e.getFormattedMessage().equals("Request done"))
+                    .findFirst().orElseThrow();
+            var keys = done.getKeyValuePairs().stream().map(p -> p.key).toList();
+            assertThat(keys).contains("request_id", "call_id", "latency_ms", "intent_ms", "analysis_ms", "ai_ms",
+                    "report_ms");
+            assertThat(done.getKeyValuePairs()).filteredOn(p -> p.key.equals("call_id"))
+                    .singleElement().satisfies(p -> assertThat(String.valueOf(p.value)).startsWith("CALL_"));
+            assertThat(done.getKeyValuePairs()).filteredOn(p -> p.key.equals("request_id"))
+                    .singleElement().satisfies(p -> assertThat(p.value).isEqualTo(r.requestId()));
+            assertThat(org.slf4j.MDC.get("request_id")).isNull();
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    @DisplayName("T9 — mỗi request để lại đúng một bản ghi: REPORT có kết luận + latency từng bước; OUT_OF_SCOPE, INVALID_REQUEST cũng ghi")
+    void everyRequestLeavesOneRecord() {
+        List<io.hason.callanalysis.domain.observability.RequestRecord> recorded = new java.util.ArrayList<>();
+        ChatAnalysisService chat = ChatPipelineFixture.chat(signaling, agreeingAi, recorded::add);
+
+        Response report = chat.handle("Phân tích cuộc gọi này giúp mình", bothEndCallLogs());
+        chat.handle("Viết giúp mình một email", bothEndCallLogs());
+        chat.handle("Phân tích cuộc gọi này giúp mình", List.of());
+
+        assertThat(recorded).extracting(io.hason.callanalysis.domain.observability.RequestRecord::resultStatus)
+                .containsExactly("REPORT", "OUT_OF_SCOPE", "INVALID_REQUEST");
+        var r = recorded.getFirst();
+        assertThat(r.requestId()).isEqualTo(report.requestId());
+        assertThat(r.callId()).startsWith("CALL_");                      // mã giả, không phải Call-ID gốc
+        assertThat(r.verdict()).isEqualTo(report.report().verdict().name());
+        assertThat(r.analysisSource()).isEqualTo("AI");
+        assertThat(r.filesAttached()).isEqualTo(2);
+        assertThat(r.intentMs()).isNotNull();
+        assertThat(r.analysisMs()).isNotNull();
+        assertThat(r.aiMs()).isNotNull();
+        assertThat(r.reportMs()).isNotNull();
+        assertThat(recorded.get(1).verdict()).isNull();
+        assertThat(recorded.get(1).callId()).isNull();
+    }
+
+    @Test
+    @DisplayName("T9 — lỗi không lường trước vẫn để lại bản ghi ERROR (chỉ tên lớp), rồi ném tiếp như cũ")
+    void unexpectedErrorIsRecorded() {
+        List<io.hason.callanalysis.domain.observability.RequestRecord> recorded = new java.util.ArrayList<>();
+        ChatAnalysisService chat = ChatPipelineFixture.chat(signaling, agreeingAi, recorded::add);
+
+        // Lỗi ES và lỗi AI đều đã có đường lui; danh sách file null làm pipeline hỏng thật
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> chat.handle("Phân tích cuộc gọi này giúp mình", null))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(recorded).singleElement().satisfies(r -> {
+            assertThat(r.resultStatus()).isEqualTo("ERROR");
+            assertThat(r.error()).isEqualTo("NullPointerException");
+        });
+    }
+
     @Test
     @DisplayName("không file, không Call-ID -> INVALID_REQUEST, nói rõ cần gì")
     void nothingToAnalyze() {
@@ -81,6 +167,26 @@ class ChatAnalysisServiceTest {
                 .contains("- Phân tích: Phân tích do AI viết.");
         assertThat(r.rendered().lines().filter(l -> l.startsWith("## ")).toList())
                 .containsExactlyElementsOf(ReportRenderer.SECTIONS);
+    }
+
+    @Test
+    @DisplayName("T1a — AI nhắc chỉ số bằng mã: report hiện giá trị kèm tên đúng như context, không còn mã")
+    void metricCodesAreExpandedInReport() {
+        Response r = ask("Phân tích cuộc gọi này giúp mình", bothEndCallLogs(), ctx -> {
+            sentToAi.add(ctx);
+            AiContext.RuleSummary rule = ctx.payload().ruleVerdict();
+            String code = "{" + ctx.payload().metrics().getFirst().id() + "}";
+            return new AiAnalysis(rule.verdict(), rule.qualityFlag(), rule.issueCategory(), "MEDIUM",
+                    "Tóm tắt: " + code + ".", List.of(ctx.evidenceIds().getFirst()), "Phân tích: " + code + ".",
+                    List.of("Đề xuất: " + code + "."));
+        });
+
+        AiContext.MetricItem first = sentToAi.getFirst().payload().metrics().getFirst();
+        String shown = first.value() + " [" + first.name() + "]";
+        assertThat(r.report().analysisSource()).isEqualTo(CallReport.AnalysisSource.AI);
+        assertThat(r.report().summary()).isEqualTo("Tóm tắt: " + shown + ".");
+        assertThat(r.report().analysis()).isEqualTo("Phân tích: " + shown + ".");
+        assertThat(r.rendered()).doesNotContain("{" + first.id() + "}");
     }
 
     @Test

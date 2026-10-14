@@ -53,7 +53,9 @@ public class ReportRenderer {
         // Mẫu 4.5: category chỉ ghi ở dòng này khi cờ BẬT. Với FAIL, category là nguyên nhân cuộc gọi
         // hỏng, không phải của cờ chất lượng — đã có ở mục "Chính:" bên dưới.
         line(out, HEADER.get(2) + ": " + (r.qualityFlag() ? "Có - " + r.issueCategory() : "Không"));
-        line(out, HEADER.get(3) + ": " + r.confidenceLevel());
+        // Mẫu 4.5 chỉ có mức; lý do đi sau dấu gạch để người đọc không phải đoán vì sao MEDIUM (MVP 7.2).
+        line(out, HEADER.get(3) + ": " + r.confidenceLevel()
+                + (r.confidenceReasons().isEmpty() ? "" : " — " + oneLine(String.join("; ", r.confidenceReasons()))));
         line(out, HEADER.get(4) + ": " + oneLine(r.summary()));
 
         section(out, SECTIONS.get(0));
@@ -76,20 +78,29 @@ public class ReportRenderer {
 
         section(out, SECTIONS.get(2));
         CallReport.PossibleCauses causes = r.possibleCauses();
+        // MVP 7.1 T2: chuyện gì xảy ra (Chính) / vì sao kết luận / evidence nào — luôn có, kể cả khi không có AI
         line(out, "- Chính: " + (causes == null || causes.primary() == null
                 ? "không có vấn đề nào được phát hiện" : oneLine(causes.primary())));
+        if (causes != null && causes.reasoning() != null) {
+            line(out, "- Vì sao kết luận: " + oneLine(causes.reasoning()));
+        }
+        if (causes != null && !causes.basisEvidenceIds().isEmpty()) {
+            line(out, "- Căn cứ của rule: " + String.join(", ", causes.basisEvidenceIds()));
+        }
         if (r.analysis() != null) {
             line(out, "- Phân tích: " + oneLine(r.analysis()));
         }
         if (!r.citedEvidenceIds().isEmpty()) {
-            line(out, "- Căn cứ: " + String.join(", ", r.citedEvidenceIds()));
+            line(out, "- Căn cứ AI trích: " + String.join(", ", r.citedEvidenceIds()));
         }
         if (causes != null) {
             causes.alternatives().forEach(a -> line(out, "- Khả dĩ khác: " + oneLine(a)));
         }
 
+        // Câu thứ tư của MVP 7.1 T2 — cần điều tra gì tiếp: bộ đề xuất chuẩn của rule, rồi phần AI bổ sung
         section(out, SECTIONS.get(3));
         bullets(out, r.suggestions());
+        r.aiSuggestions().forEach(s -> line(out, "- Bổ sung (AI): " + oneLine(s)));
 
         section(out, SECTIONS.get(4));
         bullets(out, r.dataLimitations());

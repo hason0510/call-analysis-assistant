@@ -4,7 +4,6 @@ import io.hason.callanalysis.domain.event.CanonicalEvent;
 import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.evidence.Evidence;
-import io.hason.callanalysis.domain.metrics.CallMetric;
 import io.hason.callanalysis.domain.metrics.CallMetrics;
 import io.hason.callanalysis.domain.report.ReportBuilder;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
@@ -28,7 +27,8 @@ import java.util.stream.Collectors;
  * duy nhất tạo được {@link AiContext}.
  *
  * Minimum necessary context (MVP mục 3.3) — cái gì gửi và cái gì KHÔNG:
- * - Gửi: kết luận của rule, evidence (sự kiện chính của timeline, tối đa 40), bộ chỉ số đã tính,
+ * - Gửi: kết luận của rule, evidence (sự kiện chính của timeline, tối đa 40), bộ chỉ số đã tính (kèm mã
+ *   {@link MetricCodes} để AI nhắc chỉ số mà không tự chép số),
  *   danh sách log có mặt, giới hạn dữ liệu, taxonomy (định nghĩa + triệu chứng).
  * - Không gửi: raw log, thuộc tính thô của event, timeline đầy đủ (tới ~7 000 sự kiện mỗi cuộc),
  *   Call-ID (AI không cần để phân tích), phần hiệu chỉnh của taxonomy (nêu Call-ID của data mẫu),
@@ -59,27 +59,29 @@ public class AiContextBuilder {
                 ruleSummary(rule, clean),
                 evidence.stream().map(e -> new AiContext.EvidenceItem(e.id(), e.source().name(),
                         e.event().leg().name(), e.timeLabel(), clean.text(e.description()),
-                        clean.text(e.event().sourceRef().citation()))).toList(),
-                metrics.metrics().stream().map(m -> new AiContext.MetricItem(clean.text(m.label()),
-                        clean.text(display(m)), m.key().source().name())).toList(),
+                        clean.text(e.event().sourceRef().citation()), e.ruleBasis())).toList(),
+                metricItems(metrics, clean),
                 logs(timeline, clean),
                 ReportBuilder.dataLimitations(timeline, metrics, rule, taxonomy).stream().map(clean::text).toList(),
                 taxonomy.definitions().stream().map(d -> new AiContext.CategoryItem(d.id().name(),
                         clean.text(d.definition().strip()), d.symptoms().stream().map(clean::text).toList(),
                         d.calibration().isValidated())).toList());
 
-        return new AiContext(requestId, clean.text(question), clean.text(focus), payload, clean.findings);
+        return new AiContext(requestId, clean.question(question), clean.question(focus), payload, clean.findings,
+                sanitizer.pseudonymizeCallId(timeline.callId()));
     }
 
     private static AiContext.RuleSummary ruleSummary(RuleVerdict rule, Cleaner clean) {
         return new AiContext.RuleSummary(rule.verdict().name(), rule.qualityFlag(),
                 rule.issueCategory() == null ? AiAnalysis.NO_ISSUE : rule.issueCategory().name(),
-                rule.confidence().name(), clean.text(rule.reasoning()), clean.text(rule.causeBasis()));
+                rule.confidence().name(), clean.text(rule.reasoning()), clean.text(rule.causeBasis()),
+                ReportBuilder.standardSuggestions(rule).stream().map(clean::text).toList());
     }
 
-    /** Như cột "Giá trị" của report: N/A kèm lý do, và chỉ số proxy ghi rõ là proxy (MVP mục 4.3). */
-    private static String display(CallMetric metric) {
-        return metric.value().display() + (metric.key().isProxy() ? " [proxy]" : "");
+    /** Mỗi chỉ số kèm mã {@link MetricCodes} — AI nhắc chỉ số bằng mã, không tự chép số (Sprint 3 T1a). */
+    private static List<AiContext.MetricItem> metricItems(CallMetrics metrics, Cleaner clean) {
+        return metrics.metrics().stream().map(m -> new AiContext.MetricItem(MetricCodes.id(m), clean.text(m.aiLabel()),
+                clean.text(MetricCodes.display(m)), m.key().source().name())).toList();
     }
 
     /**
@@ -116,10 +118,15 @@ public class AiContextBuilder {
         }
 
         private String text(String text) {
-            if (text == null) {
-                return null;
-            }
-            SensitiveDataSanitizer.Result result = session.sanitize(text);
+            return text == null ? null : record(session.sanitize(text));
+        }
+
+        /** Chữ người dùng gõ (câu hỏi, trọng tâm): chế độ câu hỏi của Sanitizer. */
+        private String question(String text) {
+            return text == null ? null : record(session.sanitizeQuestion(text));
+        }
+
+        private String record(SensitiveDataSanitizer.Result result) {
             result.findings().forEach((id, n) -> findings.merge(id, n, Integer::sum));
             return result.text();
         }

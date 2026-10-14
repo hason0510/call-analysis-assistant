@@ -63,7 +63,7 @@ public class AiVerdictService {
     }
 
     /**
-     * Evidence ID và văn bản căn cứ cho G01 / G05 lấy từ chính context đã gửi AI, không nhận riêng:
+     * Evidence ID, mã chỉ số và văn bản căn cứ cho G01 / G05 lấy từ chính context đã gửi AI, không nhận riêng:
      * bên gọi truyền một danh sách khác thì Guardrails kiểm theo thứ AI chưa từng thấy.
      */
     public Outcome decide(AiContext context, RuleVerdict rule, CallMetrics metrics) {
@@ -74,30 +74,45 @@ public class AiVerdictService {
             // hoặc lặp lại một chuỗi nhạy cảm — làm sạch TRƯỚC Guardrails và trước khi vào report.
             ai = sanitizeOutput(analyzer.analyze(context));
         } catch (AiUnavailableException e) {
-            return fallback(context, rule, e.reason().name(), null, null, started);
+            return fallback(context, rule, e.reason().name(), null, null, started, null);
         } catch (RuntimeException e) {
             // Lỗi không lường trước của adapter cũng không được lọt ra ngoài pipeline.
-            return fallback(context, rule, "UNEXPECTED_ERROR", null, null, started);
+            return fallback(context, rule, "UNEXPECTED_ERROR", null, null, started, null);
         }
 
-        GuardrailResult checked = guardrails.check(ai, rule, context.evidenceIds(), metrics,
+        long guardrailsStarted = System.nanoTime();
+        GuardrailResult checked = guardrails.check(ai, rule, context.evidenceIds(), context.metricIds(), metrics,
                 context.groundingTexts());
+        long guardrailsMs = elapsedMs(guardrailsStarted);
         if (!checked.usable()) {
-            return fallback(context, rule, "GUARDRAIL_REJECTED", ai, checked, started);
+            return fallback(context, rule, "GUARDRAIL_REJECTED", ai, checked, started, guardrailsMs);
         }
-        log.info("request_id={} result_status={} latency_ms={}", context.requestId(),
-                checked.status(), elapsedMs(started));
+        log.atInfo().addKeyValue("request_id", context.requestId())
+                .addKeyValue("call_id", context.logCallId())
+                .addKeyValue("result_status", checked.status())
+                .addKeyValue("latency_ms", elapsedMs(started))
+                .addKeyValue("guardrails_ms", guardrailsMs)
+                .log("AI verdict");
         return new Outcome(Source.AI, false, null, checked.verdict(), checked.qualityFlag(),
                 checked.issueCategory(), ai, checked);
     }
 
     private static Outcome fallback(AiContext context, RuleVerdict rule, String reason,
-                                    AiAnalysis ai, GuardrailResult checked, long started) {
+                                    AiAnalysis ai, GuardrailResult checked, long started, Long guardrailsMs) {
         // Chỉ log mã lỗi và mã vi phạm — không log nội dung AI trả về (MVP mục 6.2).
-        log.warn("request_id={} result_status=FALLBACK fallback_reason={} latency_ms={}{}",
-                context.requestId(), reason, elapsedMs(started),
-                checked == null ? "" : " violations=" + checked.violations().stream()
-                        .map(GuardrailResult.Violation::code).distinct().toList());
+        var event = log.atWarn().addKeyValue("request_id", context.requestId())
+                .addKeyValue("call_id", context.logCallId())
+                .addKeyValue("result_status", "FALLBACK")
+                .addKeyValue("fallback_reason", reason)
+                .addKeyValue("latency_ms", elapsedMs(started));
+        if (guardrailsMs != null) {
+            event = event.addKeyValue("guardrails_ms", guardrailsMs);
+        }
+        if (checked != null) {
+            event = event.addKeyValue("violations",
+                    checked.violations().stream().map(GuardrailResult.Violation::code).distinct().toList());
+        }
+        event.log("AI verdict");
         return new Outcome(Source.RULE_FALLBACK, true, reason, rule.verdict(), rule.qualityFlag(),
                 rule.issueCategory(), ai, checked);
     }

@@ -497,7 +497,8 @@ một câu hỏi, AI từng viết `10.942` (đổi đúng) và `11.942` (bịa)
 tự làm toán mới phân biệt được.
 
 **Đánh đổi.** Đôi khi chặn nhầm một câu đúng → report lùi về rule (degraded): người dùng mất phần chữ AI, không bao giờ
-thấy số sai. Đo được: 0-3% đầu ra thô bị chặn tuỳ lượt. Cách triệt để (Sprint 3): AI trích mã chỉ số `{Mxx}`, code điền.
+thấy số sai. Đo được: 0-3% đầu ra thô bị chặn tuỳ lượt. Cách triệt để (Sprint 3): AI trích mã chỉ số `{Mxx}`, code điền — đã làm,
+với mã theo tên thay cho số (mục 32).
 
 ---
 
@@ -586,6 +587,318 @@ trị nằm trong câu hỏi.
 
 ---
 
+## 32. AI nhắc chỉ số bằng mã theo tên chỉ số; code điền giá trị và tên (Sprint 3 T1a)
+
+**Quyết định.** Mỗi chỉ số trong context gửi AI có mã theo tên `MetricKey` kèm leg (`SETUP_TIME`, `PACKET_LOSS_CALLER`,
+`MOS_CALLEE`…). Prompt bắt AI nhắc giá trị chỉ số bằng mã trong ngoặc nhọn (`{PACKET_LOSS_CALLER}`), không tự chép số.
+Mã lạ là G05. Lúc dựng report (`AnalyzeCallService.finalReport`), code thay mã bằng `giá trị [tên]`:
+`1.83 % (cao nhất 11.32 %) [Packet loss (caller)]`. Kết quả AI giữ nguyên chữ có mã, để runner đếm được AI nhắc chỉ số
+qua mã hay tự chép số (metric "Chỉ số AI nhắc qua mã").
+
+**Lý do.** G05 chỉ kiểm **số có nguồn**, không kiểm **số được gán đúng nghĩa**: `271D1FAF` từng bị viết "mất gói của
+caller là 11.3208%", trong khi đó là một mẫu stats, còn mất gói cả cuộc là 1.83 % (mục 25). Khi tên đi cùng giá trị thì
+AI có chọn nhầm chỉ số, người đọc cũng thấy ngay tên sai chỗ.
+
+- **Không đánh số `{M01}`, `{M02}`…** như kế hoạch ban đầu. Thử với AI thật: context có `M20` (trạng thái ICE của callee)
+  thì AI trích evidence `EV20` không tồn tại ở 5/5 lần trên `2D9057AA` (EV01-EV13), kể cả với prompt cũ. Code trước T1a
+  (context không có mã) thì không. Mã theo tên không có số để lẫn với `EVxx`, và AI chọn chỉ số theo nghĩa: bản đánh số từng dùng `{M16}` (MOS
+  callee) để nói "không có gói audio".
+- **Giá trị đứng trước, tên trong ngoặc vuông.** AI hay viết "Thời gian đổ chuông là {RINGING_TIME}": dạng `tên = giá trị`
+  cho ra "Thời gian đổ chuông là Thời gian đổ chuông = 5987 ms".
+- **Prompt không nêu ví dụ chữ sau khi thay.** Bản đầu nêu `"Thời gian đổ chuông = 10942 ms"` làm ví dụ, và AI chép đúng
+  dạng đó bằng tay ("MOS (caller) = 4.42133") thay vì dùng mã.
+
+**Đo** (2026-10-10, `dev` ×2, 132 lần chạy, prompt `e217a0b28a2d`): AI nhắc chỉ số qua mã 220/231 lần (95,2%); 11 số
+tự chép trùng giá trị một chỉ số, ở 8/118 lần trả lời (cận trên). Unsupported Claim trước Guardrails 0/118, fallback 0,
+Verdict / Consistency / Intent 100%. Token mỗi lời gọi phân tích 3 753 vào + 135 ra (mốc 3 172 + 149: mã và prompt dài
+hơn, +18% token vào).
+
+**Đánh đổi.** Câu có thể lặp tên ("MOS caller là 4.42133 [MOS (caller)]"). G05 vẫn cho qua số AI tự chép nếu số đó có
+trong context: chặn hẳn sẽ đẩy thêm report về rule. Số AI tự chép được đo, không chặn. Số trong mô tả evidence (mẫu
+stats) vẫn do AI chép, và prompt chỉ dặn đó là số của một mẫu.
+
+---
+
+## 33. Evidence mang cờ "căn cứ của rule"; AI chỉ trích căn cứ (Sprint 3 T1b)
+
+**Quyết định.**
+- `Evidence` có thêm `ruleBasis`: dòng nằm trong `SignalExtractor.basis()`, tức dòng mà một tín hiệu lỗi của rule dựa
+  vào. Cờ này đi vào context AI.
+- `basis()` thêm dòng ICE chuyển sang `failed` và call summary không có byte audio nào. Evidence Engine vốn đã chọn hai
+  dòng này làm mốc, nên danh sách evidence không đổi, chỉ cờ đúng hơn. Trước đó ca ICE_FAILURE (`2D9057AA`) không có
+  dòng căn cứ nào.
+- Prompt: `evidenceIds` là căn cứ, thường 2 tới 6 dòng. Đồng ý với rule thì trích các dòng `ruleBasis`. Mốc bình thường
+  chỉ trích khi kết luận dựa vào chính nó.
+- Runner đo ba thứ: số evidence trích trên tổng, lần trích hết, lần trích đủ căn cứ của rule; và độ trùng (Jaccard)
+  giữa các lần lặp cùng câu.
+
+**Lý do.** Sprint 2 có lần AI trích 22/22 evidence, nên chip "Căn cứ" trên Web UI mất tác dụng. MVP 3.3 đòi kết luận
+trace được về evidence: trích tất cả thì không chỉ ra được dòng nào là căn cứ.
+
+**Đánh đổi.** Cờ `ruleBasis` nghiêng AI về phía rule. Chấp nhận vì kết luận cuối vẫn do rule + Guardrails quyết (mục 23),
+và cờ chỉ nói dòng nào rule đã dùng, không nói AI phải đồng ý. Ca SUCCESS không cờ chất lượng không có dòng căn cứ: AI tự
+chọn theo hướng dẫn của prompt. Không có Guardrail cho việc trích quá nhiều, vì đây chỉ là chuyện chất lượng, không phải
+sai; số liệu được đo, không chặn.
+
+**Đo** (2026-10-10, `dev` ×2, 132 lần chạy; trước = prompt T1a `e217a0b28a2d`, sau = `445a72ff32fd`):
+
+| | Trước | Sau |
+|---|---|---|
+| Evidence AI trích, trung bình / tổng | 5,2 / 12,4 | 3,2 / 12,4 |
+| Nhiều nhất một lần | 12 | 6 |
+| Trích hết mọi evidence | 21/118 | 5/118 (cuộc có 3-4 evidence) |
+| Trích đủ dòng căn cứ của rule | 26/32 | 40/46 (thêm căn cứ ICE) |
+| Giống nhau giữa các lần lặp (Jaccard) | 89,5% · 45/59 câu giống hệt | 95,4% · 49/59 |
+| Unsupported Claim · fallback | 0 · 0 | 0 · 0 |
+| Token vào mỗi lời gọi phân tích | 3 753 | 4 075 (+8,6%) |
+
+Bản nháp đầu của prompt có ví dụ "câu hỏi về thời gian đổ chuông dựa vào RINGING, OK". Ví dụ đó làm `D114749E` tái phát
+G05 `0.112` (AI tự trừ hai mốc) ở 2/2 lần. Bỏ ví dụ và nói rõ ở quy tắc 4b: "không viết độ dài thời gian tự tính" thì hết.
+
+## 34. Lỗi thân thiện và chịu lỗi: 429, câu hỏi hỏng mã hoá, ES tắt, sanitizer chậm (Sprint 3 T4)
+
+**Quyết định.**
+- **HTTP 429 của OpenAI tách thành hai lý do fallback:** `QUOTA_EXCEEDED` (`error.code = insufficient_quota`, chờ không
+  giải quyết được, phải nạp thêm) và `RATE_LIMITED` (còn lại, thử lại sau ít phút). Trước đây cả hai là `PROVIDER_ERROR`,
+  banner chỉ ghi "không gọi được dịch vụ AI". Chỉ đọc `error.code`, phần còn lại của thân lỗi không đi đâu. Không tự gọi
+  lại: một lần thử lại cộng thêm tới 30 s vào thời gian chờ, mà fallback về rule đã cho report dùng được.
+- **Câu hỏi hỏng mã hoá được phát hiện** (`GarbledText`): ký tự U+FFFD; từ hai chỗ `?` nằm giữa chữ cái (`g?i`); từ hai
+  chỗ UTF-8 bị đọc như Windows-1252 (`Ã¡`). Chuẩn hoá NFC trước khi kiểm. Phát hiện thì thêm một dòng cố định vào
+  "Giới hạn dữ liệu". Nếu câu bị xếp ngoài phạm vi thì **vẫn từ chối**, câu từ chối kèm lời nhắc gửi lại.
+- **`--parse-*` không dừng khi ES tắt:** như `--analyze`, parse tiếp log đính kèm và nêu lý do thiếu signaling.
+- **`SensitiveDataSanitizer.policyForKey` tra bảng dựng sẵn** thay cho duyệt cả inventory. Kết quả giữ nguyên
+  equalsIgnoreCase: tên có ký tự ngoài ASCII (`ı` không chấm) đi đường duyệt cũ.
+- **File vượt giới hạn vài byte nêu số byte:** hai số làm tròn tới 0,1 MB bằng nhau thì câu cũ ra "dung lượng 20.0 MB vượt
+  giới hạn 20.0 MB".
+- **U+FFFD trong mã nguồn viết bằng mã số** (`0xFFFD`), không viết ký tự: editor đọc sai bảng mã sẽ đổi ký tự đó mà
+  không ai thấy. Sửa cả chỗ có từ Sprint 2 trong `FileValidator`.
+
+**Lý do.**
+- Câu hỏi hỏng mã hoá: ca demo 2026-10-06 (curl trên Git Bash gửi byte ANSI) bị từ chối mà người dùng không biết vì sao,
+  và suýt dẫn tới sửa prompt không cần thiết. Chữ đã thành `?` thì không khôi phục được, chỉ báo được.
+- Sanitizer: tìm ra khi thử request đồng thời. `AnalyzeCallService.sanitize` gọi `policyForKey` cho **mọi thuộc tính của
+  mọi event**; cuộc `DE7DD314` đủ 4 file có rất nhiều thuộc tính (hàng trăm trường mỗi mẫu stats), mỗi lần duyệt
+  19 mục × 68 tên. Thread dump chỉ đúng chỗ này.
+
+**Đánh đổi.**
+- Câu hỏng mã hoá bị xếp ngoài phạm vi vẫn bị từ chối thay vì đoán là câu phân tích: đoán thì chuỗi `?` vô nghĩa thành
+  đường vòng qua OUT_OF_SCOPE. Người dùng mất một lượt gửi lại, nhưng biết phải sửa gì.
+- Ngưỡng hai chỗ có thể bỏ sót câu rất ngắn chỉ mất một chữ; chấp nhận vì một `?` lẻ giữa chữ có thể là gõ nhầm.
+
+**Đo** (2026-10-11, máy cá nhân, `spring-boot:run`, không khoá AI):
+
+| | Trước | Sau |
+|---|---|---|
+| Một request `DE7DD314` 4 file (server ghi `latency_ms`) | 9 405 ms | 977 ms |
+| 10 request đồng thời, cùng 4 file (thời gian phía curl) | 12,5 s mỗi request | 2,2 s |
+| Report của 23 lần trên (trừ `requestId`) | 1 nội dung | 1 nội dung, trùng bản trước |
+| `dev` ×1 không khoá AI: latency pipeline P50 / P95 | — | 163 / 890 ms |
+
+Cả 4 case chậm nhất ở mọi lượt benchmark trước (case-002, 015, 016, 017) đều là `DE7DD314`. P95 đã báo (8,1 s ở mốc;
+14-16 s tối 10/10) phần lớn là chi phí này, không phải AI. So sánh trước / sau giữa các lượt vẫn đúng vì lượt nào cũng
+chịu cùng chi phí. Con số tuyệt đối cần đo lại bằng lượt có AI.
+
+File sát 20 MB (WebRTC log 20 MB − 1 KB, 111 nghìn event): report sau 6,9 s; ba request như vậy đồng thời đều xong
+(7,1 s), heap dùng khoảng 950 MB / 1,6 GB. File 20 MB + 184 byte bị loại và nêu tên.
+
+## 35. Độ tin cậy gom về một `ConfidencePolicy`, report ghi lý do (Sprint 3 T3)
+
+**Quyết định.**
+- `domain/confidence/ConfidencePolicy` là nơi duy nhất quyết định HIGH / MEDIUM / LOW, theo đúng bốn yếu tố của MVP 7.2:
+  độ mạnh bằng chứng, dữ liệu thiếu, AI khớp hay lệch rule.
+- Mỗi nhánh của `RuleVerdictEngine` chỉ khai báo `ConfidenceBasis`: bằng chứng `STRONG` / `PARTIAL` / `WEAK` kèm lý do,
+  và kết luận nhạy với gì (dựa trên việc không thấy sự kiện → nhạy với bản export bị cắt; SUCCESS → cần đủ ba nguồn;
+  server từ chối INIT_CALL → không nhạy với thiếu log client). Dữ liệu thiếu (`DataCoverage`) policy tự đọc từ tín hiệu.
+- Hai bước: `forRule` (rule cần mức của mình trước khi có AI — gửi sang AI làm mốc, là kết quả khi AI lỗi) và
+  `forReport` (AI khớp → giữ; AI lệch → LOW; không có AI → tối đa MEDIUM).
+- Report có trường `confidenceReasons` (schema bắt buộc, ít nhất một lý do); dòng "Độ tin cậy" in lý do sau dấu gạch:
+  *"MEDIUM — thiếu log client của caller; bằng chứng rõ: ICE chuyển sang failed, không có byte audio nào"*. Yếu tố làm
+  mức thấp đi đứng trước. Web UI hiện lý do cạnh thanh mức.
+- Các câu "độ tin cậy tối đa MEDIUM vì…" bỏ khỏi "Giới hạn dữ liệu": lý do đã ở dòng đầu, giữ cả hai là nói hai lần.
+
+**Lý do.** Trước đây mức gán ở 12 nhánh của engine, một bước hạ mức riêng khi thiếu log client, và hai chỗ trong
+`ReportBuilder`. Trả lời "vì sao report này MEDIUM" phải đọc ba nơi; report chỉ nói lý do ở hai trường hợp hạ mức.
+
+**Không đổi kết quả** (2026-10-11):
+- `--analyze` trên 20 cuộc gọi mẫu + 2 biến thể (rule, không AI): mức của cả 22 report giữ nguyên. Khác biệt duy nhất là
+  dòng "Độ tin cậy" thêm lý do và mất câu "Độ tin cậy tối đa MEDIUM vì thiếu log client…" ở 5 report.
+- `dev` ×1 không khoá AI (nhánh fallback của report), chạy trên code trước T3 (worktree tạm) và sau T3: 66/66 lần chạy
+  trùng verdict, category, cờ chất lượng, mức tin cậy, kết luận rule, Template Compliance, lý do fallback.
+- Nhánh có AI (khớp → giữ, lệch → LOW) giữ đúng logic cũ, kiểm bằng `ReportDecisionTest` có từ Sprint 2; chưa chạy
+  lượt có AI.
+
+**Đánh đổi.**
+- Dòng "Độ tin cậy" dài hơn mẫu 4.5 (mẫu chỉ có mức). Template Compliance chỉ kiểm nhãn đầu dòng nên vẫn đạt; mức vẫn đứng
+  ngay sau nhãn.
+- Context gửi AI mất câu "Độ tin cậy tối đa MEDIUM vì thiếu log client…" ở các cuộc thiếu một leg (câu đó nằm trong
+  `dataLimitations` của rule). AI không quyết định độ tin cậy nên không ảnh hưởng kết luận; lượt có AI sau sẽ đo.
+
+**Còn mở.** Luồng CLI chỉ rule (`--analyze`, không thử AI) giữ mức của rule như Sprint 1, nên có thể ra HIGH; còn report
+có thử AI mà AI lỗi thì tối đa MEDIUM. Bảng 7.2 đòi "AI khớp rule" cho HIGH. Sản phẩm (Chat API, Web UI, runner) luôn thử
+AI nên không gặp; chỉ công cụ CLI Sprint 1. Chưa đổi để không làm lệch số liệu Sprint 1.
+
+## 36. Log có cấu trúc: JSON ở server, trường key-value, dòng AI call đúng bảy trường (Sprint 3 T5)
+
+**Quyết định.**
+- Trường log đi bằng key-value của SLF4J (`log.atInfo().addKeyValue(…)`), không ghép vào câu. Một sự kiện, hai cách in:
+  - CLI (mặc định): log chữ, `%skvp` in `khoá=giá trị` sau thông điệp — report của CLI in qua log nên phải đọc được.
+  - Profile `web`: JSON một dòng mỗi sự kiện, `SanitizedJsonLogFormatter` (`logging.structured.format.console`).
+    Thêm profile `plain-log` để xem log chữ khi demo.
+- Formatter JSON tự viết thay cho ECS / Logstash có sẵn của Spring Boot: hai định dạng đó ghi thông điệp và trường
+  nguyên văn, bỏ qua lớp làm sạch. Ở đây thông điệp, giá trị trường, MDC và stack trace đều qua sanitizer.
+- Dòng **AI call** (MVP 6.2) do một chỗ dựng (`AiCallLog`), thành công hay lỗi đều đúng một dòng, chỉ các khoá
+  `request_id`, `call_id`, `model`, `latency_ms`, `result_status`, `token_usage`, `fallback_reason`. Test khẳng định
+  tập khoá. Trước đây lời gọi lỗi không có dòng AI call nào; dòng fallback ở tầng service thiếu model và token.
+- `call_id` là mã giả HMAC (`CALL_xxxxxx`, `SensitiveDataSanitizer.pseudonymizeCallId`): cùng cuộc gọi cùng mã, nối
+  được các dòng mà không ghi Call-ID gốc. Mã nằm trong `AiContext` nhưng không đi vào payload gửi AI.
+- `request_id` đặt vào MDC suốt request: dòng của adapter không biết request (truy vấn Elasticsearch) vẫn mang mã.
+- Latency từng bước: dòng `Request done` có `intent_ms`, `analysis_ms` (parse + ES + rule), `ai_ms` (AI + Guardrails),
+  `report_ms`; dòng `Signaling fetch` có `signaling_ms`; dòng `AI verdict` có `guardrails_ms`.
+
+**Đánh đổi.** Log JSON khó đọc bằng mắt khi demo — vì vậy có `plain-log`. Runner (`--evaluate`) chạy kiểu CLI nên phép
+đo leakage trong application log (T6) quét bản chữ; formatter JSON có test riêng cho việc làm sạch.
+
+**Thử thật** (2026-10-11, profile `web`, không khoá AI, một request `2D9057AA`): 9/9 dòng là JSON hợp lệ; dòng truy
+vấn ES mang `request_id` qua MDC; `Request done`: `intent_ms` 45, `analysis_ms` 1 769 (trong đó `signaling_ms` 881),
+`ai_ms` 116, `report_ms` 217.
+
+## 37. Đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung; phân tích trả lời đủ bốn câu (Sprint 3 T2)
+
+**MVP 7.1 T2** đòi hai thứ: bộ đề xuất chuẩn theo issue category; phân tích trả lời được chuyện gì xảy ra, vì sao kết
+luận vậy, evidence nào hỗ trợ, cần điều tra gì tiếp. Không cần nhãn mới — dựa trên category rule đã kết luận.
+
+**Quyết định.**
+- **Bốn câu, bốn dòng cố định**, có cả khi không có AI (report dựng từ rule):
+  chuyện gì xảy ra = dòng "Chính"; vì sao kết luận = dòng mới "Vì sao kết luận" (lý do của rule, do code viết — AI lệch
+  verdict thì nói AI và rule không thống nhất); evidence nào = dòng mới "Căn cứ của rule" (evidence `ruleBasis`), dòng
+  của AI đổi tên "Căn cứ AI trích"; cần điều tra gì tiếp = mục Đề xuất.
+- **Đề xuất chuẩn luôn giữ, AI chỉ bổ sung.** `suggestions` là bộ chuẩn của rule; `aiSuggestions` (tối đa 3) là phần AI
+  thêm, câu trùng bộ chuẩn (so sau khi bỏ dấu câu, hoa thường) bị bỏ. Trước đây đề xuất AI thay hẳn — với `703100CF`
+  (chưa request TURN nào rời máy) AI từng khuyên "kiểm tra cấu hình TURN server".
+- **SIGNALING_FAILURE theo nguyên nhân con** (`SignalingCause`, 6 loại). Ba cuộc bị server từ chối mã 428 trước đây nhận
+  "đối chiếu số lần gửi lại INVITE với cấu hình timeout"; nay nhận "đây là quyết định của server, không phải lỗi mạng;
+  không cần điều tra mạng, ICE hay TURN".
+- Context gửi AI mang `standardSuggestions`; prompt quy tắc 9-10: analysis giải thích vì sao + evidence nào, suggestions
+  chỉ là phần bổ sung, không khuyên hướng mà evidence không ủng hộ. Bộ chuẩn cũng vào căn cứ của G05.
+
+**Đo** (2026-10-12):
+- `--analyze` 22 report (rule, không AI), trước / sau: kết luận, cờ, độ tin cậy, tóm tắt không đổi ở report nào; "Vì sao
+  kết luận" 22/22; "Căn cứ của rule" 14/22 (8 cuộc bình thường không có dòng lỗi); đề xuất đổi ở 5 cuộc SIGNALING_FAILURE.
+- `dev` ×1 có AI (prompt `d1f62cfe52ec`, ~0,05 USD): Verdict / Consistency / Intent / Template 100%, leakage 0, P50 2,7 s
+  · P95 4,3 s. **Lượt đầu tìm ra lỗi**: case-008 (`E9D6C112`) bị G05 chặn 3/3 vì AI nhắc "cổng 3478" — số nằm trong đề
+  xuất chuẩn vừa gửi AI nhưng chưa vào căn cứ của G05. Sửa (thêm bộ chuẩn vào `groundingTexts`), chạy lại case-008: 3/3
+  qua Guardrails. Token phân tích vào 4 072 → 4 296 (+5,5%).
+- `--ai-analyze` 5 cuộc để đọc đề xuất: AI thường **chép lại** bộ chuẩn dù prompt dặn không — bộ lọc trùng bỏ được câu
+  chép nguyên văn (`703100CF`, `2D9057AA`), không bỏ được câu diễn đạt lại (quan sát trên `271D1FAF` thuộc `for_test/` —
+  không dùng để chỉnh bộ lọc).
+
+**Đánh đổi / còn mở.**
+- Đề xuất AI diễn đạt lại bộ chuẩn có thể lọt vào "Bổ sung (AI)". Không so ngữ nghĩa: cần ngưỡng, mà chỉnh ngưỡng cần
+  dữ liệu `dev` có nhãn đề xuất — chưa có.
+- Đề xuất cho `NETWORK_PACKET_LOSS` / `NETWORK_DELAY_JITTER` chưa kiểm chứng trên ca thật (không có cuộc chất lượng kém
+  có nhãn — cùng lý do hai category này còn UNVALIDATED).
+
+## 38. Thử lại có kiểm soát; tách lỗi HTTP 4xx khỏi PROVIDER_ERROR (Sprint 3 T8)
+
+**Quyết định.**
+- **Chỉ thử lại lỗi tạm thời**: `TIMEOUT` và `PROVIDER_ERROR` (mất mạng, provider lỗi 5xx). Không thử lại 429, khoá sai,
+  yêu cầu bị từ chối, câu trả lời sai định dạng, bị Guardrails loại (temperature 0 — hỏi lại gần như ra cùng câu).
+- **Giới hạn:** tối đa 2 lần thử, chờ 500 ms giữa hai lần, ngân sách **45 s cho cả một lời gọi**. Lần sau chỉ dùng
+  phần ngân sách còn lại (lần đầu quá giờ ở 30 s thì lần sau còn ~14,5 s); còn dưới 2 s thì thôi. Bị ngắt (server tắt,
+  request huỷ) thì dừng ngay. Quyết định nằm ở `RetryPolicy` (domain, không ngủ, không gọi mạng); `OpenAiChatClient`
+  thực hiện.
+- **Phân loại lỗi HTTP** (trước đây mọi mã khác 2xx và 429 đều là `PROVIDER_ERROR`): 401/403 → `AUTH_FAILED`; 400 có
+  `error.code = context_length_exceeded` → `INPUT_TOO_LARGE`; 4xx khác → `REQUEST_REJECTED`; 5xx và lỗi mạng →
+  `PROVIDER_ERROR`. Chỉ đọc mã HTTP và `error.code`.
+- **Log:** mỗi lần thử hỏng được thử lại ghi thêm một dòng `AI call` với `result_status=RETRY`, lý do ở
+  `fallback_reason` — vẫn trong bảy trường MVP 6.2. Dòng kết quả cuối như cũ.
+- Trình duyệt chờ 150 s (trước 120 s): tổng ngân sách các bước là 45 + 5 + 30 + 45 = 125 s.
+
+**Lý do.** MVP 7.1 T8 "controlled retry, phân loại lỗi". Phân loại có từ T4 nhưng gộp lỗi cố định với lỗi tạm thời
+vào một mã, nên không quyết được có nên thử lại. Câu hỏi vượt cửa sổ ngữ cảnh của model trước đây chỉ hiện "không
+gọi được dịch vụ AI" (README, Known Limitations).
+
+**Đánh đổi.** Trên 1 044 lần chạy có AI đã lưu, chưa gặp lỗi tạm thời nào — trên `dev`, thử lại chưa từng có ích; giá
+trị của nó là lúc chạy thật khi mạng hoặc provider chập chờn. Thử lại kéo dài thời gian chờ xấu nhất (ngân sách 45 s
+thay vì 30 s mỗi lời gọi).
+
+**Kiểm** (2026-10-12): 26 test mới (server giả trên 127.0.0.1: 5xx rồi thành công, 5xx liên tục dừng sau 2 lần, lỗi cố
+định một request, quá giờ rồi thành công trong ngân sách, hết ngân sách không thử). Chạy thật: base-url cổng chết → một
+dòng `RETRY` rồi `FALLBACK PROVIDER_ERROR` sau ~0,55 s; **API OpenAI thật** với khoá giả → `AUTH_FAILED`, không thử lại;
+câu hỏi 1 MB với khoá thật → `INPUT_TOO_LARGE` ở cả hai lời gọi, report lùi về rule với đúng lý do (request bị từ chối,
+không tính phí).
+
+## 39. Mỗi request một bản ghi vào Elasticsearch, xem trên Kibana (Sprint 3 T9)
+
+**Quyết định.**
+- Chat API ghi mỗi request một tài liệu vào index `analysis-requests` (mapping `dynamic: strict`): kết quả (REPORT /
+  OUT_OF_SCOPE / INVALID_REQUEST / ERROR), intent, verdict, category, độ tin cậy, nguồn kết luận, có lùi về rule không và
+  vì sao, latency từng bước, token, tên lớp exception khi lỗi.
+- **Chỉ mã, số và cờ** — không câu hỏi, không tóm tắt, không thông điệp lỗi. `call_id` là mã giả. MVP 6.2 đặt "dữ liệu
+  ghi vào ES local" dưới Output Sanitizer; không chở chữ tự do thì không có gì để lộ, và test khẳng định điều đó.
+- Ghi bất đồng bộ trên một luồng nền, hàng đợi 1 000; đầy thì bỏ bản ghi, Elasticsearch lỗi thì cảnh báo một lần cho
+  mỗi đợt lỗi. Request của người dùng không chậm đi và không hỏng vì Elasticsearch.
+- Chỉ bật ở profile `web` (`call-analysis.request-log.enabled`): lượt benchmark và lệnh CLI không ghi, Kibana chỉ thấy
+  request thật. Cổng `RequestRecordSink`; không có adapter thì không ghi.
+- `scripts/kibana/setup_views.py` tạo data view và 4 saved search (tất cả, fallback, lỗi, chậm > 10 s); id cố định,
+  chạy lại được.
+
+**Lý do.** MVP 7.1 T9: "Ghi log và kết quả phân tích vào ES local; Kibana view cho request, latency, fallback, lỗi". Log
+JSON (mục 36) đọc được bằng máy nhưng nằm ở console; Kibana cần dữ liệu trong Elasticsearch.
+
+**Đánh đổi.** Không ghi từng dòng log, chỉ bản tóm tắt của request: đủ cho bốn thứ MVP nêu, và không phải đối chiếu từng
+dòng log với Output Sanitizer. Bản ghi có thể mất nếu ứng dụng tắt đột ngột hoặc hàng đợi đầy — chấp nhận vì đây là dữ
+liệu quan sát, không phải dữ liệu nghiệp vụ.
+
+**Kiểm** (2026-10-12): 4 test mới (tài liệu khớp mapping, không trường chữ tự do, mỗi request một bản ghi kể cả lỗi).
+Chạy thật: 6 request (có AI, không khoá AI, ngoài phạm vi, không file) → 6 tài liệu, index tự tạo đúng mapping; script
+tạo đủ data view và 4 saved search; saved search "fallback" trên Kibana hiện đúng bản ghi `NOT_CONFIGURED`.
+
+## 40. Ca FAIL: dòng Tóm tắt do code viết từ lý do của rule (dataset mới, 2026-10-14)
+
+**Quyết định.** Khi AI khớp kết luận với rule và kết luận là **FAIL**, dòng "Tóm tắt" của report là câu code viết từ lý
+do của rule ("Cuộc gọi không thành công. <lý do>."), không lấy `summary` của AI. AI vẫn viết phần phân tích (trả lời
+trọng tâm câu hỏi trước) và đề xuất bổ sung; kết luận AI vẫn được đối chiếu với rule như cũ. SUCCESS và UNKNOWN giữ
+tóm tắt của AI.
+
+**Vì sao.** Trên `ai20k_new_dataset`, hai cuộc FAIL ĐÃ thiết lập rồi mới mất dữ liệu (`70C388AD` nhận ~0,7 s âm thanh
+rồi im 12 s; `FE4EF5E7` nói ~30 s rồi rớt). `gpt-4o-mini` mở đầu tóm tắt bằng "Cuộc gọi không thiết lập được…" ở 10/10
+lần chạy, kể cả sau khi thêm quy tắc 9a vào prompt và sửa định nghĩa ICE_FAILURE ("…hoặc đã thiết lập rồi không duy trì
+được") — có lần còn viết "không thiết lập được do ICE không duy trì được kết nối", tự mâu thuẫn. Guardrail không bắt
+được vì câu không bịa số, không sai evidence ID. MVP 3.2: phần code tính được thì không giao cho AI; câu "vì sao hỏng"
+chính là lý do của rule, vốn đã có dòng căn cứ trong evidence.
+
+**Đánh đổi.** Tóm tắt ca FAIL mất phần trả lời trọng tâm câu hỏi — phần đó nằm ở "Phân tích". Lỗi diễn giải trong phần
+phân tích (gắn mã chỉ số vào câu "không nhận được âm thanh", ghi nhầm bên của `network_lost`) vẫn còn: đó là phần MVP
+giao cho AI, ghi ở Known Limitations. Cùng cơ chế với ca AI lệch rule (mục 23), code đã tự viết tóm tắt từ trước.
+
+## 41. Cài `NETWORK_DELAY_JITTER` theo ngưỡng Microsoft Teams CQD (2026-10-14)
+
+**Quyết định.** Một leg bật cờ độ trễ khi nhận > 500 gói và RTT (`transport.currentRttMs`) TRUNG BÌNH > 500 ms hoặc
+jitter (`audio.jitter`) TRUNG BÌNH > 30 ms, tính trên các mẫu stats đã có âm thanh. Xét SAU `NETWORK_PACKET_LOSS`
+(MVP mục 10 scenario 2: "packet loss ↑, RTT ↑" → NETWORK_PACKET_LOSS). Độ tin cậy LOW (`ConfidenceBasis.weak`).
+Evidence: mẫu có RTT cao nhất của mỗi leg vượt ngưỡng là dòng căn cứ; mô tả mẫu stats in thêm RTT và jitter.
+
+**Vì sao ngưỡng này.** Ngưỡng cũ 300 ms / 50 ms là phỏng đoán. Đã kiểm nguồn gốc (2026-10-14):
+- Microsoft Teams CQD (Microsoft Learn, cập nhật 06/2026): luồng âm thanh "Poor" khi > 500 gói và RTT trung bình > 500
+  ms, mất gói trung bình > 10 % hoặc jitter trung bình > 30 ms — một bộ PHÂN LOẠI cấp luồng, đo đúng loại số liệu end
+  call log có, dùng trung bình nên không bật cờ vì một mẫu. Microsoft tự ghi chú vượt ngưỡng chưa chắc người dùng nghe
+  thấy vấn đề.
+- Twilio Voice SDK: cảnh báo RTT > 400 ms / jitter > 30 ms ở 3/5 mẫu liên tiếp. Áp lên toàn bộ data cho cùng kết quả
+  cuối (chỗ hai bộ khác nhau — FE4E4BDC cuộc 9 giây, 06BCA48C một đợt jitter — đều đã bị luật mất gói bắt trước).
+- ITU-T G.114 (05/2003, vẫn hiệu lực; Amd.2 11/2009 chỉ thêm phụ lục): trễ MỘT CHIỀU > 400 ms không chấp nhận được cho
+  quy hoạch mạng, < 150 ms gần như trong suốt. 3GPP TS 23.203 QCI 1: ngân sách trễ 100 ms, mất gói 10⁻² — là ngân sách
+  thiết kế bearer, không phải tiêu chí phân loại cuộc gọi.
+
+**Không đổi luật mất gói.** Các nguồn vênh nhau xa (Cisco / 3GPP 1 %, Twilio > 1 % ở 3/5 mẫu, Teams 10 % trung bình);
+theo Teams thì B5F19381 (mất gói 8,48 %, MOS thấp nhất 1,94) thành "Good". Không có data có nhãn để chọn.
+
+**Ảnh hưởng.** Data `dev` và `for_test` không cuộc nào chạm ngưỡng (RTT trung bình cao nhất 126 ms, jitter trung bình
+cao nhất 24 ms) — kết luận không đổi, 13/13. Dataset mới: chỉ FC3187B4 đổi, từ SUCCESS không cờ sang SUCCESS +
+NETWORK_DELAY_JITTER (RTT trung bình 538 / 547 ms cả cuộc).
+
+---
+
 ## Còn để mở
 
 Năm mục từng để mở ở bản trước nay đã chốt — xem mục 11, 17, 19, 20, 21.
@@ -605,7 +918,7 @@ Từ Sprint 1, vẫn còn mở:
 Mở thêm ở Sprint 2 (chi tiết: README, mục Known Limitations):
 
 - **AI lệch rule nên `UNKNOWN` hay giữ kết luận AI kèm cờ** (mục 23).
-- **AI trích mã chỉ số `{Mxx}`** thay vì tự viết số, để G05 hết việc (mục 25).
 - **Đề xuất: rule giữ, AI bổ sung** — trên `for_test/`, đề xuất của rule tốt hơn ở 4/7 cuộc.
 - **"Semi-structured context" của T11 nghĩa là gì** — chưa chốt.
-- **Rule `NETWORK_DELAY_JITTER`** chưa cài; cần cuộc gọi có nhãn chất lượng kém.
+- **Rule `NETWORK_DELAY_JITTER`** đã cài theo ngưỡng Teams CQD (mục 41) nhưng vẫn `UNVALIDATED`; cần cuộc gọi có nhãn
+  chất lượng kém để kiểm.

@@ -58,6 +58,58 @@ class EvidenceEngineTest {
     }
 
     @Test
+    @DisplayName("callee hai thiết bị: evidence ghi rõ máy nào có âm thanh, máy nào không")
+    void multiDeviceEvidenceIsTaggedPerDevice() {
+        CanonicalEvent silent = new CanonicalEvent("callee_b_endcall.log#26", "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:10Z"), ClockDomain.CLIENT_CALLEE),
+                EventType.CALL_SUMMARY, "CALL_SUMMARY",
+                Map.of("audio.packetsReceived", "0", "audio.bytesReceived", "0", "transport.hasMediaFail", "0"),
+                Severity.INFO, new SourceRef("callee_b_endcall.log", 26, "raw"));
+        CanonicalEvent answered = new CanonicalEvent("callee_a_endcall.log#111", "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:30Z"), ClockDomain.CLIENT_CALLEE),
+                EventType.CALL_SUMMARY, "CALL_SUMMARY",
+                Map.of("audio.audioMos", "3.921", "audio.packetsReceived", "2000", "audio.bytesReceived", "47747",
+                        "transport.currentRttMs", "551"),
+                Severity.INFO, new SourceRef("callee_a_endcall.log", 111, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(silent, answered), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).extracting(Evidence::description).containsExactly(
+                "[thiết bị callee_b_endcall.log, không có âm thanh] Call summary callee: không nhận được gói audio"
+                        + " nào (packetsReceived=0, bytesRecv=0), mediaFail=0 — MOS/loss/RTT không đo được",
+                "[thiết bị callee_a_endcall.log, có âm thanh, dùng tính chỉ số callee] Call summary callee:"
+                        + " MOS=3.921, loss cả cuộc=-, RTT=551ms, bytesRecv=47747");
+    }
+
+    @Test
+    @DisplayName("tín hiệu mạng app ghi (network_lost / network_poor) vào evidence, ghi rõ bên nào; tín hiệu khác thì không")
+    void networkSignalsAreEvidence() {
+        CanonicalEvent lost = new CanonicalEvent("caller_endcall.log#140", "CALL-1", Leg.CALLER, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:10Z"), ClockDomain.CLIENT_CALLER),
+                EventType.USER_ACTION, "network_lost", Map.of("originator", "remote", "signal", "network_lost"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 140, "raw"));
+        CanonicalEvent poor = new CanonicalEvent("callee_endcall.log#90", "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:05Z"), ClockDomain.CLIENT_CALLEE),
+                EventType.USER_ACTION, "network_poor", Map.of("originator", "local", "signal", "network_poor"),
+                Severity.INFO, new SourceRef("callee_endcall.log", 90, "raw"));
+        CanonicalEvent unmuted = new CanonicalEvent("caller_endcall.log#60", "CALL-1", Leg.CALLER, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:01Z"), ClockDomain.CLIENT_CALLER),
+                EventType.USER_ACTION, "unmuted", Map.of("originator", "remote", "signal", "unmuted"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 60, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(lost, poor, unmuted), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline)).extracting(Evidence::description).containsExactly(
+                "Tín hiệu app: network_poor, originator=local (máy này)",
+                "Tín hiệu app: network_lost, originator=remote (bên kia)");
+    }
+
+    @Test
+    @DisplayName("một thiết bị mỗi bên: evidence không gắn nhãn thiết bị")
+    void singleDeviceEvidenceIsNotTagged() {
+        assertThat(engine.collect(timelineWithSummary(Map.of("audio.bytesReceived", "100", "audio.packetsReceived", "5"))))
+                .singleElement().satisfies(e -> assertThat(e.description()).doesNotContain("thiết bị"));
+    }
+
+    @Test
     @DisplayName("dòng căn cứ TURN vào evidence nhưng bỏ địa chỉ TURN server và IP mạng nội bộ")
     void turnBasisIsCitedWithoutAddresses() {
         CanonicalEvent turn = new CanonicalEvent("caller_webrtc.log#208", "CALL-1", Leg.CALLER,
@@ -134,5 +186,26 @@ class EvidenceEngineTest {
 
         assertThat(engine.collect(timeline)).singleElement().satisfies(e -> assertThat(e.description())
                 .startsWith("Thất bại phía client:").contains("code: 421"));
+    }
+
+    @Test
+    @DisplayName("T1b — evidence đánh dấu ruleBasis khi là dòng căn cứ của rule, kể cả khi trùng một mốc chọn cố định")
+    void ruleBasisIsMarked() {
+        CanonicalEvent failed = new CanonicalEvent("caller_endcall.log#28", "CALL-1", Leg.CALLER,
+                LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:01:00Z"), ClockDomain.CLIENT_CALLER),
+                EventType.LOG_MESSAGE, "_emitFailed", Map.of("msg", "_emitFailed code: 421"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 28, "raw"));
+        CanonicalEvent timer = new CanonicalEvent("caller_endcall.log#27", "CALL-1", Leg.CALLER,
+                LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse("2026-09-21T08:00:59Z"), ClockDomain.CLIENT_CALLER),
+                EventType.LOG_MESSAGE, "log_detail", Map.of("msg", "_waitingCandidateTimer with error"),
+                Severity.INFO, new SourceRef("caller_endcall.log", 27, "raw"));
+        CallTimeline timeline = new TimelineBuilder().build("CALL-1", List.of(timer, failed), LegAssignment.unknown());
+
+        assertThat(engine.collect(timeline, List.of(timer, failed)))
+                .extracting(e -> e.event().sourceRef().lineNumber() + ":" + e.ruleBasis())
+                .containsExactly("27:true", "28:true");
+        assertThat(engine.collect(timeline)).extracting(Evidence::ruleBasis).containsExactly(false);
     }
 }

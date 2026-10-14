@@ -46,7 +46,7 @@ public class ParseRequestCommand implements ApplicationRunner {
         log.info("Nguồn    : {}{}", r.source(), r.fallbackReason() == null ? "" : " (fallback: " + r.fallbackReason() + ")");
         r.notes().forEach(n -> log.info("Ghi chú  : {}", n));
         if (r.isOutOfScope()) {
-            log.info("Trả lời  : {}", ParsedRequest.OUT_OF_SCOPE_REPLY);
+            log.info("Trả lời  : {}", r.outOfScopeReply());
         }
         System.exit(SpringApplication.exit(context, () -> 0));
     }

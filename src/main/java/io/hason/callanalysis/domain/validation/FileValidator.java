@@ -100,9 +100,7 @@ public class FileValidator {
 
     private Optional<RejectedFile> checkContent(AttachedFile file) {
         if (file.sizeBytes() > maxBytesPerFile) {
-            return Optional.of(new RejectedFile(file.name(), Reason.TOO_LARGE,
-                    "dung lượng " + megabytes(file.sizeBytes()) + " vượt giới hạn "
-                            + megabytes(maxBytesPerFile)));
+            return Optional.of(new RejectedFile(file.name(), Reason.TOO_LARGE, tooLargeMessage(file.sizeBytes())));
         }
         if (!file.loaded()) {
             return Optional.of(new RejectedFile(file.name(), Reason.CORRUPT, "không đọc được nội dung"));
@@ -133,7 +131,7 @@ public class FileValidator {
                 return true;
             }
             chars += line.length();
-            replacement += line.chars().filter(c -> c == '�').count();
+            replacement += line.chars().filter(c -> c == 0xFFFD).count();      // U+FFFD: byte không giải mã được
             if (++scanned >= CORRUPT_SCAN_LINES) {
                 break;
             }
@@ -162,6 +160,20 @@ public class FileValidator {
             }
         }
         return best;
+    }
+
+    /**
+     * File chỉ vượt giới hạn vài byte thì hai số làm tròn tới 0,1 MB bằng nhau: thử thật với file 20 MB
+     * + 184 byte ra "dung lượng 20.0 MB vượt giới hạn 20.0 MB" (2026-10-11). Khi đó nêu số byte.
+     */
+    private String tooLargeMessage(long sizeBytes) {
+        String size = megabytes(sizeBytes);
+        String limit = megabytes(maxBytesPerFile);
+        if (size.equals(limit)) {
+            size = String.format(java.util.Locale.ROOT, "%,d byte", sizeBytes);
+            limit = String.format(java.util.Locale.ROOT, "%,d byte", maxBytesPerFile);
+        }
+        return "dung lượng " + size + " vượt giới hạn " + limit;
     }
 
     private static String megabytes(long bytes) {

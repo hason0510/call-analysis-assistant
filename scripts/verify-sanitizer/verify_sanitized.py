@@ -64,6 +64,9 @@ clean_text = {f: f.read_text(encoding="utf-8") for g in GROUPS for f in (CLEAN /
 blob = "\n".join(clean_text.values())
 
 print(f"Bản sạch: {len(clean_text)} file")
+if not clean_text:
+    # Không có file nào để quét thì mọi dòng "còn sót=0" bên dưới là đạt GIẢ — dừng hẳn, không in kết quả.
+    sys.exit(f"Không đọc được file nào dưới {CLEAN} — kiểm lại đường dẫn bản sạch")
 print("=== 1. Giá trị nhạy cảm GỐC còn sót trong bản sạch (so theo ranh giới chữ/số) ===")
 for kind, values in sorted(secrets.items()):
     # "C8CF631E-0" (fromTag) là chuỗi con của Call-ID "C8CF631E-0C6B-…" — không tính là sót

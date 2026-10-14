@@ -1,5 +1,7 @@
 package io.hason.callanalysis.domain.report;
 
+import io.hason.callanalysis.domain.confidence.ConfidenceAssessment;
+import io.hason.callanalysis.domain.confidence.ConfidencePolicy;
 import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.evidence.Evidence;
@@ -37,8 +39,8 @@ public class ReportBuilder {
      *   in ra sẽ mâu thuẫn với dòng "Kết luận". Phần phân tích của AI vẫn giữ để người kiểm tra đọc.
      * - Fallback: toàn bộ từ rule, kèm lý do ở "Giới hạn dữ liệu".
      *
-     * Độ tin cậy theo MVP mục 7.2: AI khớp rule → giữ mức của rule (đã xét evidence và file thiếu);
-     * AI lệch rule → LOW; không có AI để đối chiếu (degraded) → tối đa MEDIUM.
+     * Độ tin cậy: {@link ConfidencePolicy#forReport} — AI khớp rule giữ mức của rule (đã xét evidence và file
+     * thiếu); AI lệch rule → LOW; không có AI để đối chiếu (degraded) → tối đa MEDIUM.
      *
      * @param extraLimitations ghi chú từ bước trước pipeline (ví dụ câu hỏi nêu hai Call-ID)
      */
@@ -50,46 +52,90 @@ public class ReportBuilder {
                 && decision.qualityFlag() == rule.qualityFlag();
         // Kết luận đổi (lệch verdict → UNKNOWN) thì căn cứ riêng của rule (kiểu TURN hỏng, causeBasis)
         // không còn đúng với kết luận mới.
+        // Kết luận bị đổi thì "vì sao kết luận" là vì AI và rule không thống nhất, không phải lý do của rule.
+        String effectiveReasoning = verdictChanged
+                ? "AI và rule không thống nhất (" + String.join("; ", decision.reviewNotes()) + "). Lý do của rule: "
+                        + rule.reasoning()
+                : rule.reasoning();
         RuleVerdict effective = sameConclusion ? rule : new RuleVerdict(decision.verdict(), decision.qualityFlag(),
-                decision.issueCategory(), rule.confidence(), rule.reasoning(), rule.dataLimitations());
+                decision.issueCategory(), rule.confidence(), effectiveReasoning, rule.dataLimitations(),
+                TurnFailure.NONE, null, rule.confidenceReasons());
         CallReport base = build(timeline, metrics, evidence, effective, taxonomy);
 
         List<String> limitations = new ArrayList<>(base.dataLimitations());
         limitations.addAll(extraLimitations == null ? List.of() : extraLimitations);
-        ConfidenceLevel confidence = rule.confidence();
+        ConfidenceAssessment confidence = ConfidencePolicy.forReport(rule.confidenceAssessment(), aiCheck(decision),
+                decision.fallbackReason());
         String summary = base.summary();
         List<String> suggestions = base.suggestions();
+        List<String> aiSuggestions = List.of();
         String analysis = null;
 
         if (decision.needsReview()) {
-            confidence = ConfidenceLevel.LOW;
-            limitations.add("Cần kiểm tra: " + String.join("; ", decision.reviewNotes())
-                    + " — độ tin cậy hạ xuống LOW vì AI và rule không thống nhất");
+            limitations.add("Cần kiểm tra: " + String.join("; ", decision.reviewNotes()));
             if (verdictChanged) {
                 summary = "Không đủ căn cứ để kết luận: " + String.join("; ", decision.reviewNotes())
                         + ". Lý do của rule: " + rule.reasoning() + ".";
-                suggestions = new ArrayList<>(suggestions(rule));
+                suggestions = new ArrayList<>(standardSuggestions(rule));
                 suggestions.add("Đối chiếu evidence bên dưới với kết luận của rule và của AI để xác định kết luận đúng.");
             }
             analysis = blankToNull(decision.analysis());
         } else if (decision.source() == CallReport.AnalysisSource.AI) {
-            summary = isBlank(decision.summary()) ? summary : decision.summary();
-            suggestions = decision.suggestions().isEmpty() ? suggestions : decision.suggestions();
+            // Ca FAIL: tóm tắt do CODE viết từ lý do của rule, AI chỉ viết phần phân tích. gpt-4o-mini mở đầu tóm tắt
+            // ca FAIL bằng "Cuộc gọi không thiết lập được…" 10/10 lần ở 70C388AD và FE4EF5E7 — hai cuộc ĐÃ thiết lập
+            // rồi mới mất dữ liệu — dù prompt (9a) và định nghĩa taxonomy đều nói ngược lại. MVP 3.2: phần code tính
+            // được thì không giao cho AI; câu "vì sao hỏng" chính là lý do của rule.
+            summary = base.verdict() == Verdict.FAIL || isBlank(decision.summary()) ? summary : decision.summary();
+            // MVP 7.1 T2 "bộ đề xuất chuẩn theo issue category": đề xuất của rule luôn giữ, AI chỉ BỔ SUNG.
+            // Trước Sprint 3 T2 đề xuất AI thay hẳn — với 703100CF (chưa request TURN nào rời máy) AI vẫn khuyên
+            // "kiểm tra cấu hình TURN server".
+            aiSuggestions = additionalSuggestions(decision.suggestions(), suggestions);
             analysis = blankToNull(decision.analysis());
         } else if (decision.degraded()) {
-            if (confidence == ConfidenceLevel.HIGH) {
-                confidence = ConfidenceLevel.MEDIUM;
-            }
             limitations.add("Phân tích bằng AI không dùng được (" + decision.fallbackReason()
-                    + "): report dựng từ rule, độ tin cậy tối đa MEDIUM vì không có AI để đối chiếu");
+                    + "): report dựng từ rule");
         }
 
-        return new CallReport(base.callId(), base.verdict(), base.qualityFlag(), base.issueCategory(), confidence,
-                summary, base.evidence(), base.metrics(), base.possibleCauses(), suggestions,
+        return new CallReport(base.callId(), base.verdict(), base.qualityFlag(), base.issueCategory(),
+                confidence.level(), confidence.reasons(), summary, base.evidence(), base.metrics(), base.possibleCauses(), suggestions,
                 List.copyOf(new LinkedHashSet<>(limitations)), decision.degraded(), analysis,
                 decision.source(), decision.needsReview(),
                 decision.degraded() ? decision.fallbackReason() : null,
-                analysis == null ? List.of() : decision.citedEvidenceIds());
+                analysis == null ? List.of() : decision.citedEvidenceIds(), aiSuggestions);
+    }
+
+    /** Đề xuất AI có thêm được gì: bỏ câu trùng bộ chuẩn (so sau khi bỏ dấu câu, hoa thường), tối đa ba câu. */
+    static final int MAX_AI_SUGGESTIONS = 3;
+
+    static List<String> additionalSuggestions(List<String> fromAi, List<String> standard) {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        standard.forEach(s -> seen.add(normalized(s)));
+        List<String> extra = new ArrayList<>();
+        for (String s : fromAi) {
+            if (s == null || s.isBlank() || !seen.add(normalized(s))) {
+                continue;
+            }
+            extra.add(s.strip());
+            if (extra.size() == MAX_AI_SUGGESTIONS) {
+                break;
+            }
+        }
+        return extra;
+    }
+
+    private static String normalized(String s) {
+        return s == null ? "" : s.toLowerCase(java.util.Locale.ROOT).replaceAll("[\\p{Punct}\\s]+", " ").strip();
+    }
+
+    /** Cùng thứ tự với nhánh ở trên: lệch rule trước, rồi AI dùng được, rồi fallback. */
+    private static ConfidencePolicy.AiCheck aiCheck(ReportDecision decision) {
+        if (decision.needsReview()) {
+            return ConfidencePolicy.AiCheck.DISAGREES;
+        }
+        if (decision.source() == CallReport.AnalysisSource.AI) {
+            return ConfidencePolicy.AiCheck.AGREES;
+        }
+        return decision.degraded() ? ConfidencePolicy.AiCheck.UNAVAILABLE : ConfidencePolicy.AiCheck.NOT_RUN;
     }
 
     private static boolean isBlank(String text) {
@@ -120,13 +166,14 @@ public class ReportBuilder {
                 verdict.qualityFlag(),
                 verdict.issueCategory(),
                 verdict.confidence(),
+                verdict.confidenceReasons(),
                 summarise(timeline, verdict),
                 evidenceEntries,
                 metricEntries,
-                possibleCauses(verdict, taxonomy),
-                suggestions(verdict),
+                possibleCauses(verdict, taxonomy, evidence),
+                standardSuggestions(verdict),
                 dataLimitations(timeline, metrics, verdict, taxonomy),
-                false);
+                false, null, CallReport.AnalysisSource.RULE, false, null, List.of(), List.of());
     }
 
     private static CallReport.MetricEntry toEntry(CallMetric metric) {
@@ -155,10 +202,11 @@ public class ReportBuilder {
         return base + " " + verdict.reasoning() + ".";
     }
 
-    private static CallReport.PossibleCauses possibleCauses(RuleVerdict verdict,
-                                                           IssueTaxonomy taxonomy) {
+    private static CallReport.PossibleCauses possibleCauses(RuleVerdict verdict, IssueTaxonomy taxonomy,
+                                                           List<Evidence> evidence) {
+        List<String> basis = evidence.stream().filter(Evidence::ruleBasis).map(Evidence::id).toList();
         if (verdict.issueCategory() == null) {
-            return new CallReport.PossibleCauses(null, List.of());
+            return new CallReport.PossibleCauses(null, List.of(), verdict.reasoning(), basis);
         }
         // Có căn cứ đo được của chính cuộc gọi thì in căn cứ; không thì dùng định nghĩa của taxonomy
         String explanation = verdict.causeBasis() != null ? verdict.causeBasis()
@@ -172,19 +220,21 @@ public class ReportBuilder {
                 alternatives.add("Điểm mơ hồ: " + d.knownAmbiguity().strip());
             }
         });
-        return new CallReport.PossibleCauses(primary, alternatives);
+        return new CallReport.PossibleCauses(primary, alternatives, verdict.reasoning(), basis);
     }
 
     /** Bộ đề xuất chuẩn theo từng issue category. */
-    private static List<String> suggestions(RuleVerdict verdict) {
+    /**
+     * Bộ đề xuất chuẩn theo issue category (MVP 7.1 T2) — luôn có trong report, có AI hay không. TURN_FAILURE và
+     * SIGNALING_FAILURE chọn theo nguyên nhân con: cùng một category mà nguyên nhân khác thì việc cần điều tra khác.
+     * Công khai để context gửi AI mang bộ chuẩn này: AI chỉ viết phần BỔ SUNG, không lặp lại.
+     */
+    public static List<String> standardSuggestions(RuleVerdict verdict) {
         if (verdict.issueCategory() == null) {
             return List.of("Không cần hành động thêm.");
         }
         return switch (verdict.issueCategory()) {
-            case SIGNALING_FAILURE -> List.of(
-                    "Kiểm tra log của service signaling quanh thời điểm INIT_CALL.",
-                    "Đối chiếu số lần gửi lại INVITE với cấu hình timeout phía server.",
-                    "Bổ sung end call log của cả hai bên để xác nhận phía nào không phản hồi.");
+            case SIGNALING_FAILURE -> signalingSuggestions(verdict.signalingCause());
             case ICE_FAILURE -> List.of(
                     "Kiểm tra kết nối mạng của bên bị lỗi tại thời điểm cuộc gọi.",
                     "Đối chiếu danh sách ICE candidate hai bên xem có cặp nào khả dĩ không.",
@@ -198,6 +248,40 @@ public class ReportBuilder {
                     "Đối chiếu transport.currentRttMs theo thời gian, không dùng transport.rttMs.");
             case UNKNOWN -> List.of(
                     "Bổ sung các file log còn thiếu rồi phân tích lại.");
+        };
+    }
+
+    private static List<String> signalingSuggestions(io.hason.callanalysis.domain.rule.SignalingCause cause) {
+        if (cause == null) {
+            return List.of(
+                    "Kiểm tra log của service signaling quanh thời điểm INIT_CALL.",
+                    "Đối chiếu số lần gửi lại INVITE với cấu hình timeout phía server.",
+                    "Bổ sung end call log của cả hai bên để xác nhận phía nào không phản hồi.");
+        }
+        return switch (cause) {
+            case INIT_CALL_REJECTED -> List.of(
+                    "Đối chiếu mã từ chối ở phản hồi INIT_CALL với chính sách của server (ví dụ chặn theo quyền riêng"
+                            + " tư của bên nhận): đây là quyết định của server, không phải lỗi mạng.",
+                    "Không cần điều tra mạng, ICE hay TURN cho cuộc gọi này.");
+            case CANDIDATE_TIMEOUT -> List.of(
+                    "Kiểm tra bước thu thập ICE candidate và tạo offer phía bên gọi: mạng và quyền truy cập mạng của"
+                            + " app tại thời điểm gọi.",
+                    "Đối chiếu dòng hết giờ chờ candidate và dòng _emitFailed trong end call log để lấy mã lỗi phía"
+                            + " client.");
+            case NO_INVITE -> List.of(
+                    "Kiểm tra log của service signaling quanh thời điểm INIT_CALL để biết vì sao không có INVITE.",
+                    "Bổ sung end call log và WebRTC log của bên gọi: chưa có dấu hiệu nào khác giải thích việc thiếu"
+                            + " INVITE.");
+            case FAIL_HARD -> List.of(
+                    "Tra ngữ cảnh FAIL_HARD trong log của service signaling: bên nào phát, ngay sau lệnh nào.",
+                    "Đối chiếu số lần gửi lại INVITE với cấu hình timeout phía server.");
+            case CANCELLED -> List.of(
+                    "Xác định bên huỷ: đối chiếu thao tác người dùng trong end call log với thời điểm CANCEL.",
+                    "Không thấy thao tác huỷ của người dùng thì kiểm tra thời gian chờ đổ chuông và timeout phía"
+                            + " server.");
+            case NOT_CONFIRMED -> List.of(
+                    "Kiểm tra log của service signaling quanh thời điểm INVITE và OK để biết bước bắt tay dừng ở đâu.",
+                    "Bổ sung end call log của cả hai bên để xác nhận phía nào không phản hồi.");
         };
     }
 
@@ -257,6 +341,7 @@ public class ReportBuilder {
         Set<String> limitations = new LinkedHashSet<>(verdict.dataLimitations());
 
         limitations.addAll(missingClientLogs(timeline));
+        limitations.addAll(multiDeviceLegs(timeline));
         limitations.addAll(zeroFilledLegs(metrics));
         endOfCallSnapshotNote(metrics).ifPresent(limitations::add);
 
@@ -318,6 +403,46 @@ public class ReportBuilder {
                     + " — " + consequence(source, false));
         }
         return missing;
+    }
+
+    /**
+     * Leg có nhiều end call log (nhiều thiết bị cùng đổ chuông): nói rõ chỉ số lấy từ máy nào, và vì sao máy kia
+     * không có âm thanh — đọc NGUYÊN VĂN dòng `_emitFailed` / `_emitBye` của máy đó, không viết cứng mã 490.
+     * Thiếu dòng này thì report fc3187b4 chỉ nói "leg callee chưa nhận được gói audio nào", và AI kết luận ngược
+     * lại với chính evidence (xem {@link CallTimeline#callSummary}).
+     */
+    static List<String> multiDeviceLegs(CallTimeline timeline) {
+        List<String> notes = new ArrayList<>();
+        for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
+            List<String> files = timeline.endCallFiles(leg);
+            if (files.size() < 2) {
+                continue;
+            }
+            String name = leg.name().toLowerCase();
+            java.util.Optional<String> chosen = timeline.audioFile(leg);
+            StringBuilder note = new StringBuilder("Leg " + name + " có " + files.size()
+                    + " end call log (nhiều thiết bị cùng đổ chuông): ");
+            note.append(chosen.map(f -> "chỉ số " + name + " lấy từ " + f + " (thiết bị có âm thanh)")
+                    .orElse("không thiết bị nào có âm thanh"));
+            for (String file : files) {
+                if (chosen.isPresent() && chosen.get().equals(file)) {
+                    continue;
+                }
+                note.append("; ").append(file).append(" không có âm thanh");
+                clientEnding(timeline, file).ifPresent(msg -> note.append(" (").append(msg).append(")"));
+            }
+            notes.add(note.toString());
+        }
+        return notes;
+    }
+
+    /** Dòng kết thúc phía client của một file: `_emitFailed` (thất bại / dừng) hoặc `_emitBye`. */
+    private static java.util.Optional<String> clientEnding(CallTimeline timeline, String file) {
+        return timeline.mainTrack().stream()
+                .filter(e -> e.sourceRef().fileName().equals(file))
+                .map(e -> e.attribute("msg"))
+                .filter(m -> m != null && (m.startsWith("_emitFailed") || m.startsWith("_emitBye")))
+                .findFirst();
     }
 
     /**

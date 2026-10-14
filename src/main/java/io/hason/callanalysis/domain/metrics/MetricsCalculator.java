@@ -388,8 +388,11 @@ public class MetricsCalculator {
             return unavailableReason(record, PACKETS_LOST, timeline, leg);
         }
         String value = percent(wholeCall.get());
+        // Mẫu cao nhất lấy trong CÙNG file với bản ghi cả cuộc: leg có nhiều thiết bị thì không trộn mẫu của máy khác.
+        String file = record.get().sourceRef().fileName();
         Optional<BigDecimal> peak = timeline.allEvents().stream()
                 .filter(e -> e.type() == EventType.MEDIA_STATS && e.leg() == leg)
+                .filter(e -> e.sourceRef().fileName().equals(file))
                 .map(e -> parseDecimal(e.attribute("audio.packetLostPercent")))
                 .flatMap(Optional::stream)
                 .max(BigDecimal::compareTo);

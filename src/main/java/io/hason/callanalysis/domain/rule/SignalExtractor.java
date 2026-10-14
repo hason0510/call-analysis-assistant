@@ -104,7 +104,16 @@ public class SignalExtractor {
                 clientFailureEvent(timeline).flatMap(SignalExtractor::describeClientFailure).orElse(null),
                 sources,
                 legsWithClientLog,
-                qualityByLeg(timeline));
+                qualityByLeg(timeline),
+                !partnerLostNetworkEvents(timeline).isEmpty());
+    }
+
+    /** Bản ghi `signal` của end call log báo bên kia mất mạng (`network_lost`, originator remote). */
+    private static List<CanonicalEvent> partnerLostNetworkEvents(CallTimeline timeline) {
+        return timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.ENDCALL && e.type() == EventType.USER_ACTION)
+                .filter(e -> "network_lost".equals(e.name()) && "remote".equalsIgnoreCase(e.attribute("originator")))
+                .toList();
     }
 
     /**
@@ -143,9 +152,30 @@ public class SignalExtractor {
                 }
                 mediaPoor += "1".equals(e.attribute("transport.hasMediaPoor")) ? 1 : 0;
             }
-            result.add(new LegQuality(leg, samples.size(), lossOver, maxLoss, mosLow, minMos, mediaPoor));
+            // Độ trễ / jitter: trung bình chỉ trên mẫu ĐÃ có âm thanh — trước khi có gói, RTT/jitter là 0 điền chỗ
+            // trống (bẫy #11), và máy không bắt máy của leg nhiều thiết bị không có mẫu nào như vậy (bẫy #21).
+            List<CanonicalEvent> live = samples.stream()
+                    .filter(e -> decimal(e.attribute(PACKETS_RECEIVED)).filter(v -> v.signum() > 0).isPresent())
+                    .toList();
+            long packets = live.stream().map(e -> decimal(e.attribute(PACKETS_RECEIVED)))
+                    .flatMap(Optional::stream).mapToLong(BigDecimal::longValue).max().orElse(0);
+            result.add(new LegQuality(leg, samples.size(), lossOver, maxLoss, mosLow, minMos, mediaPoor, packets,
+                    average(live, "transport.currentRttMs", BigDecimal.ONE),
+                    average(live, "audio.jitter", BigDecimal.valueOf(1000))));
         }
         return result;
+    }
+
+    private static final String PACKETS_RECEIVED = "audio.packetsReceived";
+
+    /** Trung bình một trường trên các mẫu có trường đó, nhân hệ số đổi đơn vị; null nếu không mẫu nào có. */
+    private static BigDecimal average(List<CanonicalEvent> samples, String field, BigDecimal unit) {
+        List<BigDecimal> values = samples.stream().map(e -> decimal(e.attribute(field))).flatMap(Optional::stream).toList();
+        if (values.isEmpty()) {
+            return null;
+        }
+        return values.stream().reduce(BigDecimal.ZERO, BigDecimal::add).multiply(unit)
+                .divide(BigDecimal.valueOf(values.size()), 1, java.math.RoundingMode.HALF_UP);
     }
 
     /**
@@ -167,6 +197,22 @@ public class SignalExtractor {
             vpnEvent(timeline, file).ifPresent(basis::add);
         });
         basis.addAll(worstDegradedRecordPerLeg(timeline));
+        basis.addAll(worstDelayRecordPerLeg(timeline));
+        // ICE hỏng / không có media: Evidence Engine vốn đã chọn các dòng này làm mốc, nhưng phải liệt kê ở đây thì
+        // evidence mới mang cờ ruleBasis — thiếu thì ca ICE_FAILURE (2D9057AA) không có dòng căn cứ nào (Sprint 3 T1b).
+        timeline.allEvents().stream()
+                .filter(e -> "failed".equalsIgnoreCase(e.attribute("iceStateTo")))
+                .forEach(basis::add);
+        if (noMediaBytes(timeline)) {
+            qualityRecords(timeline).filter(e -> e.type() == EventType.CALL_SUMMARY).forEach(basis::add);
+        }
+        // Kết luận dựa trên cờ hasMediaFail thì dòng bật cờ ĐẦU TIÊN là căn cứ; trước đây ca FE4EF5E7 kết luận FAIL
+        // mà evidence không có dòng nào mang mediaFail=1. Kèm dòng app báo bên kia mất mạng, nếu có.
+        if (hasFlag(timeline, "transport.hasMediaFail")) {
+            qualityRecords(timeline).filter(e -> "1".equals(e.attribute("transport.hasMediaFail")))
+                    .findFirst().ifPresent(basis::add);
+            basis.addAll(partnerLostNetworkEvents(timeline));
+        }
         return List.copyOf(basis);
     }
 
@@ -408,6 +454,27 @@ public class SignalExtractor {
      * Không trích bản ghi cuối như phần evidence chung, vì bản ghi cuối có thể đã hồi về 0%
      * — 271D1FAF là ví dụ: loss cuối 0% nhưng caller có 18/80 giây mất gói trên 5%.
      */
+    /**
+     * Dòng căn cứ của cờ độ trễ: mỗi leg vượt ngưỡng Teams CQD một mẫu stats có RTT hiện tại cao nhất (hoà thì mẫu
+     * sớm nhất). Cờ dựa trên TRUNG BÌNH nên không có "dòng bật cờ"; mẫu tệ nhất là dòng người đọc cần mở ra xem.
+     */
+    private List<CanonicalEvent> worstDelayRecordPerLeg(CallTimeline timeline) {
+        List<CanonicalEvent> basis = new ArrayList<>();
+        for (LegQuality q : qualityByLeg(timeline)) {
+            if (!q.delayDegraded()) {
+                continue;
+            }
+            qualityRecords(timeline)
+                    .filter(e -> e.leg() == q.leg() && e.type() == EventType.MEDIA_STATS)
+                    .filter(e -> decimal(e.attribute(PACKETS_RECEIVED)).filter(v -> v.signum() > 0).isPresent())
+                    .sorted(Comparator.comparing((CanonicalEvent e) -> decimal(e.attribute("transport.currentRttMs"))
+                            .orElse(BigDecimal.ZERO)).reversed())   // sort ổn định: hoà thì mẫu sớm nhất
+                    .findFirst()
+                    .ifPresent(basis::add);
+        }
+        return basis;
+    }
+
     private List<CanonicalEvent> worstDegradedRecordPerLeg(CallTimeline timeline) {
         List<CanonicalEvent> degraded = degradedRecords(timeline);
         Comparator<CanonicalEvent> worstFirst = Comparator

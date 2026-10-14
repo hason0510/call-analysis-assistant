@@ -3,6 +3,7 @@ package io.hason.callanalysis.domain.evaluation;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
 import io.hason.callanalysis.domain.validation.AttachedFile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,8 +20,13 @@ import java.util.regex.Pattern;
  * cột TSV của end call log, cặp tên=giá trị, SDP, Cand[]), theo đúng cách scripts/verify-sanitizer/verify_sanitized.py.
  * Sanitizer bỏ sót một dạng nào thì phép đo này vẫn bắt được — miễn bộ đọc này nhận ra giá trị gốc.
  *
- * Giới hạn: chưa lấy địa chỉ IPv6 (cần parser địa chỉ, không làm bằng regex an toàn được); giá trị nhạy cảm
- * nằm trong câu hỏi người dùng không được tính.
+ * Văn bản tự do (mọi dòng log đính kèm, và câu hỏi của người dùng qua {@link #withQuestion}) còn được quét tìm
+ * IPv4, IPv6, bí mật (JWT, Bearer, API key, cặp {@code token=…}) và liên hệ (số điện thoại Việt Nam, email).
+ * IPv6 được nhận bằng parser địa chỉ ({@link #isGlobalIpv6}), không bằng regex: log WebRTC đầy chuỗi trông như
+ * IPv6 mà không phải ({@code Port[6449f700:0:1:0:host…}, {@code WRVMC::}, DTLS fingerprint).
+ *
+ * Giới hạn: IPv6 chỉ tính địa chỉ unicast toàn cầu (2000::/3) — địa chỉ client công cộng; link-local và địa chỉ
+ * nội bộ không tính. Số điện thoại chỉ nhận dạng di động Việt Nam (0 / 84 / +84 rồi 9 chữ số, đầu 3, 5, 7, 8, 9).
  */
 public final class SensitiveValues {
 
@@ -39,6 +45,20 @@ public final class SensitiveValues {
             "Cand\\[[^\\]]*:([A-Za-z0-9+/]{4,}):([A-Za-z0-9+/]{16,}):\\d+:\\d+:\\d+]");
     private static final Pattern FINGERPRINT = Pattern.compile("fingerprint:sha-256 ([0-9A-F:]+)");
     private static final Pattern IPV4 = Pattern.compile("(?<![0-9.])(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})(?![0-9.])");
+    /**
+     * Ứng viên IPv6: chuỗi hex và dấu hai chấm đứng riêng — trước / sau không phải chữ, số, ':' hay '.'. Chỉ để
+     * KHOANH chuỗi; có phải địa chỉ hay không là việc của {@link #isGlobalIpv6}. Ranh giới chặt nên
+     * {@code Port[6449f700:0:1:0:host} (dính chữ "host") và {@code rmnet0:2402:…} (dính tên giao diện) bị loại;
+     * dạng thật trong data là cột TSV, SDP ({@code … 2402:… 51625 typ host}) và {@code Cand[…:[2402:…]:port…]}.
+     */
+    private static final Pattern IPV6_TOKEN = Pattern.compile("(?<![0-9A-Za-z:.])[0-9A-Fa-f:]{3,}(?![0-9A-Za-z:.])");
+    private static final Pattern JWT = Pattern.compile("eyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}");
+    private static final Pattern BEARER = Pattern.compile("(?i)\\bbearer\\s+([A-Za-z0-9._~+/=-]{8,})");
+    private static final Pattern API_KEY = Pattern.compile("(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{8,}");
+    private static final Pattern SECRET_PAIR = Pattern.compile(
+            "(?i)\\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|passwd|secret)\\b\"?\\s*[=:]\\s*\"?([^\\s\",;}\\]]{8,})");
+    private static final Pattern PHONE = Pattern.compile("(?<![\\d.])(?:\\+84|84|0)[35789]\\d{8}(?![\\d.])");
+    private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
 
     /** Ngắn hơn thế này thì dễ trùng ngẫu nhiên với chữ thường ("SVC1"), cùng ngưỡng với script. */
     private static final int MIN_LENGTH = 6;
@@ -89,13 +109,76 @@ public final class SensitiveValues {
             addAll(found, "ice-pwd", USER_PASS, line, 1);
             addAll(found, "ice-pwd", CAND, line, 2);
             addAll(found, "fingerprint", FINGERPRINT, line, 1);
-            Matcher ip = IPV4.matcher(line);
-            while (ip.find()) {
-                if (isRealAddress(ip)) {
-                    add(found, "ip", ip.group());
-                }
+            collectFromFreeText(line, found);
+        }
+    }
+
+    /**
+     * Thêm giá trị nhạy cảm nằm trong câu hỏi của người dùng ("Máy 0912345678 gọi lỗi, token eyJ…"). Câu hỏi đi
+     * tới AI (bước phân loại và bước phân tích) và có thể bị chép lại vào report — phải đo như log đính kèm.
+     */
+    public SensitiveValues withQuestion(String question) {
+        Map<String, Set<String>> found = new TreeMap<>();
+        byKind.forEach((kind, values) -> found.put(kind, new TreeSet<>(values)));
+        if (question != null) {
+            question.lines().forEach(line -> collectFromFreeText(line, found));
+        }
+        return new SensitiveValues(found);
+    }
+
+    /** IP, bí mật, liên hệ — thứ không có tên trường cố định, xuất hiện ở bất kỳ đâu trong văn bản. */
+    private static void collectFromFreeText(String line, Map<String, Set<String>> found) {
+        Matcher ip = IPV4.matcher(line);
+        while (ip.find()) {
+            if (isRealAddress(ip)) {
+                add(found, "ip", ip.group());
             }
         }
+        Matcher v6 = IPV6_TOKEN.matcher(line);
+        while (v6.find()) {
+            if (isGlobalIpv6(v6.group())) {
+                add(found, "ip", v6.group());
+            }
+        }
+        addAll(found, "secret", JWT, line, 0);
+        addAll(found, "secret", BEARER, line, 1);
+        addAll(found, "secret", API_KEY, line, 0);
+        addAll(found, "secret", SECRET_PAIR, line, 1);
+        addAll(found, "contact", PHONE, line, 0);
+        addAll(found, "contact", EMAIL, line, 0);
+    }
+
+    /**
+     * Địa chỉ IPv6 unicast toàn cầu (2000::/3) đúng cú pháp RFC 4291: 8 nhóm 1-4 chữ số hex, hoặc ít nhóm hơn với
+     * đúng một "::". Dạng nhúng IPv4 ({@code ::ffff:1.2.3.4}) không tính — phần IPv4 đã có bộ đọc IPv4 bắt.
+     */
+    static boolean isGlobalIpv6(String s) {
+        int gap = s.indexOf("::");
+        List<String> groups = new ArrayList<>();
+        if (gap < 0) {
+            groups.addAll(List.of(s.split(":", -1)));
+            if (groups.size() != 8) {
+                return false;
+            }
+        } else {
+            if (s.indexOf("::", gap + 1) >= 0 || gap == 0) {
+                return false;                       // hai "::" hoặc ":::"; "::…" thì nhóm đầu là 0, ngoài 2000::/3
+            }
+            String right = s.substring(gap + 2);
+            groups.addAll(List.of(s.substring(0, gap).split(":", -1)));
+            if (!right.isEmpty()) {
+                groups.addAll(List.of(right.split(":", -1)));
+            }
+            if (groups.size() > 7) {
+                return false;
+            }
+        }
+        for (String g : groups) {
+            if (g.isEmpty() || g.length() > 4 || !g.chars().allMatch(c -> Character.digit(c, 16) >= 0)) {
+                return false;
+            }
+        }
+        return (Integer.parseInt(groups.getFirst(), 16) & 0xE000) == 0x2000;
     }
 
     /** Bốn số 0-255, không phải 0.0.0.0 / loopback / broadcast — mấy địa chỉ đó không định danh ai. */

@@ -45,4 +45,18 @@ class SanitizingConvertersTest {
                 .contains("at io.hason.callanalysis")                 // stack trace không bị cắt
                 .doesNotContain("Zx81Qp0LmN3").doesNotContain("internal.example.net").doesNotContain("DHV3MGQG53I");
     }
+
+    @Test
+    @DisplayName("%skvp — trường key-value in ' khoá=giá trị' sau thông điệp, giá trị đã làm sạch, null bỏ qua")
+    void keyValuesAreSanitized() {
+        LoggingEvent e = event("AI call", null);
+        e.addKeyValuePair(new org.slf4j.event.KeyValuePair("request_id", "req-1"));
+        e.addKeyValuePair(new org.slf4j.event.KeyValuePair("note", "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln"));
+        e.addKeyValuePair(new org.slf4j.event.KeyValuePair("fallback_reason", null));
+
+        String out = new SanitizingKeyValueConverter().convert(e);
+
+        assertThat(out).startsWith(" request_id=req-1 note=").doesNotContain("eyJ").doesNotContain("fallback_reason");
+        assertThat(new SanitizingKeyValueConverter().convert(event("không có trường", null))).isEmpty();
+    }
 }

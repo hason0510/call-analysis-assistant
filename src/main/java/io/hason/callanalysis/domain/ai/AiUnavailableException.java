@@ -9,7 +9,15 @@ package io.hason.callanalysis.domain.ai;
  */
 public class AiUnavailableException extends RuntimeException {
 
-    public enum Reason { NOT_CONFIGURED, TIMEOUT, PROVIDER_ERROR, INVALID_RESPONSE, REFUSED }
+    /**
+     * RATE_LIMITED / QUOTA_EXCEEDED: HTTP 429 — tách khỏi PROVIDER_ERROR vì người dùng cần làm việc khác nhau.
+     * AUTH_FAILED (401/403), INPUT_TOO_LARGE (400 vượt cửa sổ ngữ cảnh), REQUEST_REJECTED (4xx khác): tách ở Sprint 3
+     * T8 — thử lại vô ích. PROVIDER_ERROR chỉ còn lỗi mạng và 5xx, là lỗi tạm thời ({@link RetryPolicy}).
+     */
+    public enum Reason {
+        NOT_CONFIGURED, TIMEOUT, PROVIDER_ERROR, RATE_LIMITED, QUOTA_EXCEEDED, AUTH_FAILED, INPUT_TOO_LARGE,
+        REQUEST_REJECTED, INVALID_RESPONSE, REFUSED
+    }
 
     private final Reason reason;
 

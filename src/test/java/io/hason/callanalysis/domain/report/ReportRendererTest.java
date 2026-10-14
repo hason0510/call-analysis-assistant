@@ -19,6 +19,7 @@ class ReportRendererTest {
                                      List<String> suggestions, List<String> limitations) {
         return new CallReport("CALL-EXAMPLE-001", Verdict.SUCCESS, qualityFlag,
                 qualityFlag ? IssueCategory.NETWORK_PACKET_LOSS : null, ConfidenceLevel.MEDIUM,
+                List.of("thiếu log client của callee", "bằng chứng rõ: ICE đạt connected"),
                 "Cuộc gọi thiết lập thành công.", evidence,
                 List.of(new CallReport.MetricEntry("Thời gian thiết lập", "6200", "ms", null, "SIGNALING"),
                         new CallReport.MetricEntry("RTT (callee)", null, null, "không có trong file log", "ENDCALL"),
@@ -28,7 +29,7 @@ class ReportRendererTest {
                         qualityFlag ? List.of("NETWORK_DELAY_JITTER - chưa xác nhận được") : List.of()),
                 suggestions, limitations, false, analysis,
                 analysis == null ? CallReport.AnalysisSource.RULE : CallReport.AnalysisSource.AI, false, null,
-                analysis == null ? List.of() : List.of("EV02", "EV10"));
+                analysis == null ? List.of() : List.of("EV02", "EV10"), List.of());
     }
 
     private static final List<CallReport.EvidenceEntry> EVIDENCE = List.of(
@@ -49,7 +50,7 @@ class ReportRendererTest {
                 "Call-ID: CALL-EXAMPLE-001",
                 "Kết luận: SUCCESS",
                 "Cờ chất lượng: Có - NETWORK_PACKET_LOSS",
-                "Độ tin cậy: MEDIUM",
+                "Độ tin cậy: MEDIUM — thiếu log client của callee; bằng chứng rõ: ICE đạt connected",
                 "Tóm tắt: Cuộc gọi thiết lập thành công.");
         assertThat(lines.stream().filter(l -> l.startsWith("## ")).toList()).containsExactlyElementsOf(ReportRenderer.SECTIONS);
     }
@@ -90,7 +91,25 @@ class ReportRendererTest {
         String text = renderer.render(report(true, "Mất gói 9.8% phía callee.", EVIDENCE, List.of(), List.of()));
 
         assertThat(text).containsSubsequence("- Chính: NETWORK_PACKET_LOSS", "- Phân tích: Mất gói 9.8% phía callee.",
-                "- Căn cứ: EV02, EV10", "- Khả dĩ khác: NETWORK_DELAY_JITTER");
+                "- Căn cứ AI trích: EV02, EV10", "- Khả dĩ khác: NETWORK_DELAY_JITTER");
+    }
+
+    @Test
+    @DisplayName("T2 — bốn câu của MVP 7.1: Chính, Vì sao kết luận, Căn cứ của rule ở mục nguyên nhân; đề xuất chuẩn rồi phần AI")
+    void fourQuestionsAreAnswered() {
+        CallReport base = report(true, null, EVIDENCE, List.of("Kiểm tra mạng phía callee."), List.of());
+        CallReport r = new CallReport(base.callId(), base.verdict(), base.qualityFlag(), base.issueCategory(),
+                base.confidenceLevel(), base.confidenceReasons(), base.summary(), base.evidence(), base.metrics(),
+                new CallReport.PossibleCauses("NETWORK_PACKET_LOSS — mất gói phía callee", List.of(),
+                        "Chỉ số chất lượng vượt ngưỡng", List.of("EV10")),
+                base.suggestions(), base.dataLimitations(), false, "Phân tích AI.", CallReport.AnalysisSource.AI,
+                false, null, List.of("EV10"), List.of("Đo lại khi đổi Wi-Fi."));
+
+        String text = renderer.render(r);
+
+        assertThat(text).containsSubsequence("- Chính: NETWORK_PACKET_LOSS", "- Vì sao kết luận: Chỉ số chất lượng vượt ngưỡng",
+                "- Căn cứ của rule: EV10", "- Phân tích: Phân tích AI.", "- Căn cứ AI trích: EV10",
+                "## Đề xuất", "- Kiểm tra mạng phía callee.", "- Bổ sung (AI): Đo lại khi đổi Wi-Fi.");
     }
 
     @Test

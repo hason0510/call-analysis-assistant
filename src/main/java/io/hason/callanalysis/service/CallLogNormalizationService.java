@@ -62,9 +62,16 @@ public class CallLogNormalizationService {
     public record FileOutcome(String fileName, DetectedLogType detectedType, Leg leg,
                               int lineCount, ParseResult result) {}
 
-    /** @param rejected file bị File Validator loại, kèm lý do — không được parse */
+    /**
+     * @param rejected       file bị File Validator loại, kèm lý do — không được parse
+     * @param signalingNotes vì sao không có signaling (ES tắt, không có Call-ID); rỗng khi truy vấn được
+     */
     public record CallOutcome(String callId, ParseResult signaling, List<FileOutcome> files,
-                              List<RejectedFile> rejected) {
+                              List<RejectedFile> rejected, List<TimelineNote> signalingNotes) {
+
+        public CallOutcome {
+            signalingNotes = signalingNotes == null ? List.of() : List.copyOf(signalingNotes);
+        }
 
         public ParseResult combined() {
             ParseResult all = signaling;
@@ -92,7 +99,7 @@ public class CallLogNormalizationService {
         // một lượt cho normalize và một lượt cho leg, tức hai vòng tới Elasticsearch.
         List<TimelineNote> seedNotes = new ArrayList<>();
         SignalingFetch fetch = fetchSafely(validation.callId(), seedNotes);
-        CallOutcome outcome = normalize(validation, fetch);
+        CallOutcome outcome = normalize(validation, fetch, List.of());
         LegAssignment legs = LegAssignment.fromFirstInitCall(
                 fetch == null ? List.of() : fetch.records());
 
@@ -210,13 +217,18 @@ public class CallLogNormalizationService {
         return normalize(callId, toAttached(attachedFiles));
     }
 
+    /**
+     * Cho --parse-*: ES tắt thì vẫn parse log đính kèm và báo lý do trong {@link CallOutcome#signalingNotes()},
+     * như {@link #buildTimeline} — trước đây lệnh dừng giữa chừng với stack trace của ES client.
+     */
     public CallOutcome normalize(String callId, List<AttachedFile> attachedFiles) {
         FileValidation validation = fileValidator.validate(callId, attachedFiles);
-        return normalize(validation, validation.callId() == null
-                ? null : signalingSource.fetchByCallId(validation.callId()));
+        List<TimelineNote> notes = new ArrayList<>();
+        SignalingFetch fetch = fetchSafely(validation.callId(), notes);
+        return normalize(validation, fetch, notes);
     }
 
-    private CallOutcome normalize(FileValidation validation, SignalingFetch fetch) {
+    private CallOutcome normalize(FileValidation validation, SignalingFetch fetch, List<TimelineNote> signalingNotes) {
         String callId = validation.callIdOrPlaceholder();
         ParseResult signaling = signalingNormalizer.normalize(fetch);
 
@@ -248,7 +260,7 @@ public class CallLogNormalizationService {
             };
             outcomes.add(new FileOutcome(fileName, type, leg, lines.size(), result));
         }
-        return new CallOutcome(callId, signaling, List.copyOf(outcomes), validation.rejected());
+        return new CallOutcome(callId, signaling, List.copyOf(outcomes), validation.rejected(), signalingNotes);
     }
 
     /** Nội dung đã đọc sẵn (test, lệnh cũ): kích thước tính lại từ nội dung. */

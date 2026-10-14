@@ -67,6 +67,7 @@ public class ParseCallCommand implements ApplicationRunner {
         log.info("Call-ID: {}", outcome.callId());
         log.info("");
         printSection("signaling (từ Elasticsearch)", outcome.signaling());
+        outcome.signalingNotes().forEach(n -> log.warn("    {}", n.message()));
         for (FileOutcome file : outcome.files()) {
             printSection(String.format("%s  [%s, leg=%s, %d dòng]",
                     file.fileName(), file.detectedType(), file.leg(), file.lineCount()), file.result());
@@ -90,6 +91,7 @@ public class ParseCallCommand implements ApplicationRunner {
         int totalEvents = 0;
         int totalWarnings = 0;
         int totalUnrecognised = 0;
+        int withoutSignaling = 0;
 
         for (Path folder : calls) {
             CallOutcome outcome = normalizationService.normalize(folder.getFileName().toString(),
@@ -103,6 +105,9 @@ public class ParseCallCommand implements ApplicationRunner {
             totalEvents += combined.events().size();
             totalWarnings += combined.warnings().size();
             totalUnrecognised += (int) unrecognised;
+            if (!outcome.signalingNotes().isEmpty()) {
+                withoutSignaling++;
+            }
 
             log.info("{}", String.format("%-10s %-26s %7d %7d %9d %9d",
                     folder.getParent().getFileName(), folder.getFileName().toString().substring(0, 8),
@@ -114,6 +119,11 @@ public class ParseCallCommand implements ApplicationRunner {
         log.info("Tổng event sinh ra       : {}", totalEvents);
         log.info("Tổng cảnh báo            : {}", totalWarnings);
         log.info("File bị loại khi kiểm    : {}", totalUnrecognised);
+        if (withoutSignaling > 0) {
+            // Không dừng lệnh: log đính kèm vẫn parse được. Nhưng số event lúc này thiếu phần signaling.
+            log.warn("Không truy vấn được signaling ở {}/{} cuộc gọi (Elasticsearch tắt hoặc chưa import?)"
+                    + " — số event ở trên chỉ gồm log đính kèm", withoutSignaling, calls.size());
+        }
     }
 
     private List<Path> findCallFolders(Path root) throws IOException {

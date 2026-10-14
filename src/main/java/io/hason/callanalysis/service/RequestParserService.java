@@ -4,6 +4,7 @@ import io.hason.callanalysis.domain.ai.AiUnavailableException;
 import io.hason.callanalysis.domain.ai.TokenUsage;
 import io.hason.callanalysis.domain.request.AiIntent;
 import io.hason.callanalysis.domain.request.CallIdExtractor;
+import io.hason.callanalysis.domain.request.GarbledText;
 import io.hason.callanalysis.domain.request.IntentClassification;
 import io.hason.callanalysis.domain.request.KeywordIntentClassifier;
 import io.hason.callanalysis.domain.request.ParsedRequest;
@@ -48,42 +49,49 @@ public class RequestParserService {
         if (callId.note() != null) {
             notes.add(callId.note());
         }
+        boolean garbled = GarbledText.isGarbled(question);
+        if (garbled) {
+            notes.add(GarbledText.NOTE);
+        }
         SafeQuestion safe = SafeQuestion.of(question, sanitizer);
         if (safe.isBlank()) {
             // Chỉ đính kèm log: không có gì để AI hiểu, khỏi tốn một lời gọi.
-            return result(safe, keywords.classify(null), callId, ParsedRequest.Source.KEYWORD, null, notes, null);
+            return result(safe, keywords.classify(null), callId, ParsedRequest.Source.KEYWORD, null, notes, null,
+                    garbled);
         }
 
         AiIntent ai;
         try {
             ai = classifier.classify(requestId, safe);
         } catch (AiUnavailableException e) {
-            return fallback(requestId, safe, callId, e.reason().name(), notes, null);
+            return fallback(requestId, safe, callId, e.reason().name(), notes, null, garbled);
         } catch (RuntimeException e) {
-            return fallback(requestId, safe, callId, "UNEXPECTED_ERROR", notes, null);
+            return fallback(requestId, safe, callId, "UNEXPECTED_ERROR", notes, null, garbled);
         }
         Optional<IntentClassification> checked = IntentClassification.fromAi(sanitizeOutput(ai));
         if (checked.isEmpty()) {
             // AI đã trả lời (đã tốn token) nhưng câu trả lời không dùng được: vẫn ghi số token.
-            return fallback(requestId, safe, callId, "INVALID_INTENT", notes, ai.usage());
+            return fallback(requestId, safe, callId, "INVALID_INTENT", notes, ai.usage(), garbled);
         }
-        log.info("request_id={} result_status=OK intent={}", requestId, checked.get().intent());
-        return result(safe, checked.get(), callId, ParsedRequest.Source.AI, null, notes, ai.usage());
+        log.atInfo().addKeyValue("request_id", requestId).addKeyValue("result_status", "OK")
+                .addKeyValue("intent", checked.get().intent()).addKeyValue("garbled", garbled).log("Request parsed");
+        return result(safe, checked.get(), callId, ParsedRequest.Source.AI, null, notes, ai.usage(), garbled);
     }
 
     private ParsedRequest fallback(String requestId, SafeQuestion safe, CallIdExtractor.Result callId,
-                                   String reason, List<String> notes, TokenUsage usage) {
+                                   String reason, List<String> notes, TokenUsage usage, boolean garbled) {
         IntentClassification byKeywords = keywords.classify(safe.text());
-        log.warn("request_id={} result_status=FALLBACK fallback_reason={} intent={}",
-                requestId, reason, byKeywords.intent());
-        return result(safe, byKeywords, callId, ParsedRequest.Source.KEYWORD, reason, notes, usage);
+        log.atWarn().addKeyValue("request_id", requestId).addKeyValue("result_status", "FALLBACK")
+                .addKeyValue("fallback_reason", reason).addKeyValue("intent", byKeywords.intent())
+                .addKeyValue("garbled", garbled).log("Request parsed");
+        return result(safe, byKeywords, callId, ParsedRequest.Source.KEYWORD, reason, notes, usage, garbled);
     }
 
     private static ParsedRequest result(SafeQuestion safe, IntentClassification c, CallIdExtractor.Result callId,
                                         ParsedRequest.Source source, String fallbackReason, List<String> notes,
-                                        TokenUsage usage) {
+                                        TokenUsage usage, boolean garbled) {
         return new ParsedRequest(safe.text(), c.intent(), c.focus(), callId.callId(), source, fallbackReason, notes,
-                usage);
+                usage, garbled);
     }
 
     /** Câu hỏi đã sạch nhưng model vẫn có thể bịa ra một chuỗi nhạy cảm trong trọng tâm (ca S07). */
@@ -91,6 +99,6 @@ public class RequestParserService {
         if (ai == null || ai.focus() == null) {
             return ai;
         }
-        return new AiIntent(ai.intent(), sanitizer.sanitize(ai.focus()).text(), ai.usage());
+        return new AiIntent(ai.intent(), sanitizer.sanitizeQuestion(ai.focus()).text(), ai.usage());
     }
 }

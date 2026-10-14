@@ -257,6 +257,7 @@ textarea:focus { border-color: var(--signal); outline: none; box-shadow: 0 0 0 3
 .meter { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: -1px; }
 .meter i { width: 6px; height: 14px; border-radius: 1px; background: var(--line); }
 .meter i.on { background: var(--ink); }
+.confidence-reasons { color: var(--ink-soft); font-size: 13px; }
 .summary { max-width: 72ch; }
 
 /* Mục: mở sẵn hết (giữ đủ mục của mẫu 4.5), người đọc tự thu gọn */

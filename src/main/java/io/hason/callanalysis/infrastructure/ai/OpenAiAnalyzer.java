@@ -25,8 +25,8 @@ import java.io.UncheckedIOException;
 public class OpenAiAnalyzer implements AiAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiAnalyzer.class);
-    private static final String SCHEMA = "schema/ai-analysis.schema.json";
-    private static final String SYSTEM_PROMPT = "prompts/analyze-call.system.txt";
+    static final String SCHEMA = "schema/ai-analysis.schema.json";
+    static final String SYSTEM_PROMPT = "prompts/analyze-call.system.txt";
 
     private final ObjectMapper mapper;
     private final OpenAiChatClient client;
@@ -42,19 +42,34 @@ public class OpenAiAnalyzer implements AiAnalyzer {
 
     @Override
     public AiAnalysis analyze(AiContext context) {
-        OpenAiChatClient.Completion completion = client.complete(prompt(context));
-        AiAnalysis analysis = read(completion.content())
-                .withUsage(new TokenUsage(completion.promptTokens(), completion.completionTokens()));
-        log.info("request_id={} model={} latency_ms={} result_status=OK prompt_tokens={} completion_tokens={}",
-                context.requestId(), client.model(), completion.latencyMs(),
-                completion.promptTokens(), completion.completionTokens());
-        return analysis;
+        long started = System.nanoTime();
+        OpenAiChatClient.Completion completion;
+        try {
+            completion = client.complete(prompt(context, (reason, ms) -> AiCallLog.retrying(log, context.requestId(),
+                    context.logCallId(), client.model(), ms, reason.name())));
+        } catch (AiUnavailableException e) {
+            AiCallLog.write(log, context.requestId(), context.logCallId(), client.model(),
+                    (System.nanoTime() - started) / 1_000_000, null, e.reason().name());
+            throw e;
+        }
+        TokenUsage usage = new TokenUsage(completion.promptTokens(), completion.completionTokens());
+        try {
+            AiAnalysis analysis = read(completion.content()).withUsage(usage);
+            AiCallLog.write(log, context.requestId(), context.logCallId(), client.model(), completion.latencyMs(),
+                    usage, null);
+            return analysis;
+        } catch (AiUnavailableException e) {
+            // Đã tốn token mà câu trả lời không đọc được: vẫn ghi số token
+            AiCallLog.write(log, context.requestId(), context.logCallId(), client.model(), completion.latencyMs(),
+                    usage, e.reason().name());
+            throw e;
+        }
     }
 
     record Parsed(AiAnalysis analysis, int promptTokens, int completionTokens) {}
 
     String requestBody(AiContext context) {
-        return client.requestBody(prompt(context));
+        return client.requestBody(prompt(context, OpenAiChatClient.RetryListener.NONE));
     }
 
     Parsed parseResponse(String body) {
@@ -62,8 +77,8 @@ public class OpenAiAnalyzer implements AiAnalyzer {
         return new Parsed(read(completion.content()), completion.promptTokens(), completion.completionTokens());
     }
 
-    private OpenAiChatClient.Prompt prompt(AiContext context) {
-        return new OpenAiChatClient.Prompt(systemPrompt, userMessage(context), "call_analysis", schema);
+    private OpenAiChatClient.Prompt prompt(AiContext context, OpenAiChatClient.RetryListener onRetry) {
+        return new OpenAiChatClient.Prompt(systemPrompt, userMessage(context), "call_analysis", schema, onRetry);
     }
 
     private AiAnalysis read(String content) {

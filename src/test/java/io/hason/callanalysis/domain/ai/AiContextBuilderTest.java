@@ -144,6 +144,60 @@ class AiContextBuilderTest {
     }
 
     @Test
+    @DisplayName("T1b — evidence là dòng căn cứ của rule mang ruleBasis = true, mốc bình thường mang false")
+    void ruleBasisReachesAi() {
+        CallTimeline timeline = timeline();
+        CanonicalEvent bye = timeline.allEvents().stream()
+                .filter(e -> e.sourceRef().fileName().equals("caller_endcall.log")).findFirst().orElseThrow();
+        List<Evidence> evidence = new EvidenceEngine().collect(timeline, List.of(bye));
+
+        AiContext context = builder.build("req-1", null, null, timeline, METRICS, evidence, FAIL_ICE, TAXONOMY);
+
+        assertThat(context.payload().evidence())
+                .extracting(e -> e.citation() + "=" + e.ruleBasis())
+                .containsExactly("signaling#1=false", "signaling#2=false", "caller_endcall.log:40=true",
+                        "callee_webrtc.log:9=false");
+    }
+
+    @Test
+    @DisplayName("T2 — context gửi AI mang bộ đề xuất chuẩn, để AI chỉ viết phần bổ sung")
+    void standardSuggestionsReachAi() {
+        AiContext context = builder.build("req-1", null, null, timeline(), METRICS, List.of(), FAIL_ICE, TAXONOMY);
+
+        assertThat(context.payload().ruleVerdict().standardSuggestions())
+                .isEqualTo(io.hason.callanalysis.domain.report.ReportBuilder.standardSuggestions(FAIL_ICE))
+                .isNotEmpty();
+        // Đã gửi cho AI thì là căn cứ của G05: số trong đề xuất chuẩn (ví dụ cổng 3478) AI được nhắc lại
+        assertThat(context.groundingTexts()).containsAll(context.payload().ruleVerdict().standardSuggestions());
+    }
+
+    @Test
+    @DisplayName("mã chỉ số trong context và mã report thay (MetricCodes) chỉ cùng một chỉ số")
+    void metricCodesMatchWhatAiSaw() {
+        List<AiContext.MetricItem> metrics = build(null, FAIL_ICE).payload().metrics();
+        MetricCodes codes = MetricCodes.of(METRICS);
+
+        assertThat(metrics).extracting(AiContext.MetricItem::id).containsExactly("RTT_CALLER", "MOS_CALLEE", "MAX_PAIR_PING_GAP_CALLER");
+        assertThat(metrics).extracting(m -> codes.expand("{" + m.id() + "}")).containsExactly(
+                "63 ms [RTT (caller)]",
+                "N/A (audio.packetsReceived = 0) [MOS (callee)]",
+                "1505 ms [Khoảng trống PAIR_PING lớn nhất (caller), proxy]");
+        assertThat(metrics).extracting(AiContext.MetricItem::value)
+                .containsExactly("63 ms", "N/A (audio.packetsReceived = 0)", "1505 ms [proxy]");
+    }
+
+    @Test
+    @DisplayName("tên chỉ số gửi AI ghi chiều âm thanh nhận; bảng report giữ tên theo mẫu MVP 4.5")
+    void aiMetricLabelCarriesDirectionButReportLabelDoesNot() {
+        List<AiContext.MetricItem> metrics = build(null, FAIL_ICE).payload().metrics();
+
+        assertThat(metrics).extracting(AiContext.MetricItem::name)
+                .containsExactly("RTT (caller)", "MOS (callee nhận)", "Khoảng trống PAIR_PING lớn nhất (caller)");
+        assertThat(METRICS.metrics()).extracting(io.hason.callanalysis.domain.metrics.CallMetric::label)
+                .allSatisfy(label -> assertThat(label).doesNotContain("nhận"));
+    }
+
+    @Test
     @DisplayName("danh sách log: signaling không gắn một leg, WebRTC ghi là mốc tương đối")
     void logsDescribeWhatIsPresent() {
         assertThat(build(null, FAIL_ICE).payload().logs()).containsExactly(
@@ -188,9 +242,9 @@ class AiContextBuilderTest {
         AiAnalysis echoesQuestion = new AiAnalysis("FAIL", false, "ICE_FAILURE", "MEDIUM",
                 "Cuộc gọi rớt sau 7 phút.", List.of("EV04"), "ICE chuyển sang failed.", List.of());
 
-        assertThat(guardrails.check(grounded, FAIL_ICE, context.evidenceIds(), METRICS, context.groundingTexts())
+        assertThat(guardrails.check(grounded, FAIL_ICE, context.evidenceIds(), context.metricIds(), METRICS, context.groundingTexts())
                 .status()).isEqualTo(GuardrailResult.Status.PASSED);
-        assertThat(guardrails.check(echoesQuestion, FAIL_ICE, context.evidenceIds(), METRICS, context.groundingTexts())
+        assertThat(guardrails.check(echoesQuestion, FAIL_ICE, context.evidenceIds(), context.metricIds(), METRICS, context.groundingTexts())
                 .violations()).extracting(GuardrailResult.Violation::code).containsExactly("G05");
     }
 

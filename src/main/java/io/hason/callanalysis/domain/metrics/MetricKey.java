@@ -60,6 +60,18 @@ public enum MetricKey {
         return proxy;
     }
 
+    /**
+     * Chỉ số đo luồng âm thanh mà bên đó NHẬN: lấy từ bộ đếm inbound trên máy của bên đó, nên
+     * {@code PACKET_LOSS} của caller là gói từ callee tới caller bị mất — nói về việc CALLER nghe, không
+     * phải callee. Tên gửi AI ghi rõ "nhận" ({@link CallMetric#aiLabel()}): thiếu chữ đó, AI lấy mất gói của
+     * caller để giải thích "bên nhận không nghe được" ({@code 4FD495C1}, 2026-10-13). Bảng report giữ tên theo
+     * mẫu MVP 4.5 ({@link CallMetric#label()}). RTT là khứ hồi, không
+     * có chiều; ICE / PAIR_PING / ISP là của kết nối, không phải của luồng âm thanh.
+     */
+    public boolean isReceiveSide() {
+        return this == MOS || this == PACKET_LOSS || this == JITTER;
+    }
+
     /** Chỉ số tính riêng cho từng bên, phải kèm leg khi hiển thị. */
     public boolean isPerLeg() {
         return this == MOS || this == PACKET_LOSS || this == RTT

@@ -165,6 +165,41 @@ class MetricsCalculatorTest {
                 .extracting(m -> m.value().display()).isEqualTo("18 ms");
     }
 
+    /** Bản ghi end call log của một THIẾT BỊ cụ thể (tên file), để dựng leg có nhiều máy. */
+    private static CanonicalEvent onDevice(String file, String isoTime, EventType type, Map<String, String> fields) {
+        return new CanonicalEvent(file + "#" + isoTime, "CALL-1", Leg.CALLEE, LogSource.ENDCALL,
+                EventTime.absolute(Instant.parse(isoTime), ClockDomain.CLIENT_CALLEE),
+                type, type.name(), fields, Severity.INFO, new SourceRef(file, 1, "raw"));
+    }
+
+    @Test
+    @DisplayName("callee hai thiết bị (fc3187b4): chỉ số lấy từ máy có âm thanh, không từ máy dừng sớm hơn")
+    void multiDeviceLegUsesDeviceWithAudio() {
+        // Hình dạng của fc3187b4 (giá trị giả): máy B đổ chuông rồi dừng vì máy A đã nghe — 0 byte, summary SỚM
+        // hơn; máy A có âm thanh. Máy B có thêm một mẫu stats mất gói cao để kiểm "cao nhất" không trộn hai máy.
+        CallMetrics metrics = calculator.calculate(timelineOf(List.of(
+                sigAt(0, "INIT_CALL", Leg.CALLER),
+                onDevice("callee_b_endcall.log", "2026-09-21T08:00:09Z", EventType.MEDIA_STATS, Map.of(
+                        "audio.packetLostPercent", "50", "audio.bytesReceived", "0")),
+                onDevice("callee_b_endcall.log", "2026-09-21T08:00:10Z", EventType.CALL_SUMMARY, Map.of(
+                        "audio.audioMos", "0", "audio.packetsReceived", "0", "audio.packetsLost", "0",
+                        "audio.bytesReceived", "0", "transport.currentRttMs", "0",
+                        "transport.localStunResponse", "0")),
+                onDevice("callee_a_endcall.log", "2026-09-21T08:00:20Z", EventType.MEDIA_STATS, Map.of(
+                        "audio.packetLostPercent", "2", "audio.bytesReceived", "30000")),
+                onDevice("callee_a_endcall.log", "2026-09-21T08:00:30Z", EventType.CALL_SUMMARY, Map.of(
+                        "audio.audioMos", "3.921", "audio.packetsReceived", "2000", "audio.packetsLost", "0",
+                        "audio.bytesReceived", "47747", "transport.currentRttMs", "551",
+                        "transport.localStunResponse", "12")))));
+
+        assertThat(metrics.find(MetricKey.MOS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("3.921");
+        assertThat(metrics.find(MetricKey.RTT, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("551 ms");
+        assertThat(metrics.find(MetricKey.PACKET_LOSS, Leg.CALLEE)).get()
+                .extracting(m -> m.value().display()).isEqualTo("0 % (cao nhất 2 %)");
+    }
+
     @Test
     @DisplayName("leg chưa từng có media (2D9057AA): số 0 trong summary là giá trị trống -> N/A kèm lý do")
     void zerosOfNeverConnectedLegAreNotAvailable() {

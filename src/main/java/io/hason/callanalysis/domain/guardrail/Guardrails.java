@@ -1,6 +1,7 @@
 package io.hason.callanalysis.domain.guardrail;
 
 import io.hason.callanalysis.domain.ai.AiAnalysis;
+import io.hason.callanalysis.domain.ai.MetricCodes;
 import io.hason.callanalysis.domain.guardrail.GuardrailResult.Status;
 import io.hason.callanalysis.domain.guardrail.GuardrailResult.Violation;
 import io.hason.callanalysis.domain.metrics.CallMetrics;
@@ -40,11 +41,13 @@ public class Guardrails {
 
     /**
      * @param knownEvidenceIds ID evidence mà Evidence Engine đã cấp cho cuộc gọi này
+     * @param knownMetricIds   mã chỉ số đã gửi AI ({@link MetricCodes}); mã nào ngoài danh sách là chỉ số không tồn tại
      * @param groundingTexts   văn bản đã có trong context gửi AI (mô tả evidence, mốc thời gian,
      *                         câu lý do của rule): số nào xuất hiện ở đây thì AI được phép nhắc lại
      */
     public GuardrailResult check(AiAnalysis ai, RuleVerdict rule, Collection<String> knownEvidenceIds,
-                                 CallMetrics metrics, Collection<String> groundingTexts) {
+                                 Collection<String> knownMetricIds, CallMetrics metrics,
+                                 Collection<String> groundingTexts) {
         if (ai == null) {
             return rejected(List.of(new Violation("G02", "AI không trả về nội dung")));
         }
@@ -82,7 +85,12 @@ public class Guardrails {
                 .filter(id -> !known.contains(id))
                 .forEach(id -> formal.add(new Violation("G01", "evidence ID không tồn tại: " + id)));
 
-        // G05 — số liệu không có trong bộ chỉ số đã tính hay trong context
+        // G05 — số liệu không có trong bộ chỉ số đã tính hay trong context. Mã chỉ số lạ ({MOS_SERVER}) cũng là
+        // nhắc tới một chỉ số không có trong bộ đã tính; để lọt thì report in nguyên chuỗi mã.
+        Set<String> metricIds = Set.copyOf(knownMetricIds);
+        ai.freeText().stream().flatMap(t -> MetricCodes.codesIn(t).stream())
+                .filter(id -> !metricIds.contains(id)).distinct()
+                .forEach(id -> formal.add(new Violation("G05", "mã chỉ số không tồn tại: {" + id + "}")));
         Set<BigDecimal> allowed = allowedNumbers(metrics, groundingTexts);
         unsupportedNumbers(ai.freeText(), allowed)
                 .forEach(n -> formal.add(new Violation("G05", "số liệu không có trong input: " + n)));
@@ -151,7 +159,15 @@ public class Guardrails {
     }
 
     private static Set<BigDecimal> numbersIn(String text) {
-        Set<BigDecimal> numbers = new LinkedHashSet<>();
+        return new LinkedHashSet<>(numbers(text));
+    }
+
+    /**
+     * Mọi con số G05 xét trong một đoạn chữ, theo thứ tự, kể cả số lặp lại; đã chuẩn hoá ("3,50" = 3.5).
+     * Evidence ID (EV02) không tính là số.
+     */
+    public static List<BigDecimal> numbers(String text) {
+        List<BigDecimal> numbers = new ArrayList<>();
         if (text == null) {
             return numbers;
         }

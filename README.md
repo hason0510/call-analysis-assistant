@@ -42,7 +42,7 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **390 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **520 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -51,8 +51,8 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 | Mọi report ra `UNKNOWN`, giới hạn dữ liệu ghi *"Không truy vấn được signaling"* | Elasticsearch chưa bật hoặc chưa nạp | `docker compose up -d elasticsearch`, chạy lại lệnh nạp |
 | `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như lệnh mẫu |
 | Web không mở được, cổng 8080 đang bị chiếm | Chương trình khác dùng cổng 8080 | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"`, mở http://localhost:8089/ |
-| Banner vàng *"Report dựng từ rule vì AI không dùng được"* | Chưa có key, hết hạn mức, hoặc AI lỗi | Đúng thiết kế (fallback); muốn có phần phân tích của AI thì điền key |
-| Thử API bằng curl, câu tiếng Việt bị xếp ngoài phạm vi | curl trên Windows làm hỏng chữ có dấu trước khi gửi | Gõ không dấu, hoặc gửi từ file UTF-8: `-F "message=<cau-hoi.txt"` |
+| Banner vàng *"Report dựng từ rule vì AI không dùng được"* | Chưa có key, AI lỗi, hoặc OpenAI trả 429 — banner ghi rõ lý do, ví dụ *"giới hạn tốc độ gọi"* hay *"hết hạn mức"* | Đúng thiết kế (fallback). Giới hạn tốc độ: thử lại sau ít phút; hết hạn mức: nạp thêm; chưa có key: điền key |
+| Report hoặc câu từ chối có dòng *"Câu hỏi có ký tự bị hỏng mã hoá"* | curl / dòng lệnh Windows làm hỏng chữ có dấu trước khi gửi | Gõ trên Web UI, gõ không dấu, hoặc gửi từ file UTF-8: `-F "message=<cau-hoi.txt"` |
 
 ---
 
@@ -88,15 +88,17 @@ curl http://localhost:9200/_cluster/health
 # 6. Web UI + Chat API tại http://localhost:8080/
 ./mvnw spring-boot:run "-Dspring-boot.run.profiles=web"
 
-# 7. Evaluation Runner trên benchmark dev (lần đầu: tạo file biến thể F02, xem dưới)
+# 7. Evaluation Runner trên benchmark dev (lần đầu: tạo file biến thể, xem dưới)
 python scripts/benchmark-variants/make_variants.py ../ai20k_sample
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample"
 ```
 
 **File biến thể F02.** MVP 6.3 đòi tập `dev` có ca "tên file sai loại", mà data mẫu không có sẵn. Script trên chép
 `caller_endcall.log` của `DE7DD314` thành `_variants/F02-sai-loai/caller_webrtc.log` — nội dung giống hệt, chỉ đặt sai
-tên — để kiểm hệ thống nhận loại file theo nội dung (case-016). File nằm trong thư mục data mẫu, ngoài repo, vì data
-mẫu chứa IP thật. Chỉ cần chạy một lần; bộ `held-out` của Mentor không cần bước này.
+tên — để kiểm hệ thống nhận loại file theo nội dung (case-016). Script cũng tạo `_variants/S06-nhay-cam/`: log của
+`2D9057AA` có chèn số điện thoại, email, Bearer JWT, API key **giả** vào lời nhắn lỗi, cho case-019 (scenario 6 — dữ liệu
+nhạy cảm; data mẫu đã xử lý PII nên không có sẵn). File nằm trong thư mục data mẫu, ngoài repo, vì data mẫu chứa IP thật.
+Chỉ cần chạy một lần; bộ `held-out` của Mentor không cần bước này.
 
 **Key AI.** Chép `.env.example` thành `.env` và điền `OPENAI_API_KEY` (cùng `CALL_ANALYSIS_PSEUDONYM_KEY`, khoá
 HMAC cho mã giả). Không có key thì app vẫn chạy: mọi lời gọi AI lùi về rule, report đánh dấu degraded. Muốn chạy
@@ -106,7 +108,7 @@ Kết quả import đúng: **1 059 document / 20 cuộc gọi**. Importer gửi 
 
 > Các lệnh `--analyze*`, `--metrics*`, `--timeline`, `--parse-*` lấy signaling từ
 > Elasticsearch, nên phải bật ES trước. Nếu quên, `--analyze-all` sẽ ra `UNKNOWN` cho mọi cuộc
-> (report ghi rõ *"Không truy vấn được signaling"*); riêng `--parse-*` dừng với lỗi. `--evaluate` kiểm
+> (report ghi rõ *"Không truy vấn được signaling"*); `--parse-*` vẫn parse log đính kèm và báo thiếu signaling. `--evaluate` kiểm
 > signaling trước khi chạy và cảnh báo ngay ở đầu báo cáo. Web UI và `--evaluate` cũng lấy signaling từ ES.
 
 ---
@@ -162,6 +164,7 @@ Importer quét đệ quy mọi file `signaling.json` dưới thư mục được
 | `--ai-analyze=<thư-mục>` · `--ai-analyze-all=<thư-mục-gốc>` | Request Parser → pipeline → AI thật → Guardrails (2 lời gọi API mỗi cuộc) |
 | `--sanitize-dir=<thư-mục> --out=<thư-mục-ra>` | Làm sạch toàn bộ log thô để kiểm độc lập bằng `scripts/verify-sanitizer` |
 | `--evaluate=<file case> --logs=<thư-mục log> [--repeat=n] [--out=<thư-mục>]` | **Evaluation Runner**: chạy bộ case YAML (mẫu MVP mục 6.3) qua đúng luồng Chat API, chấm metric mục 6.5, ghi `.md` + `.json` vào `target/evaluation/` |
+| `--rescore=<file .json> [--cases=<file case>] [--out=<thư mục>]` | Chấm lại một lượt `--evaluate` từ file `.json` của nó theo đáp án hiện tại của file case — không gọi AI, không cần Elasticsearch |
 | profile `web` | Bật Web UI và `POST /api/analyze` (multipart: `message` + `files`) |
 
 Trên PowerShell dùng `.\build.ps1` thay cho `./mvnw` và đặt tham số `-D…` trong nháy kép, ví dụ
@@ -260,6 +263,19 @@ Mặc định ở `target/evaluation/`:
 
 Báo cáo **không chứa** log hay giá trị nhạy cảm gốc; Security Leakage chỉ lưu số đếm.
 
+Đầu báo cáo có dòng **`Prompt AI`**: 12 ký tự đầu SHA-256 của hai system prompt và hai JSON Schema của AI. Hai lượt
+chạy cùng dòng này thì AI nhận cùng chỉ dẫn; khác thì số liệu của hai lượt không so trực tiếp được.
+
+**Chấm lại không tốn tiền.** Bổ sung đáp án vào file case (ví dụ `expected_issue_category`) rồi chạy:
+
+```powershell
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--rescore=target\evaluation\evaluation-<thời điểm>.json"
+```
+
+Câu trả lời của hệ thống giữ nguyên như lúc chạy; chỉ đáp án lấy từ file case hiện tại (mặc định đúng file ghi trong
+`.json`, đổi bằng `--cases=`). Câu hỏi phải giữ đúng thứ tự vì lần chạy được ghép theo `case_id` + số thứ tự câu; lần
+chạy nào không ghép được thì nêu ở mục "Case không chạy được". Kết quả ghi cạnh file gốc, tên `…-rescored-<thời điểm>`.
+
 Trên macOS / Linux: đặt `JAVA_HOME` trỏ tới JDK 21 rồi dùng `./mvnw` thay cho `.\build.ps1`, cùng tham số
 (phần này chưa chạy thử).
 
@@ -331,8 +347,8 @@ Guardrails:
 | `resources/schema/ai-analysis.schema.json` · `request-intent.schema.json` | Structured output của AI phân tích và AI phân loại câu hỏi |
 | `resources/prompts/*.system.txt` | Prompt của hai lời gọi AI |
 | `resources/es/signaling-mapping.json` | Mapping Elasticsearch, `dynamic: strict` |
-| `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (18 case, 63 câu) và bộ câu kiểm phân loại |
-| `scripts/benchmark-variants/make_variants.py` | Tạo file biến thể "tên file sai loại" cho case-016 (ca F02), đặt ngoài repo |
+| `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (19 case, 66 câu) và bộ câu kiểm phân loại |
+| `scripts/benchmark-variants/make_variants.py` | Tạo file biến thể cho case-016 (F02, tên file sai loại) và case-019 (dữ liệu nhạy cảm giả), đặt ngoài repo |
 
 Kiến trúc theo `Controller → Service → Domain → Infrastructure`, triển khai kiểu
 Hexagonal (Ports & Adapters).
@@ -369,7 +385,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5); 280/280 giá trị trên 20 cuộc khớp script độc lập `scripts/verify-metrics/run.sh` |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Test | **390** (2026-10-07): 387 unit test (không cần Elasticsearch hay AI thật) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
+| Test | **520** (2026-10-12): 517 unit test (không cần Elasticsearch hay AI thật) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
 ## Trạng thái — Sprint 2: 10/11 task xong
 
@@ -470,15 +486,30 @@ Benchmark `dev` (`benchmark/dev-cases.yaml`: 18 case, 63 câu hỏi), mỗi câu
   rồi gọi sai tên: demo 2026-10-07 (`271D1FAF`) viết *"mất gói của caller là 11.3208%"* trong khi đó là mẫu stats cao nhất,
   mất gói cả cuộc là 1.83 %; lần chạy trước gọi MOS lúc kết thúc là "MOS thấp nhất". Kết luận và bảng chỉ số không bị ảnh
   hưởng (do code tính), chỉ câu chữ phần Phân tích. Sửa ở Sprint 3 T1(a): AI trích mã chỉ số, code điền tên và giá trị.
-- Phần đề xuất của AI thay hẳn đề xuất của rule. Trên `for_test/`, rule cho đề xuất tốt hơn ở 4/7 cuộc
-  (chạy để quan sát, không dùng để chỉnh). Demo cũng thấy lặp lại: với `703100CF` (chưa request nào rời máy), AI vẫn khuyên "kiểm tra
-  cấu hình TURN server". Dự kiến sửa ở Sprint 3 T2(a): giữ đề xuất của rule, AI chỉ bổ sung.
+- Đề xuất: từ Sprint 3 T2 bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung tối đa 3 câu ("Bổ sung (AI)"); câu AI chép
+  nguyên văn bộ chuẩn bị bỏ, nhưng câu **diễn đạt lại** bộ chuẩn vẫn có thể lọt (không so ngữ nghĩa). Đề xuất cho
+  `NETWORK_PACKET_LOSS` / `NETWORK_DELAY_JITTER` chưa kiểm chứng trên ca thật (không có cuộc chất lượng kém có nhãn).
 - Câu hỏi rất cụt, không dấu, chỉ gồm giá trị đã che vẫn có thể bị xếp ngoài phạm vi: *"sdt … email … goi loi"* ra
   `OUT_OF_SCOPE` (1/23 câu của `benchmark/intent-check.yaml`, 2026-10-07). Một lần sai chưa đủ căn cứ để sửa prompt; theo
   dõi ở các lượt đo sau. Câu liệt kê có số điện thoại / token / IP viết đủ ý thì phân loại đúng.
+- Câu hỏi rất dài không bị chặn: không có giới hạn độ dài câu hỏi. Thử 2026-10-12 (không khoá AI): câu 2 KB / 100 KB /
+  1 MB đều ra report (0,9 s / 0,6 s / 3,9 s). Câu cỡ 100 KB (~25 nghìn token) vẫn tới AI, tốn thêm ~0,008 USD mỗi lần.
+  Câu vượt cửa sổ ngữ cảnh của model (~128 nghìn token, cỡ 1 MB): OpenAI từ chối, report lùi về rule với lý do
+  `INPUT_TOO_LARGE` ("vượt giới hạn độ dài của model" — Sprint 3 T8, đã thử với API thật). Chưa chặn sớm vì người dùng
+  thật hầu như không gõ câu dài cỡ đó; MVP 7.1 nhắc "oversized input" nhưng không nói rõ là đầu vào nào.
 - Câu hỏi bị hỏng mã hoá trước khi tới server (gửi bằng công cụ không dùng UTF-8, ví dụ curl trong Git Bash trên Windows)
-  không được phát hiện: AI phân loại trên chữ hỏng và có thể trả `OUT_OF_SCOPE`. Trình duyệt luôn gửi UTF-8 nên web UI không
-  gặp (`docs/ket-qua-demo-sprint-2.md` mục 3). Dự kiến Sprint 3 T4: báo lỗi khi câu hỏi chứa ký tự lỗi mã hoá.
+  không khôi phục được. Từ Sprint 3 T4 hệ thống phát hiện và báo (ký tự U+FFFD, `?` giữa chữ cái, UTF-8 đọc như
+  Windows-1252): report thêm một dòng ở "Giới hạn dữ liệu"; nếu câu bị xếp ngoài phạm vi thì câu từ chối kèm lời nhắc gửi
+  lại. Câu rất ngắn chỉ hỏng một chỗ có thể lọt (ngưỡng hai chỗ). Trình duyệt luôn gửi UTF-8 nên web UI không gặp.
+- Khi AI phân loại không dùng được, intent do bộ từ khoá dự phòng quyết định và kém AI. Trên 87 câu có nhãn (`dev` +
+  `intent-check`) bộ từ khoá đúng 72 (2026-10-12). Còn từ chối 3 câu trong phạm vi: *"Cuộc này ổn không?"*, *"ben nao tat
+  may"*, và một câu có địa chỉ email (luật "viết email" thắng). Còn nhận 5 câu ngoài phạm vi có nhắc tới cuộc gọi hoặc log
+  (*"Viết caption Facebook về cuộc gọi này"*, *"dich log nay sang tieng anh"*…): các câu này ra report của cuộc gọi đính
+  kèm chứ không làm việc ngoài phạm vi. Có AI thì đúng hết (lượt mốc 100%).
+  Đã sửa 2026-10-12 ba câu bị từ chối của tập `dev` và kịch bản demo: *"Máy gọi có lấy được địa chỉ relay không?"*,
+  *"Độ trễ giữa hai máy có cao không?"*, *"Vì sao gọi không được?"* (scenario 3). Động từ "gọi" đi với kết cục ("gọi không
+  được", "gọi bị", "gọi xong"…), "relay", "máy gọi", "độ trễ", "hai máy" nay là dấu hiệu cuộc gọi; "gọi" đứng riêng thì
+  không, vì bỏ dấu trùng "gói" và "gọi món".
 - Thiếu log của một bên (chỉ một file đính kèm): kết luận vẫn ra `SUCCESS` / `FAIL` với độ tin cậy tối đa MEDIUM và nêu
   file thiếu, **không** ra `UNKNOWN` như scenario 5 của MVP mục 10 — vì ground truth của `5E0800AE` (chỉ có một file) là
   `SUCCESS`. Hai nguồn mâu thuẫn, chưa chốt.
@@ -488,16 +519,20 @@ Benchmark `dev` (`benchmark/dev-cases.yaml`: 18 case, 63 câu hỏi), mỗi câu
   cuộc gọi chất lượng kém có nhãn, nên benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém".
 - T11 (Nếu kịp) chưa làm: khái niệm "semi-structured context" chưa chốt.
 
-**Bảo mật (Sprint 2)**
+**Bảo mật**
 
 - Signaling nạp vào Elasticsearch local ở dạng gốc, chưa qua Sanitizer (trường nhạy cảm: `appUserId`; thêm `isp`, `asn`;
   không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào ES —
   hiện hệ thống chưa ghi kết quả nào vào ES. Cách hiểu này chưa được xác nhận. Nếu phải che cả data nhập, cần mã giả hoá
   `appUserId` lúc import và sửa cách suy ra leg (end call log vẫn mang `appUserId` gốc). Từ Sprint 3, mọi kết quả ghi vào
   ES (T9-T11) phải qua Sanitizer.
-- Phép đo Security Leakage của runner chỉ xét chuỗi gửi AI và phản hồi, chưa xét application log; và chưa gom IPv6 cùng
-  giá trị nằm trong câu hỏi (`docs/evaluation-metrics.md`). Log được làm sạch bằng converter Logback và có test riêng (S08),
-  nhưng không nằm trong số đo của runner.
+- Bí mật dạng `tên=giá trị` / `tên: giá trị` (mục DROP): trong log che **tới hết dòng** (để `Authorization: Basic dXNl…`
+  không lộ phần sau khoảng trắng); trong **câu hỏi** người dùng gõ chỉ che một từ, hoặc `Basic` / `Bearer` … + một từ, để
+  giữ phần yêu cầu viết tiếp (trước 2026-10-10, câu *"api_key=sk-… phan tich cuoc goi nay giup minh"* mất cả yêu cầu và
+  bị từ chối). Cái giá: bí mật có khoảng trắng gõ thẳng vào câu hỏi (`password=my secret pass`) lộ phần sau từ đầu tiên.
+- Phép đo Security Leakage của runner (Sprint 3): gom IPv4, IPv6 unicast toàn cầu, bí mật, SĐT di động Việt Nam, email,
+  định danh — trong log đính kèm, signaling và câu hỏi; quét chuỗi gửi AI, phản hồi và application log của từng lần chạy.
+  Log của tầng HTTP (chỉ có ở profile `web`) không đi qua runner.
 
 **Vận hành**
 

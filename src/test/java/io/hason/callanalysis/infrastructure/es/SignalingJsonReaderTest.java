@@ -49,6 +49,54 @@ class SignalingJsonReaderTest {
             }
             """;
 
+    /**
+     * Bản export THÔ (3/7 file của ai20k_new_dataset): call_id, logs[], grpcMethod, service.name,
+     * log.level, không có truncated. Cùng nội dung với hai event của {@link #SAMPLE}; giá trị chỉ
+     * có ở bản thô (message, clientIp, kubernetes...) là giả, không chép từ data thật.
+     */
+    private static final String RAW_EXPORT = """
+            {
+              "environment": "production",
+              "dataset": "call-apps",
+              "service_name": "call-signaling-*",
+              "total_matching": 3,
+              "call_id": "1B009D42-49CD-479E-B26C-3A2994AEB720",
+              "window": "last 120 minutes at query time",
+              "returned": 2,
+              "logs": [
+                {
+                  "callId": "1B009D42-49CD-479E-B26C-3A2994AEB720",
+                  "kubernetes": {"container_name": "SCYZPESAVDK", "pod_name": "pod-a"},
+                  "grpcMethod": "INIT_CALL",
+                  "log": {"level": "WARN"},
+                  "csid": "bNuT0d9v",
+                  "isp": "MOBIFONE",
+                  "message": "[IN][NATs][Partition 1][INIT_CALL][CALLER] Current dialog state: No dialog",
+                  "@timestamp": "2026-09-21T08:44:28.953756952Z",
+                  "requestId": "9c5ef435-0177-4d3a-bb0f-5447b319a873",
+                  "countryCode": "VN",
+                  "service": {"name": "SCYZPESAVDK"},
+                  "clientIp": "192.0.2.10",
+                  "appUserId": "UULM3IK5WPW",
+                  "asn": "AS131429"
+                },
+                {
+                  "callId": "1B009D42-49CD-479E-B26C-3A2994AEB720",
+                  "grpcMethod": "INIT_CALL",
+                  "log": {"level": "INFO"},
+                  "csid": "bNuT0d9v",
+                  "message": "[getScam] res: ok",
+                  "@timestamp": "2026-09-21T08:44:28.969039058Z",
+                  "requestId": "c3d457b3-efd1-40ad-965e-f140da0fc566",
+                  "countryCode": "VN",
+                  "service": {"name": "S46TQW3OJDW"},
+                  "appUserId": "UULM3IK5WPW",
+                  "latencyMs": 5
+                }
+              ]
+            }
+            """;
+
     @Test
     @DisplayName("callId ở cấp ngoài được chèn vào từng document")
     void callIdFromEnvelopeIsCopiedIntoEveryDocument() throws Exception {
@@ -120,6 +168,33 @@ class SignalingJsonReaderTest {
                 {"callId":"CALL-1","events":"khong-phai-mang"}"""))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("events");
+    }
+
+    @Test
+    @DisplayName("bản export thô cho ra ĐÚNG các document như bản gọn cùng nội dung")
+    void rawExportYieldsSameDocumentsAsCompactFormat() throws Exception {
+        // So cả record: grpcMethod -> cmd, service.name -> service, log.level -> level,
+        // call_id -> callId, returned < total_matching -> truncated. Lệch một trường là đỏ.
+        assertThat(reader.read(RAW_EXPORT)).isEqualTo(reader.read(SAMPLE));
+    }
+
+    @Test
+    @DisplayName("bản thô: truncated suy từ returned và total_matching")
+    void rawExportDerivesTruncationFromCounts() throws Exception {
+        String complete = """
+                {"call_id":"CALL-1","total_matching":1,"returned":1,
+                 "logs":[{"grpcMethod":"BYE","service":{"name":"S"},"log":{"level":"INFO"}}]}""";
+        assertThat(reader.read(complete)).singleElement()
+                .satisfies(d -> {
+                    assertThat(d.sourceTruncated()).isFalse();
+                    assertThat(d.cmd()).isEqualTo("BYE");
+                    assertThat(d.service()).isEqualTo("S");
+                    assertThat(d.level()).isEqualTo("INFO");
+                });
+
+        // Thiếu một trong hai con số thì không đoán là bị cắt.
+        assertThat(reader.read("""
+                {"call_id":"CALL-1","returned":1,"logs":[{}]}""").getFirst().sourceTruncated()).isFalse();
     }
 
     @Test

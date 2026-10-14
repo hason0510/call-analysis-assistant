@@ -4,10 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hason.callanalysis.domain.security.Pseudonymizer;
 import io.hason.callanalysis.domain.security.SensitiveDataSanitizer;
+import io.hason.callanalysis.domain.security.SensitiveField;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,6 +35,25 @@ class SensitiveDataSanitizerTest {
         return sanitizer.sanitize(text).text();
     }
 
+    @Test
+    @DisplayName("policyForKey dùng bảng tra: kết quả như duyệt cả inventory với equalsIgnoreCase, mọi tên và mọi kiểu hoa/thường")
+    void policyLookupMatchesLinearScan() {
+        List<SensitiveField> inventory = new SensitiveDataInventoryLoader().load();
+        // So theo id: SensitiveField chứa Pattern, mà Pattern không có equals — hai lần nạp là hai đối tượng
+        Function<String, Optional<String>> linear =
+                key -> inventory.stream().filter(f -> f.matchesFieldName(key)).findFirst().map(SensitiveField::id);
+        // "ı" (i không chấm, U+0131): equalsIgnoreCase coi bằng "i", chữ thường thì không — phải đi đường dự phòng
+        String dotlessI = "appUser" + Character.toString(0x0131) + "d";
+        List<String> keys = new ArrayList<>(List.of("khongCoTrongInventory", "", dotlessI));
+        inventory.forEach(f -> f.fieldNames().forEach(n -> keys.addAll(
+                List.of(n, n.toUpperCase(Locale.ROOT), n.toLowerCase(Locale.ROOT)))));
+
+        assertThat(keys).allSatisfy(k ->
+                assertThat(sanitizer.policyForKey(k).map(SensitiveField::id)).isEqualTo(linear.apply(k)));
+        assertThat(sanitizer.policyForKey(dotlessI)).isPresent();
+        assertThat(sanitizer.policyForKey(null)).isEmpty();
+    }
+
     // ---------------- S01-S03: bí mật bị DROP ----------------
 
     @Test
@@ -47,6 +72,30 @@ class SensitiveDataSanitizerTest {
         // Dừng ở khoảng trắng thì chỉ che chữ "Basic" và để lộ phần base64.
         assertThat(clean("Authorization: Basic dXNlcjpwYXNzd29yZA=="))
                 .isEqualTo("Authorization: [REDACTED]");
+    }
+
+    @Test
+    @DisplayName("câu hỏi: bí mật tên=giá trị chỉ che đúng giá trị, GIỮ phần yêu cầu viết tiếp (case-019)")
+    void questionKeepsRequestAfterSecret() {
+        String question = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYWRtaW4ifQ.YWRtaW5zaWc"
+                + " api_key=sk-FAKEquestion12345 phan tich cuoc goi nay giup minh";
+
+        assertThat(sanitizer.sanitizeQuestion(question).text())
+                .isEqualTo("Authorization: [REDACTED] api_key=[REDACTED] phan tich cuoc goi nay giup minh");
+        // Cùng chuỗi ở log: vẫn che tới hết dòng như cũ
+        assertThat(clean(question)).isEqualTo("Authorization: [REDACTED] api_key=[REDACTED]");
+    }
+
+    @Test
+    @DisplayName("câu hỏi: scheme xác thực + giá trị vẫn bị che trọn — không lộ phần base64 của Basic")
+    void questionStillDropsSchemeAndValue() {
+        assertThat(sanitizer.sanitizeQuestion("Authorization: Basic dXNlcjpwYXNzd29yZA== vi sao goi loi").text())
+                .isEqualTo("Authorization: [REDACTED] vi sao goi loi");
+        assertThat(sanitizer.sanitizeQuestion("password: Hunter2pass, cuộc gọi này lỗi gì?").text())
+                .isEqualTo("password: [REDACTED], cuộc gọi này lỗi gì?");
+        // Làm sạch lần hai (AiContextBuilder làm lại trên câu đã sạch) cho đúng kết quả cũ
+        String once = sanitizer.sanitizeQuestion("api_key=Zx81Qp0LmN3 vi sao loi").text();
+        assertThat(sanitizer.sanitizeQuestion(once).text()).isEqualTo(once).isEqualTo("api_key=[REDACTED] vi sao loi");
     }
 
     @Test

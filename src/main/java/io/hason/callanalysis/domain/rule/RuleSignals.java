@@ -43,7 +43,14 @@ public record RuleSignals(
         /** Leg có ít nhất một log client (end call hoặc WebRTC) đính kèm. */
         Set<Leg> legsWithClientLog,
         /** Căn cứ đo được của cờ chất lượng, mỗi leg có bản ghi chỉ số một phần tử. */
-        List<LegQuality> qualityByLeg
+        List<LegQuality> qualityByLeg,
+        /**
+         * App phát tín hiệu `network_lost` về phía BÊN KIA: bản ghi `signal` của end call log, `originator=remote`.
+         * Có ở 3 cuộc (2D9057AA, 70C388AD, FE4EF5E7), 0 cuộc thuộc success/. App báo nó ~7 s sau khi hết dữ liệu
+         * từ bên kia (70C388AD, FE4EF5E7); ở 70C388AD máy bên kia VẪN ping server — nên đọc là "không nhận được gì
+         * từ bên kia", không phải bằng chứng bên kia mất mạng. Chỉ dùng để GIẢI THÍCH, không dùng để kết luận.
+         */
+        boolean partnerLostNetwork
 ) {
 
     public RuleSignals {
@@ -51,6 +58,11 @@ public record RuleSignals(
         legsWithClientLog = legsWithClientLog == null ? Set.of() : Set.copyOf(legsWithClientLog);
         qualityByLeg = qualityByLeg == null ? List.of() : List.copyOf(qualityByLeg);
         turnFailure = turnFailure == null ? TurnFailure.NONE : turnFailure;
+    }
+
+    /** Có leg mà độ trễ / jitter TRUNG BÌNH vượt ngưỡng Teams CQD (xem {@link LegQuality#delayDegraded()}). */
+    public boolean delayDegraded() {
+        return qualityByLeg.stream().anyMatch(LegQuality::delayDegraded);
     }
 
     /** Có file WebRTC đã thử TURN nhưng KHÔNG một lần allocate nào thành công. */

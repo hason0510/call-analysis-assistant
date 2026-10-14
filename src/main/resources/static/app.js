@@ -20,6 +20,12 @@
   const submitHint = $("submit-hint");
   let busy = false;
 
+  /**
+   * Lớn hơn tổng ngân sách các bước phía server (application.yml): AI phân loại 45 s + ES 5 + 30 s + AI phân tích
+   * 45 s = 125 s. Ngân sách AI 45 s gồm cả lần thử lại (Sprint 3 T8).
+   */
+  const REQUEST_TIMEOUT_MS = 150000;
+
   /** Cùng điều kiện với server (ChatAnalysisService): cần ít nhất một file, hoặc Call-ID trong câu hỏi. */
   const CALL_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -53,6 +59,11 @@
     NOT_CONFIGURED: "chưa cấu hình khoá AI",
     TIMEOUT: "AI phản hồi quá thời gian chờ",
     PROVIDER_ERROR: "không gọi được dịch vụ AI",
+    RATE_LIMITED: "dịch vụ AI đang giới hạn tốc độ gọi, thử lại sau ít phút",
+    QUOTA_EXCEEDED: "tài khoản AI đã hết hạn mức sử dụng, cần người quản trị nạp thêm",
+    AUTH_FAILED: "khoá AI không hợp lệ hoặc không có quyền, cần người quản trị kiểm tra",
+    INPUT_TOO_LARGE: "câu hỏi và dữ liệu gửi AI vượt giới hạn độ dài của model, thử câu hỏi ngắn hơn",
+    REQUEST_REJECTED: "dịch vụ AI từ chối yêu cầu",
     INVALID_RESPONSE: "AI trả lời sai định dạng",
     REFUSED: "AI từ chối trả lời",
     GUARDRAIL_REJECTED: "câu trả lời của AI không qua bước kiểm tra",
@@ -187,14 +198,25 @@
     show(el("div", { class: "report" }, counter,
         el("div", { class: "skeleton", "aria-hidden": "true" }, el("span"), el("span"), el("span"))));
 
+    // Không chờ vô hạn: server tự giới hạn từng bước (application.yml), nên
+    // quá REQUEST_TIMEOUT_MS mà chưa có phản hồi là server treo hoặc mạng đứt — báo rõ thay vì quay mãi.
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch("api/analyze", { method: "POST", body });
+      const response = await fetch("api/analyze", { method: "POST", body, signal: controller.signal });
       const data = await response.json().catch(() => ({}));
       showResponse(response.status, data);
-    } catch {
-      show(banner("critical", "Không gửi được yêu cầu",
-          "Không kết nối được máy chủ phân tích. Kiểm tra server còn chạy rồi thử lại."));
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        show(banner("critical", "Quá thời gian chờ",
+            `Máy chủ chưa trả lời sau ${REQUEST_TIMEOUT_MS / 1000} giây. Thử lại; nếu vẫn vậy, kiểm tra server`
+            + " và Elasticsearch còn chạy."));
+      } else {
+        show(banner("critical", "Không gửi được yêu cầu",
+            "Không kết nối được máy chủ phân tích. Kiểm tra server còn chạy rồi thử lại."));
+      }
     } finally {
+      clearTimeout(deadline);
       clearInterval(timer);
       busy = false;
       submit.classList.remove("busy");
@@ -294,7 +316,10 @@
         el("dd", {},
             el("span", { class: "meter", "aria-hidden": "true" },
                 [1, 2, 3].map((i) => el("i", { class: i <= bars ? "on" : null }))),
-            r.confidenceLevel),
+            r.confidenceLevel,
+            // Lý do do ConfidencePolicy viết (MVP 7.2): người đọc thấy ngay vì sao không phải HIGH
+            (r.confidenceReasons || []).length > 0
+                && el("span", { class: "confidence-reasons", text: ` — ${r.confidenceReasons.join("; ")}` })),
         el("dt", { text: summaryLabel }),
         el("dd", { class: "summary", text: r.summary }));
   }
@@ -327,6 +352,13 @@
       block: "center" });
     item.classList.add("flash");
     setTimeout(() => item.classList.remove("flash"), 1600);
+  }
+
+  /** Chip trích dẫn evidence: bấm để cuộn tới dòng evidence đó. */
+  function citeChips(ids) {
+    return el("span", { class: "cite-chips" }, ids.map((id) =>
+        el("button", { type: "button", class: "cite", text: id, "aria-label": `Xem evidence ${id}`,
+          onclick: () => flashEvidence(id) })));
   }
 
   function list(items, cls = "plain-list") {
@@ -365,23 +397,32 @@
               const value = m.value === null
                   ? el("td", { class: "na", text: `N/A (${m.naReason})` })
                   : el("td", {}, `${m.value.replace(" [proxy]", "")}${m.unit ? " " + m.unit.replace(" [proxy]", "") : ""}`,
+                      // Khoảng trắng thật, không chỉ margin: chép bảng ra ngoài thì "7579 ms proxy", không "msproxy".
+                      proxy && " ",
                       proxy && el("span", { class: "proxy", title: "Chỉ số gián tiếp, không đo trực tiếp", text: "proxy" }));
               return el("tr", {}, el("td", { text: m.name }), value,
                   el("td", { text: SOURCE_NAMES[m.source] || m.source }));
             })))) }),
 
+    // MVP 7.1 T2: chuyện gì xảy ra / vì sao kết luận / evidence nào — có cả khi không có AI
     "Vấn đề chất lượng / nguyên nhân khả dĩ": (r) => ({ count: null, node: el("ul", { class: "causes" },
         el("li", {}, el("span", { class: "cause-label", text: "Chính: " }),
             r.possibleCauses?.primary || "không có vấn đề nào được phát hiện"),
+        r.possibleCauses?.reasoning && el("li", {}, el("span", { class: "cause-label", text: "Vì sao kết luận: " }),
+            r.possibleCauses.reasoning),
+        (r.possibleCauses?.basisEvidenceIds || []).length > 0 && el("li", {},
+            el("span", { class: "cause-label", text: "Căn cứ của rule: " }), citeChips(r.possibleCauses.basisEvidenceIds)),
         r.analysis && el("li", {}, el("span", { class: "cause-label", text: "Phân tích: " }), r.analysis),
-        r.citedEvidenceIds.length > 0 && el("li", {}, el("span", { class: "cause-label", text: "Căn cứ: " }),
-            el("span", { class: "cite-chips" }, r.citedEvidenceIds.map((id) =>
-                el("button", { type: "button", class: "cite", text: id, "aria-label": `Xem evidence ${id}`,
-                  onclick: () => flashEvidence(id) })))),
+        r.citedEvidenceIds.length > 0 && el("li", {}, el("span", { class: "cause-label", text: "Căn cứ AI trích: " }),
+            citeChips(r.citedEvidenceIds)),
         (r.possibleCauses?.alternatives || []).map((a) =>
             el("li", {}, el("span", { class: "cause-label", text: "Khả dĩ khác: " }), a))) }),
 
-    "Đề xuất": (r) => ({ count: null, node: list(r.suggestions) }),
+    // Câu thứ tư — cần điều tra gì tiếp: bộ đề xuất chuẩn của rule, rồi phần AI bổ sung (đánh dấu riêng)
+    "Đề xuất": (r) => ({ count: null, node: el("ul", { class: "plain-list" },
+        r.suggestions.map((text) => el("li", { text })),
+        (r.aiSuggestions || []).map((text) => el("li", {}, el("span", { class: "cause-label", text: "Bổ sung (AI): " }),
+            text))) }),
 
     "Giới hạn dữ liệu": (r) => ({ count: r.dataLimitations.length, node: list(r.dataLimitations) }),
   };

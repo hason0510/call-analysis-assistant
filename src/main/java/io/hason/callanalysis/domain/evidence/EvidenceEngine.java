@@ -3,6 +3,7 @@ package io.hason.callanalysis.domain.evidence;
 import io.hason.callanalysis.domain.event.CanonicalEvent;
 import io.hason.callanalysis.domain.event.EventTime;
 import io.hason.callanalysis.domain.event.EventType;
+import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.metrics.MetricsCalculator;
 import io.hason.callanalysis.domain.rule.SignalExtractor;
@@ -38,6 +39,8 @@ public class EvidenceEngine {
             "BYE", "CANCEL", "FAIL_HARD");
 
     private static final int MAX_EVIDENCE = 40;
+
+    private static final Set<String> NETWORK_SIGNALS = Set.of("network_lost", "network_poor", "network_stable");
 
     public List<Evidence> collect(CallTimeline timeline) {
         return collect(timeline, List.of());
@@ -75,25 +78,59 @@ public class EvidenceEngine {
                 })
                 .forEach(selected::add);
 
+        // Tín hiệu mạng app tự ghi (bản ghi `signal`): network_lost về phía bên kia, network_poor / network_stable
+        // của chính máy đó. Rule không kết luận bằng chúng, nhưng thiếu chúng thì report không kể được lúc nào hết
+        // dữ liệu từ bên kia (FE4EF5E7, 70C388AD). Mô tả giữ nguyên văn tên tín hiệu, không diễn giải thành "mất mạng".
+        timeline.allEvents().stream()
+                .filter(e -> e.source() == LogSource.ENDCALL && e.type() == EventType.USER_ACTION)
+                .filter(e -> NETWORK_SIGNALS.contains(e.name()))
+                .forEach(selected::add);
+
         selected.addAll(basis);
 
         List<CanonicalEvent> ordered = new ArrayList<>(selected);
         ordered.sort(EVIDENCE_ORDER);
 
+        java.util.Map<String, String> deviceTags = deviceTags(timeline);
         List<Evidence> evidence = new ArrayList<>();
         int index = 1;
         for (CanonicalEvent event : ordered) {
             if (index > MAX_EVIDENCE) {
                 break;
             }
+            String tag = deviceTags.get(event.sourceRef().fileName());
             evidence.add(new Evidence(
                     String.format("EV%02d", index++),
                     event.source(),
                     timeLabel(event),
-                    describe(event),
-                    event));
+                    tag == null ? describe(event) : tag + " " + describe(event),
+                    event,
+                    basis.contains(event)));
         }
         return List.copyOf(evidence);
+    }
+
+    /**
+     * Nhãn thiết bị cho end call log của leg có nhiều thiết bị. Không có nhãn thì hai dòng "Call summary callee"
+     * của hai máy trông như một bên, và AI trích máy KHÔNG bắt máy (0 byte) làm căn cứ cho "callee không nhận
+     * được âm thanh" ở fc3187b4. Máy có âm thanh là máy {@link CallTimeline#audioFile} chọn để tính chỉ số.
+     */
+    private static java.util.Map<String, String> deviceTags(CallTimeline timeline) {
+        java.util.Map<String, String> tags = new java.util.LinkedHashMap<>();
+        for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
+            List<String> files = timeline.endCallFiles(leg);
+            if (files.size() < 2) {
+                continue;
+            }
+            java.util.Optional<String> chosen = timeline.audioFile(leg);
+            for (String file : files) {
+                boolean withAudio = chosen.isPresent() && chosen.get().equals(file);
+                tags.put(file, "[thiết bị " + file + ", " + (withAudio
+                        ? "có âm thanh, dùng tính chỉ số " + leg.name().toLowerCase() + "]"
+                        : "không có âm thanh]"));
+            }
+        }
+        return tags;
     }
 
     private static String timeLabel(CanonicalEvent event) {
@@ -132,11 +169,19 @@ public class EvidenceEngine {
         if (event.type() == EventType.MEDIA_STATS) {
             // Một mẫu stats: packetLostPercent là tỉ lệ TRONG KHOẢNG của mẫu đó, ghi rõ để
             // không lẫn với "loss cả cuộc" của dòng call summary
+            // RTT và jitter có mặt để dòng căn cứ của cờ độ trễ (NETWORK_DELAY_JITTER) tự giải thích được
             return "Chỉ số media " + event.leg().name().toLowerCase()
                     + ": MOS=" + orDash(event.attribute("audio.audioMos"))
                     + ", loss trong khoảng=" + orDash(event.attribute("audio.packetLostPercent")) + "%"
+                    + ", RTT=" + orDash(event.attribute("transport.currentRttMs")) + "ms"
+                    + ", jitter=" + jitterMs(event.attribute("audio.jitter"))
                     + ", mediaFail=" + orDash(event.attribute("transport.hasMediaFail"))
                     + ", bytesRecv=" + orDash(event.attribute("audio.bytesReceived"));
+        }
+        if (event.type() == EventType.USER_ACTION && NETWORK_SIGNALS.contains(event.name())) {
+            String originator = event.attribute("originator");
+            return "Tín hiệu app: " + event.name() + ", originator=" + orDash(originator)
+                    + ("remote".equalsIgnoreCase(originator) ? " (bên kia)" : "local".equalsIgnoreCase(originator) ? " (máy này)" : "");
         }
         String msg = event.attribute("msg");
         if (msg != null && msg.startsWith("_emitBye")) {
@@ -190,6 +235,19 @@ public class EvidenceEngine {
 
     private static final java.util.regex.Pattern IPV4 =
             java.util.regex.Pattern.compile("\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.(?:\\d{1,3}|x)\\b");
+
+    /** audio.jitter ghi bằng GIÂY trong log; in mili giây như bảng chỉ số. */
+    private static String jitterMs(String seconds) {
+        if (seconds == null || seconds.isBlank()) {
+            return "-";
+        }
+        try {
+            return new java.math.BigDecimal(seconds.strip()).multiply(java.math.BigDecimal.valueOf(1000))
+                    .setScale(0, java.math.RoundingMode.HALF_UP).toPlainString() + "ms";
+        } catch (NumberFormatException e) {
+            return "-";
+        }
+    }
 
     private static String orDash(String value) {
         return value == null || value.isBlank() ? "-" : value;

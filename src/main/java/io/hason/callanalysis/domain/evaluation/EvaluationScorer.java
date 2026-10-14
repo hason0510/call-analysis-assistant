@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -53,6 +55,9 @@ public final class EvaluationScorer {
                 "100%", REPORTED, "bản Markdown đủ 5 dòng đầu và 5 mục, đúng thứ tự mẫu 4.5", "chưa có report nào"));
         metrics.add(intentAccuracy(runs));
         metrics.add(unsupportedClaims(runs));
+        metrics.add(metricCodes(runs));
+        metrics.add(evidenceCited(runs));
+        metrics.add(evidenceStability(runs));
         metrics.add(ratio("Unsupported Claim Rate (report cuối)",
                 reports.stream().filter(r -> "AI".equals(r.analysisSource())).toList(),
                 EvaluationRun::hasUnsupportedClaim, "0%", REPORTED,
@@ -151,6 +156,106 @@ public final class EvaluationScorer {
                 "đầu ra thô của AI; lần vi phạm bị Guardrails chặn, report cuối lùi về rule — chi tiết ở mục"
                         + " \"Vi phạm Guardrails\"",
                 "AI chưa trả lời lần nào (chưa có key, hoặc mọi lần lỗi)");
+    }
+
+    /**
+     * Sprint 3 T1a: AI nhắc chỉ số bằng mã ({@code {MOS_CALLER}}), tên và giá trị do code điền. Số chỉ số AI vẫn tự chép là
+     * chỗ còn có thể gán sai nghĩa mà G05 không bắt được. Không có trong bảng 6.5.
+     */
+    private static Metric metricCodes(List<EvaluationRun> runs) {
+        List<MetricMentions> measured = runs.stream().map(EvaluationRun::metricMentions).filter(Objects::nonNull).toList();
+        String name = "Chỉ số AI nhắc qua mã";
+        if (measured.isEmpty()) {
+            return new Metric(name, "N/A (chưa đo: AI chưa trả lời lần nào, hoặc lượt chạy trước Sprint 3 T1a)",
+                    null, null, "100%", "Thêm", null);
+        }
+        int viaCode = measured.stream().mapToInt(MetricMentions::viaCode).sum();
+        int handWritten = measured.stream().mapToInt(MetricMentions::handWritten).sum();
+        long runsWithHandWritten = measured.stream().filter(m -> m.handWritten() > 0).count();
+        if (viaCode + handWritten == 0) {
+            return new Metric(name, "N/A (AI không nhắc chỉ số nào trong " + measured.size() + " lần trả lời)",
+                    null, null, "100%", "Thêm", null);
+        }
+        return new Metric(name, percent(viaCode, viaCode + handWritten), viaCode, viaCode + handWritten, "100%",
+                "Thêm", viaCode + " lần qua mã, " + handWritten + " số AI tự chép trùng giá trị một chỉ số (ở "
+                        + runsWithHandWritten + "/" + measured.size() + " lần trả lời) — cận trên: số trùng"
+                        + " ngẫu nhiên như \"1\" cũng tính");
+    }
+
+    /**
+     * Sprint 3 T1b: AI trích evidence nào làm căn cứ. Sprint 2 có lần trích 22/22 — chip "Căn cứ" trên Web UI mất tác
+     * dụng. Không có trong bảng 6.5, không có target: đo để thấy chọn lọc hay không, và có giữ dòng căn cứ của rule.
+     */
+    private static Metric evidenceCited(List<EvaluationRun> runs) {
+        List<EvidenceCitation> measured = runs.stream().map(EvaluationRun::evidenceCitation)
+                .filter(Objects::nonNull).toList();
+        String name = "Evidence AI trích";
+        if (measured.isEmpty()) {
+            return new Metric(name, "N/A (chưa đo: AI chưa trả lời lần nào, hoặc lượt chạy trước Sprint 3 T1b)",
+                    null, null, "—", "Thêm", null);
+        }
+        int cited = measured.stream().mapToInt(c -> c.cited().size()).sum();
+        int available = measured.stream().mapToInt(EvidenceCitation::available).sum();
+        int min = measured.stream().mapToInt(c -> c.cited().size()).min().orElse(0);
+        int max = measured.stream().mapToInt(c -> c.cited().size()).max().orElse(0);
+        long citesAll = measured.stream().filter(EvidenceCitation::citesAll).count();
+        List<EvidenceCitation> withBasis = measured.stream().filter(c -> !c.ruleBasis().isEmpty()).toList();
+        long coversBasis = withBasis.stream().filter(EvidenceCitation::coversRuleBasis).count();
+        return new Metric(name, String.format(Locale.ROOT, "trung bình %.1f / %.1f evidence (%s)",
+                (double) cited / measured.size(), (double) available / measured.size(), percent(cited, available)),
+                cited, available, "—", "Thêm",
+                "mỗi lần trích " + min + "-" + max + "; trích HẾT mọi evidence: " + citesAll + "/" + measured.size()
+                        + " lần; trích đủ dòng căn cứ của rule: " + coversBasis + "/" + withBasis.size()
+                        + " lần có căn cứ (câu SUCCESS không cờ thường không có)");
+    }
+
+    /**
+     * Cùng một câu hỏi, các lần lặp có trích cùng evidence không: độ trùng Jaccard (giao ÷ hợp) trung bình trên mọi cặp
+     * lần lặp, rồi trung bình trên các câu. Verdict ổn định (Consistency) nhưng phần căn cứ thì chưa từng được đo.
+     */
+    private static Metric evidenceStability(List<EvaluationRun> runs) {
+        Map<String, List<Set<String>>> byQuestion = new LinkedHashMap<>();
+        runs.stream().filter(r -> r.evidenceCitation() != null)
+                .forEach(r -> byQuestion.computeIfAbsent(r.caseId() + "#" + r.questionIndex(), k -> new ArrayList<>())
+                        .add(new TreeSet<>(r.evidenceCitation().cited())));
+        List<Double> perQuestion = new ArrayList<>();
+        int identical = 0;
+        for (List<Set<String>> sets : byQuestion.values()) {
+            if (sets.size() < 2) {
+                continue;
+            }
+            double sum = 0;
+            int pairs = 0;
+            for (int i = 0; i < sets.size(); i++) {
+                for (int j = i + 1; j < sets.size(); j++) {
+                    sum += jaccard(sets.get(i), sets.get(j));
+                    pairs++;
+                }
+            }
+            perQuestion.add(sum / pairs);
+            if (sets.stream().distinct().count() == 1) {
+                identical++;
+            }
+        }
+        String name = "Evidence AI trích — giống nhau giữa các lần lặp";
+        if (perQuestion.isEmpty()) {
+            return new Metric(name, "N/A (cần ≥ 2 lần AI trả lời cùng một câu: --repeat > 1)",
+                    null, null, "—", "Thêm", null);
+        }
+        double mean = perQuestion.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        return new Metric(name, String.format(Locale.ROOT, "%.1f%%", 100 * mean), identical, perQuestion.size(),
+                "—", "Thêm", "độ trùng (giao ÷ hợp) trung bình giữa các lần lặp của cùng một câu; " + identical + "/"
+                        + perQuestion.size() + " câu trích giống hệt mọi lần");
+    }
+
+    private static double jaccard(Set<String> a, Set<String> b) {
+        if (a.isEmpty() && b.isEmpty()) {
+            return 1;
+        }
+        Set<String> union = new TreeSet<>(a);
+        union.addAll(b);
+        long common = a.stream().filter(b::contains).count();
+        return (double) common / union.size();
     }
 
     private static Metric latency(List<EvaluationRun> reports) {
@@ -287,10 +392,22 @@ public final class EvaluationScorer {
             return new Metric("Security Leakage (output)", "N/A (chưa có lần chạy nào hoàn tất)", null, null, "0",
                     REQUIRED, null);
         }
-        int leaked = measured.stream().mapToInt(r -> total(r.outputLeaks())).sum();
-        return new Metric("Security Leakage (output)", String.valueOf(leaked), null, measured.size(), "0", REQUIRED,
-                "giá trị gốc còn nguyên văn trong report JSON, bản render và câu trả lời; application log không quét"
-                        + " ở đây (test S08)" + kinds(measured, EvaluationRun::outputLeaks));
+        int inResponse = measured.stream().mapToInt(r -> total(r.outputLeaks())).sum();
+        List<EvaluationRun> logged = measured.stream().filter(r -> r.logLeaks() != null).toList();
+        int inLog = logged.stream().mapToInt(r -> total(r.logLeaks())).sum();
+        String responseNote = "report / response: " + inResponse + bracket(kinds(measured, EvaluationRun::outputLeaks));
+        String logNote = logged.isEmpty()
+                ? "application log: CHƯA đo (lượt chạy không thu được log — file kết quả cũ hoặc không tìm thấy"
+                        + " appender CONSOLE); log được làm sạch bằng converter Logback, kiểm ở test S08"
+                : "application log: " + inLog + " trên " + logged.size() + "/" + measured.size()
+                        + " lần chạy thu được log" + bracket(kinds(logged, EvaluationRun::logLeaks));
+        return new Metric("Security Leakage (output)", String.valueOf(inResponse + inLog), null, measured.size(), "0",
+                REQUIRED, "giá trị gốc còn nguyên văn trong đầu ra — " + responseNote + "; " + logNote);
+    }
+
+    /** "; lộ: ip ×2" → " (lộ: ip ×2)"; rỗng thì rỗng. */
+    private static String bracket(String kinds) {
+        return kinds.isEmpty() ? "" : " (" + kinds.substring(2) + ")";
     }
 
     private static int total(Map<String, Integer> leaks) {

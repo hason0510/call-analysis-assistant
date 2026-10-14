@@ -6,12 +6,15 @@ import io.hason.callanalysis.domain.ai.AiAnalysis;
 import io.hason.callanalysis.domain.ai.AiContext;
 import io.hason.callanalysis.domain.evaluation.BenchmarkCase;
 import io.hason.callanalysis.domain.evaluation.EvaluationRun;
+import io.hason.callanalysis.domain.evaluation.EvidenceCitation;
+import io.hason.callanalysis.domain.evaluation.MetricMentions;
 import io.hason.callanalysis.domain.evaluation.SensitiveValues;
 import io.hason.callanalysis.domain.evaluation.TemplateCompliance;
 import io.hason.callanalysis.domain.guardrail.GuardrailResult;
 import io.hason.callanalysis.domain.report.CallReport;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
 import io.hason.callanalysis.domain.validation.AttachedFile;
+import io.hason.callanalysis.service.port.ApplicationLogTap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,7 +34,8 @@ import java.util.List;
  * vẫn được ưu tiên.
  *
  * Security Leakage (MVP mục 6.5) đo ngay trong lần chạy, trên bộ nhớ: giá trị nhạy cảm GỐC của case
- * ({@link SensitiveValues}) có còn nguyên văn trong chuỗi gửi AI và trong phản hồi không. Chỉ lưu số đếm.
+ * ({@link SensitiveValues}) có còn nguyên văn trong chuỗi gửi AI, trong phản hồi, và trong application log ghi ra
+ * trong lần chạy ({@link ApplicationLogTap}) không. Giá trị gốc gồm cả giá trị nằm trong câu hỏi. Chỉ lưu số đếm.
  *
  * Lỗi của một lần chạy không dừng cả lượt: lần đó ghi mã lỗi và tính vào Pipeline Success Rate.
  */
@@ -42,10 +46,12 @@ public class EvaluationService {
 
     private final ChatAnalysisService chat;
     private final ObjectMapper mapper;
+    private final ApplicationLogTap logTap;
 
-    public EvaluationService(ChatAnalysisService chat, ObjectMapper mapper) {
+    public EvaluationService(ChatAnalysisService chat, ObjectMapper mapper, ApplicationLogTap logTap) {
         this.chat = chat;
         this.mapper = mapper;
+        this.logTap = logTap;
     }
 
     /**
@@ -55,10 +61,11 @@ public class EvaluationService {
      */
     public List<EvaluationRun> runCase(BenchmarkCase c, List<AttachedFile> files,
                                        List<RawSignalingRecord> rawSignaling, int repeat) {
-        SensitiveValues sensitive = SensitiveValues.collect(files, rawSignaling);
+        SensitiveValues fromInput = SensitiveValues.collect(files, rawSignaling);
         List<EvaluationRun> runs = new ArrayList<>();
         for (int qi = 0; qi < c.questions().size(); qi++) {
             BenchmarkCase.Question q = c.questions().get(qi);
+            SensitiveValues sensitive = fromInput.withQuestion(q.text());
             for (int rep = 1; rep <= repeat; rep++) {
                 EvaluationRun run = runOnce(c, qi + 1, q, rep, files, sensitive);
                 log.info("{} câu {}/{} lần {}/{}: {} {} ms", c.caseId(), qi + 1, c.questions().size(), rep, repeat,
@@ -75,15 +82,20 @@ public class EvaluationService {
         String caseId = c.caseId();
         long started = System.nanoTime();
         ChatAnalysisService.Trace trace;
+        String logged;
+        logTap.start();
         try {
             trace = chat.handleTraced(q.text(), files, c.callId());
         } catch (RuntimeException e) {
+            logged = logTap.stop();
             // Chỉ giữ tên lỗi: thông điệp exception có thể mang một phần nội dung file.
             return new EvaluationRun(caseId, index, null, repeat, q.expectedIntent(), e.getClass().getSimpleName(),
                     null, null, null, null, null, null, null, null, null, null, null, null, false, null, false,
-                    List.of(), null, null, sensitive.count(), null, null, null, null, elapsedMs(started));
+                    List.of(), null, null, sensitive.count(), null, null, logLeaks(sensitive, logged), null, null, null,
+                    null, elapsedMs(started));
         }
         long latency = elapsedMs(started);
+        logged = logTap.stop();
 
         ChatAnalysisService.Response response = trace.response();
         CallReport report = response.report();
@@ -111,8 +123,11 @@ public class EvaluationService {
                 sensitive.count(),
                 sensitive.foundIn(aiInput(trace)),
                 sensitive.foundIn(json(response)),
+                logLeaks(sensitive, logged),
                 trace.request().usage(),
                 ai == null ? null : ai.usage(),
+                ai == null || trace.aiContext() == null ? null : MetricMentions.of(ai, trace.aiContext().payload().metrics()),
+                ai == null ? null : EvidenceCitation.of(ai.evidenceIds(), trace.evidence()),
                 latency);
     }
 
@@ -130,6 +145,10 @@ public class EvaluationService {
                     .append('\n').append(json(context.payload()));
         }
         return text.toString();
+    }
+
+    private static java.util.Map<String, Integer> logLeaks(SensitiveValues sensitive, String logged) {
+        return logged == null ? null : sensitive.foundIn(logged);
     }
 
     /** Toàn bộ phản hồi trả người dùng — report JSON, bản render, câu trả lời — như Chat API trả ra. */

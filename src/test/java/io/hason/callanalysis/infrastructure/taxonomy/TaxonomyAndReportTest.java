@@ -131,6 +131,7 @@ class TaxonomyAndReportTest {
         return new CallReport(
                 "2D9057AA-C496-48B2-946A-98FA2896D086",
                 Verdict.SUCCESS, true, IssueCategory.NETWORK_PACKET_LOSS, ConfidenceLevel.MEDIUM,
+                List.of("bằng chứng yếu: ngưỡng chất lượng kém chưa kiểm chứng trên data có nhãn"),
                 "Cuộc gọi thiết lập thành công nhưng có dấu hiệu suy giảm chất lượng.",
                 List.of(new CallReport.EvidenceEntry("EV01", "SIGNALING",
                         "2026-09-21T08:44:28.953756952Z", "Signaling INIT_CALL", "signaling#1")),
@@ -141,6 +142,6 @@ class TaxonomyAndReportTest {
                 new CallReport.PossibleCauses("NETWORK_PACKET_LOSS", List.of("Diem mo ho: ...")),
                 List.of("Kiem tra chat luong mang."),
                 List.of("Thieu caller_webrtc.log."),
-                false);
+                false, null, CallReport.AnalysisSource.RULE, false, null, List.of(), List.of());
     }
 }

@@ -8,6 +8,8 @@ import io.hason.callanalysis.service.port.SignalingSource;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
 import io.hason.callanalysis.domain.signaling.SignalingFetch;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -26,14 +28,34 @@ public class ElasticsearchSignalingSource implements SignalingSource {
     /** Cuộc gọi nhiều event nhất trong data mẫu có 200 event; 10 000 là đủ rộng. */
     private static final int MAX_EVENTS = 10_000;
 
+    private static final Logger log = LoggerFactory.getLogger(ElasticsearchSignalingSource.class);
+
     private final ElasticsearchClient client;
 
     public ElasticsearchSignalingSource(ElasticsearchClient client) {
         this.client = client;
     }
 
+    /**
+     * Mỗi lần truy vấn ghi một dòng log thời gian (MVP 7.1 T5: latency từng bước). Không ghi Call-ID: dòng này nối
+     * với request qua {@code request_id} trong MDC (ChatAnalysisService đặt), không cần định danh cuộc gọi.
+     */
     @Override
     public SignalingFetch fetchByCallId(String callId) {
+        long started = System.nanoTime();
+        try {
+            SignalingFetch fetch = search(callId);
+            log.atInfo().addKeyValue("result_status", "OK").addKeyValue("events", fetch.records().size())
+                    .addKeyValue("signaling_ms", (System.nanoTime() - started) / 1_000_000).log("Signaling fetch");
+            return fetch;
+        } catch (RuntimeException e) {
+            log.atWarn().addKeyValue("result_status", "ERROR").addKeyValue("error", e.getClass().getSimpleName())
+                    .addKeyValue("signaling_ms", (System.nanoTime() - started) / 1_000_000).log("Signaling fetch");
+            throw e;
+        }
+    }
+
+    private SignalingFetch search(String callId) {
         try {
             SearchResponse<SignalingDocument> response = client.search(s -> s
                             .index(SignalingIndex.NAME)

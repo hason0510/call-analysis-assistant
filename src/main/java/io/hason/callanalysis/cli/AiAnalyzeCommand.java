@@ -88,7 +88,7 @@ public class AiAnalyzeCommand implements ApplicationRunner {
         ParsedRequest request = requestParser.parse(requestId, question);
         if (request.isOutOfScope()) {
             log.info("{}: {} ({}) -> {}", callId.substring(0, 8), request.intent(), request.source(),
-                    ParsedRequest.OUT_OF_SCOPE_REPLY);
+                    request.outOfScopeReply());
             return new Row(group, callId.substring(0, 8), "-", "-", "OUT_OF_SCOPE", "-", "-");
         }
 

@@ -24,8 +24,8 @@ import java.io.IOException;
 public class OpenAiIntentClassifier implements IntentClassifier {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiIntentClassifier.class);
-    private static final String SCHEMA = "schema/request-intent.schema.json";
-    private static final String SYSTEM_PROMPT = "prompts/parse-request.system.txt";
+    static final String SCHEMA = "schema/request-intent.schema.json";
+    static final String SYSTEM_PROMPT = "prompts/parse-request.system.txt";
 
     private final ObjectMapper mapper;
     private final OpenAiChatClient client;
@@ -41,17 +41,30 @@ public class OpenAiIntentClassifier implements IntentClassifier {
 
     @Override
     public AiIntent classify(String requestId, SafeQuestion question) {
-        OpenAiChatClient.Completion completion = client.complete(prompt(question));
-        AiIntent intent = read(completion.content())
-                .withUsage(new TokenUsage(completion.promptTokens(), completion.completionTokens()));
-        log.info("request_id={} model={} latency_ms={} result_status=OK prompt_tokens={} completion_tokens={}",
-                requestId, client.model(), completion.latencyMs(),
-                completion.promptTokens(), completion.completionTokens());
-        return intent;
+        long started = System.nanoTime();
+        OpenAiChatClient.Completion completion;
+        try {
+            completion = client.complete(prompt(question, (reason, ms) -> AiCallLog.retrying(log, requestId, null,
+                    client.model(), ms, reason.name())));
+        } catch (AiUnavailableException e) {
+            // Chưa biết cuộc gọi nào ở bước này: call_id bỏ trống
+            AiCallLog.write(log, requestId, null, client.model(), (System.nanoTime() - started) / 1_000_000, null,
+                    e.reason().name());
+            throw e;
+        }
+        TokenUsage usage = new TokenUsage(completion.promptTokens(), completion.completionTokens());
+        try {
+            AiIntent intent = read(completion.content()).withUsage(usage);
+            AiCallLog.write(log, requestId, null, client.model(), completion.latencyMs(), usage, null);
+            return intent;
+        } catch (AiUnavailableException e) {
+            AiCallLog.write(log, requestId, null, client.model(), completion.latencyMs(), usage, e.reason().name());
+            throw e;
+        }
     }
 
     String requestBody(SafeQuestion question) {
-        return client.requestBody(prompt(question));
+        return client.requestBody(prompt(question, OpenAiChatClient.RetryListener.NONE));
     }
 
     AiIntent parseResponse(String body) {
@@ -62,8 +75,9 @@ public class OpenAiIntentClassifier implements IntentClassifier {
      * Rào câu hỏi bằng <<< >>> để model tách rõ dữ liệu cần phân loại với chỉ dẫn. Chỉ là cách trình bày
      * prompt, KHÔNG phải cơ chế phòng thủ prompt injection — việc đó nằm ngoài phạm vi (MVP mục 9).
      */
-    private OpenAiChatClient.Prompt prompt(SafeQuestion question) {
-        return new OpenAiChatClient.Prompt(systemPrompt, "<<<\n" + question.text() + "\n>>>", "request_intent", schema);
+    private OpenAiChatClient.Prompt prompt(SafeQuestion question, OpenAiChatClient.RetryListener onRetry) {
+        return new OpenAiChatClient.Prompt(systemPrompt, "<<<\n" + question.text() + "\n>>>", "request_intent", schema,
+                onRetry);
     }
 
     private AiIntent read(String content) {

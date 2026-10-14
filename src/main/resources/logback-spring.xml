@@ -1,17 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Log ứng dụng đi qua Sensitive Data Sanitizer (MVP mục 6.2, ca kiểm thử S08).
-  %smsg / %sex thay cho %msg / %ex trong logging.pattern.console (application.yml).
-  Phần còn lại giữ nguyên cấu hình mặc định của Spring Boot.
+  %smsg / %sex / %skvp thay cho %msg / %ex / %kvp trong logging.pattern.console (application.yml).
+
+  Hai dạng (Sprint 3 T5):
+  - CLI (mặc định): log chữ theo pattern — report của CLI in qua log, người đọc trực tiếp.
+  - Profile "web": log JSON một dòng mỗi sự kiện, formatter SanitizedJsonLogFormatter (application-web.yml).
+    Muốn log chữ khi chạy web (xem bằng mắt khi demo): thêm profile "plain-log".
 -->
 <configuration>
     <conversionRule conversionWord="smsg"
                     class="io.hason.callanalysis.infrastructure.logging.SanitizingMessageConverter"/>
     <conversionRule conversionWord="sex"
                     class="io.hason.callanalysis.infrastructure.logging.SanitizingThrowableConverter"/>
+    <conversionRule conversionWord="skvp"
+                    class="io.hason.callanalysis.infrastructure.logging.SanitizingKeyValueConverter"/>
 
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <springProfile name="web &amp; !plain-log">
+        <include resource="org/springframework/boot/logging/logback/structured-console-appender.xml"/>
+    </springProfile>
+    <springProfile name="!web | plain-log">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    </springProfile>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

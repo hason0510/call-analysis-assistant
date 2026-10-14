@@ -6,9 +6,9 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "callId", "verdict", "qualityFlag", "confidenceLevel", "summary",
+    "callId", "verdict", "qualityFlag", "confidenceLevel", "confidenceReasons", "summary",
     "evidence", "metrics", "possibleCauses", "suggestions", "dataLimitations", "degraded",
-    "analysis", "analysisSource", "needsReview", "fallbackReason", "citedEvidenceIds"
+    "analysis", "analysisSource", "needsReview", "fallbackReason", "citedEvidenceIds", "aiSuggestions"
   ],
 
   "properties": {
@@ -36,6 +36,13 @@
     "confidenceLevel": {
       "enum": ["HIGH", "MEDIUM", "LOW"],
       "description": "Suy bằng logic tất định, không để AI sinh số (MVP mục 7.2)."
+    },
+
+    "confidenceReasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Vì sao ở mức confidenceLevel: yếu tố hạ mức trước, bằng chứng sau. Do ConfidencePolicy viết, không do AI."
     },
 
     "summary": { "type": "string", "minLength": 1 },
@@ -97,14 +104,29 @@
     "possibleCauses": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["alternatives"],
+      "required": ["alternatives", "basisEvidenceIds"],
       "properties": {
         "primary": { "type": ["string", "null"] },
-        "alternatives": { "type": "array", "items": { "type": "string" } }
+        "alternatives": { "type": "array", "items": { "type": "string" } },
+        "reasoning": {
+          "type": ["string", "null"],
+          "description": "Vì sao kết luận vậy (MVP 7.1 T2) — lý do của rule, do code viết."
+        },
+        "basisEvidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^EV[0-9]{2,}$" },
+          "uniqueItems": true,
+          "description": "Evidence là căn cứ của rule (MVP 7.1 T2: evidence nào hỗ trợ). Có cả khi không có AI."
+        }
       }
     },
 
-    "suggestions": { "type": "array", "items": { "type": "string" } },
+    "suggestions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "Bộ đề xuất chuẩn theo issue category, do rule chọn (MVP 7.1 T2). AI bổ sung ở aiSuggestions."
+    },
 
     "dataLimitations": {
       "type": "array",
@@ -143,6 +165,13 @@
       "items": { "type": "string", "pattern": "^EV[0-9]{2,}$" },
       "uniqueItems": true,
       "description": "Evidence AI dùng làm căn cứ cho phần phân tích (MVP mục 3.3). Rỗng khi report dựng từ rule."
+    },
+
+    "aiSuggestions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Đề xuất AI bổ sung cho bộ đề xuất chuẩn ở suggestions (MVP 7.1 T2). Rỗng khi report dựng từ rule."
     }
   },
 
@@ -150,7 +179,8 @@
     {
       "description": "Report từ rule không có phần phân tích của AI.",
       "if": { "properties": { "analysisSource": { "const": "RULE" } } },
-      "then": { "properties": { "analysis": { "type": "null" }, "citedEvidenceIds": { "maxItems": 0 } } }
+      "then": { "properties": { "analysis": { "type": "null" }, "citedEvidenceIds": { "maxItems": 0 },
+                                "aiSuggestions": { "maxItems": 0 } } }
     },
     {
       "description": "degraded khi và chỉ khi có lý do fallback.",

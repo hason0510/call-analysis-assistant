@@ -6,7 +6,11 @@
 #   scripts/verify-sanitizer/run.sh ../ai20k_sample
 set -euo pipefail
 DATA="${1:?Cách dùng: run.sh <thư-mục-ai20k_sample>}"
-OUT="$(mktemp -d)"
+# Thư mục ra TƯƠNG ĐỐI trong target/: trên Git Bash (Windows), "$(mktemp -d)" cho /tmp/…, mà Java nhận nguyên chuỗi đó
+# (nằm trong -Dspring-boot.run.arguments) và hiểu là D:	mp\…, còn Python nhận bản đã bị Git Bash đổi sang thư mục
+# Temp của Windows — hai bên nhìn hai thư mục khác nhau, script báo "còn sót=0" trên 0 file.
+OUT="target/verify-sanitizer"
+rm -rf "$OUT"
 export PYTHONIOENCODING=utf-8
 for g in success fail; do
   ./mvnw -q spring-boot:run -Dspring-boot.run.arguments="--sanitize-dir=$DATA/$g --out=$OUT/$g"

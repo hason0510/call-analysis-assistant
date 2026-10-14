@@ -31,18 +31,26 @@ class EvaluationScorerTest {
     private static EvaluationRun report(String caseId, int qi, int rep, Intent expected, Verdict verdict,
                                         IssueCategory category, String aiVerdict, List<String> violations,
                                         String fallbackReason, long latency) {
+        return report(caseId, qi, rep, expected, verdict, category, aiVerdict, violations, fallbackReason, latency,
+                null, null);
+    }
+
+    private static EvaluationRun report(String caseId, int qi, int rep, Intent expected, Verdict verdict,
+                                        IssueCategory category, String aiVerdict, List<String> violations,
+                                        String fallbackReason, long latency, MetricMentions mentions,
+                                        EvidenceCitation citation) {
         return new EvaluationRun(caseId, qi, "q", rep, expected, null, "REPORT", Intent.ANALYZE_CALL,
                 aiVerdict == null ? "KEYWORD" : "AI", verdict, false, category, "MEDIUM", Verdict.FAIL,
                 IssueCategory.ICE_FAILURE, aiVerdict, null, fallbackReason == null ? "AI" : "RULE",
                 fallbackReason != null, fallbackReason, false, violations, true, true, 10, Map.of(), Map.of(),
-                aiVerdict == null ? null : new TokenUsage(600, 10),
-                aiVerdict == null ? null : new TokenUsage(3000, 200), latency);
+                Map.of(), aiVerdict == null ? null : new TokenUsage(600, 10),
+                aiVerdict == null ? null : new TokenUsage(3000, 200), mentions, citation, latency);
     }
 
     private static EvaluationRun refused(String caseId, int qi, int rep, Intent expected) {
         return new EvaluationRun(caseId, qi, "q", rep, expected, null, "OUT_OF_SCOPE", Intent.OUT_OF_SCOPE, "AI",
                 null, null, null, null, null, null, null, null, null, false, null, false, List.of(), null, null,
-                10, Map.of(), Map.of(), new TokenUsage(600, 10), null, 1);
+                10, Map.of(), Map.of(), Map.of(), new TokenUsage(600, 10), null, null, null, 1);
     }
 
     private static Metric metric(EvaluationSummary s, String name) {
@@ -175,7 +183,7 @@ class EvaluationScorerTest {
             runs.add(report("c1", 1, i, null, Verdict.FAIL, null, null, List.of(), "NOT_CONFIGURED", i * 10L));
         }
         runs.add(new EvaluationRun("c1", 1, null, 20, null, "IllegalStateException", null, null, null, null, null,
-                null, null, null, null, null, null, null, false, null, false, List.of(), null, null, 10, null, null, null, null, 5));
+                null, null, null, null, null, null, null, false, null, false, List.of(), null, null, 10, null, null, null, null, null, null, null, 5));
 
         EvaluationSummary s = scorer.score(List.of(c), runs, 20, List.of());
 
@@ -200,13 +208,61 @@ class EvaluationScorerTest {
     }
 
     @Test
+    @DisplayName("T1a — tỉ lệ chỉ số AI nhắc qua mã, cộng trên mọi lần trả lời; lượt cũ chưa đo thì N/A")
+    void metricCodeShare() {
+        BenchmarkCase c = failCase("c1", null, q(null));
+        List<EvaluationRun> runs = List.of(
+                report("c1", 1, 1, null, Verdict.FAIL, null, "FAIL", List.of(), null, 1, new MetricMentions(3, 0), null),
+                report("c1", 1, 2, null, Verdict.FAIL, null, "FAIL", List.of(), null, 1, new MetricMentions(2, 1), null),
+                report("c1", 1, 3, null, Verdict.FAIL, null, null, List.of(), "TIMEOUT", 1));
+
+        Metric m = metric(scorer.score(List.of(c), runs, 3, List.of()), "Chỉ số AI nhắc qua mã");
+
+        assertThat(m.value()).isEqualTo("83.3%");
+        assertThat(m.numerator()).isEqualTo(5);
+        assertThat(m.denominator()).isEqualTo(6);
+        assertThat(m.note()).contains("1 số AI tự chép").contains("1/2 lần trả lời");
+        assertThat(metric(scorer.score(List.of(c), runs.subList(2, 3), 1, List.of()), "Chỉ số AI nhắc qua mã")
+                .value()).startsWith("N/A (chưa đo");
+    }
+
+    @Test
+    @DisplayName("T1b — evidence AI trích: trung bình trên tổng, lần trích hết, lần đủ căn cứ của rule; độ trùng giữa lần lặp")
+    void evidenceCitationMetrics() {
+        BenchmarkCase c = failCase("c1", null, q(null), q(null));
+        List<EvaluationRun> runs = List.of(
+                cited(1, 1, new EvidenceCitation(List.of("EV01", "EV02"), 4, List.of("EV02"))),
+                cited(1, 2, new EvidenceCitation(List.of("EV02", "EV03"), 4, List.of("EV02"))),
+                cited(2, 1, new EvidenceCitation(List.of("EV01", "EV02", "EV03", "EV04"), 4, List.of("EV04"))),
+                cited(2, 2, new EvidenceCitation(List.of("EV04", "EV03", "EV02", "EV01"), 4, List.of("EV04"))));
+
+        EvaluationSummary s = scorer.score(List.of(c), runs, 2, List.of());
+
+        Metric m = metric(s, "Evidence AI trích");
+        assertThat(m.value()).isEqualTo("trung bình 3.0 / 4.0 evidence (75.0%)");
+        assertThat(m.note()).contains("mỗi lần trích 2-4").contains("trích HẾT mọi evidence: 2/4")
+                .contains("trích đủ dòng căn cứ của rule: 4/4");
+        Metric stable = metric(s, "Evidence AI trích — giống nhau giữa các lần lặp");
+        assertThat(stable.value()).isEqualTo("66.7%");     // câu 1: 1/3; câu 2: thứ tự khác nhưng cùng tập = 1
+        assertThat(stable.numerator()).isEqualTo(1);
+        assertThat(stable.denominator()).isEqualTo(2);
+        assertThat(metric(scorer.score(List.of(c), List.of(), 1, List.of()), "Evidence AI trích").value())
+                .startsWith("N/A (chưa đo");
+    }
+
+    private static EvaluationRun cited(int qi, int rep, EvidenceCitation citation) {
+        return report("c1", qi, rep, null, Verdict.FAIL, null, "FAIL", List.of(), null, 1, null, citation);
+    }
+
+    @Test
     @DisplayName("Security Leakage: đầu vào = lộ ÷ phát hiện, đầu ra = số giá trị lộ; chỉ in loại, không in giá trị")
     void leakageMetrics() {
         BenchmarkCase c = failCase("c1", null, q(null));
         EvaluationRun clean = report("c1", 1, 1, null, Verdict.FAIL, null, null, List.of(), "NOT_CONFIGURED", 1);
         EvaluationRun leaky = new EvaluationRun("c1", 1, "q", 2, null, null, "REPORT", Intent.ANALYZE_CALL, "AI",
                 Verdict.FAIL, false, null, "MEDIUM", Verdict.FAIL, null, null, null, "RULE", true, "NOT_CONFIGURED",
-                false, List.of(), true, true, 10, Map.of("ip", 1), Map.of("userId", 2), null, null, 1);
+                false, List.of(), true, true, 10, Map.of("ip", 1), Map.of("userId", 2), Map.of("contact", 1),
+                null, null, null, null, 1);
 
         EvaluationSummary s = scorer.score(List.of(c), List.of(clean, leaky), 2, List.of());
 
@@ -216,8 +272,23 @@ class EvaluationScorerTest {
         assertThat(input.value()).isEqualTo("5.0%");
         assertThat(input.note()).contains("lộ: ip ×1");
         Metric output = metric(s, "Security Leakage (output)");
-        assertThat(output.value()).isEqualTo("2");
-        assertThat(output.note()).contains("lộ: userId ×2");
+        assertThat(output.value()).isEqualTo("3");                         // report / response 2 + log 1
+        assertThat(output.note()).contains("report / response: 2 (lộ: userId ×2)")
+                .contains("application log: 1 trên 2/2 lần chạy thu được log (lộ: contact ×1)");
+    }
+
+    @Test
+    @DisplayName("file kết quả cũ không có log: đầu ra vẫn chấm, ghi rõ application log CHƯA đo — không coi là 0")
+    void logNotCapturedIsSaidSo() {
+        BenchmarkCase c = failCase("c1", null, q(null));
+        EvaluationRun noLog = new EvaluationRun("c1", 1, "q", 1, null, null, "REPORT", Intent.ANALYZE_CALL, "AI",
+                Verdict.FAIL, false, null, "MEDIUM", Verdict.FAIL, null, null, null, "RULE", true, "NOT_CONFIGURED",
+                false, List.of(), true, true, 10, Map.of(), Map.of(), null, null, null, null, null, 1);
+
+        Metric output = metric(scorer.score(List.of(c), List.of(noLog), 1, List.of()), "Security Leakage (output)");
+
+        assertThat(output.value()).isEqualTo("0");
+        assertThat(output.note()).contains("application log: CHƯA đo");
     }
 
     @Test

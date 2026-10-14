@@ -57,9 +57,9 @@ categories:
 
   - id: ICE_FAILURE
     definition: >-
-      Signaling bắt tay xong nhưng đường truyền media không thiết lập được: ICE chuyển
-      sang failed mà chưa từng đạt connected, hoặc app báo lỗi media, hoặc không một byte
-      audio nào được truyền.
+      Signaling bắt tay xong nhưng đường truyền media không thiết lập được, hoặc đã thiết lập
+      rồi không duy trì được: ICE chuyển sang failed mà chưa từng đạt connected, hoặc app báo
+      lỗi media, hoặc không một byte audio nào được truyền.
     symptoms:
       - "IceConnectionState chuyển checking => failed"
       - "Gửi STUN BINDING request liên tục mà không nhận được response nào"
@@ -78,7 +78,8 @@ categories:
       - "audio.bytesReceived=0 và audio.bytesSent=0 ở MỌI bản ghi chỉ số"
     knownAmbiguity: >-
       Timeout ICE mặc định khoảng 15 giây; cuộc gọi bị cúp máy trước mốc đó sẽ không
-      kịp sinh trạng thái failed dù media thật sự không chạy.
+      kịp sinh trạng thái failed dù media thật sự không chạy. Ca rớt giữa chừng (đã connected,
+      đã có âm thanh) cũng xếp vào đây.
     calibration:
       status: VALIDATED
       evidence: >-
@@ -170,28 +171,31 @@ categories:
     definition: >-
       Độ trễ hoặc độ rung gói cao làm thoại bị ngắt quãng dù không mất gói đáng kể.
     symptoms:
-      - "transport.currentRttMs cao kéo dài"
-      - "audio.jitter cao"
+      - "transport.currentRttMs trung bình cao trên cả cuộc gọi"
+      - "audio.jitter trung bình cao"
     requiredEvidence:
       - source: ENDCALL
         field: transport.currentRttMs
       - source: ENDCALL
         field: audio.jitter
-    # CHƯA CÀI trong rule: RuleVerdictEngine chưa có nhánh riêng cho category này, mọi suy
-    # giảm chất lượng đang xếp NETWORK_PACKET_LOSS. Hai điều kiện dưới là thiết kế dự kiến.
+    # Đã cài (RuleVerdictEngine bước 6b, LegQuality.delayDegraded), xét SAU NETWORK_PACKET_LOSS: MVP mục 10
+    # scenario 2 xếp "packet loss ↑, RTT ↑" vào NETWORK_PACKET_LOSS.
     detectionConditions:
-      - "(chưa cài) transport.currentRttMs > 300 kéo dài trên nhiều mẫu liên tiếp"
-      - "(chưa cài) audio.jitter > 0.050 (giây)"
+      - "Một leg nhận > 500 gói và transport.currentRttMs TRUNG BÌNH > 500 ms (trên mẫu đã có âm thanh)"
+      - "Một leg nhận > 500 gói và audio.jitter TRUNG BÌNH > 0.030 (giây)"
     knownAmbiguity: >-
-      Rất dễ trùng triệu chứng với NETWORK_PACKET_LOSS. Khi cả hai điều kiện cùng đúng,
-      ưu tiên category có bằng chứng mạnh hơn.
+      Rất dễ trùng triệu chứng với NETWORK_PACKET_LOSS; khi cả hai cùng đúng, rule xếp mất gói.
+      Ngưỡng là của mạng, vượt ngưỡng không chắc người dùng nghe thấy vấn đề.
       Lưu ý transport.rttMs là giá trị TÍCH LUỸ, không dùng để so với ngưỡng.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHÔNG có ca mẫu. Đường nền đo được trên 844 mẫu stats của 6 leg thuộc success/: RTT cao nhất 266 ms
-        (2/844 mẫu vượt 200 ms, đều ở callee 70A1F889), jitter cao nhất 28 ms. Ngưỡng 300 ms / 50 ms là phỏng đoán, chỉ biết chắc
-        phải cao hơn đường nền này.
+        KHÔNG có ca mẫu có nhãn. Ngưỡng lấy từ bộ phân loại "Poor" cho luồng âm thanh của Microsoft Teams Call Quality
+        Dashboard (trang Microsoft Learn cập nhật 06/2026): luồng > 500 gói, RTT trung bình > 500 ms hoặc jitter trung
+        bình > 30 ms. Đối chiếu: Twilio Voice SDK cảnh báo khi RTT > 400 ms hoặc jitter > 30 ms ở 3/5 mẫu liên tiếp —
+        trên data hiện có cho cùng kết quả cuối; ITU-T G.114 (05/2003, còn hiệu lực): trễ MỘT CHIỀU > 400 ms không chấp
+        nhận được cho quy hoạch mạng. Đường nền 844 mẫu stats của 6 leg thuộc success/: RTT trung bình cao nhất 126 ms, jitter trung bình
+        cao nhất 24 ms — xa ngưỡng. Ngưỡng cũ 300 ms / 50 ms là phỏng đoán, đã thay.
 
   - id: UNKNOWN
     definition: >-

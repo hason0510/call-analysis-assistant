@@ -11,13 +11,13 @@
       "description": "NONE khi verdict SUCCESS và qualityFlag false"
     },
     "confidenceLevel": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
-    "summary": { "type": "string", "description": "1-2 câu tiếng Việt" },
+    "summary": { "type": "string", "description": "1-2 câu tiếng Việt. Nhắc chỉ số bằng mã, dạng {MOS_CALLER}" },
     "evidenceIds": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Chỉ dùng ID có trong context, dạng EV01"
+      "description": "Căn cứ của kết luận và câu trả lời (thường 2-6), không phải mọi evidence. ID có trong context, dạng EV01"
     },
-    "analysis": { "type": "string" },
-    "suggestions": { "type": "array", "items": { "type": "string" } }
+    "analysis": { "type": "string", "description": "Nhắc chỉ số bằng mã, dạng {MOS_CALLER}" },
+    "suggestions": { "type": "array", "items": { "type": "string" }, "description": "0-3 bước điều tra BỔ SUNG, không lặp standardSuggestions. Nhắc chỉ số bằng mã, dạng {MOS_CALLER}" }
   }
 }

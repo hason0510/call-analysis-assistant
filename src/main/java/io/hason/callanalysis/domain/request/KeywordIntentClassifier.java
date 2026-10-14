@@ -31,7 +31,11 @@ public class KeywordIntentClassifier {
             "cuoc goi", "cuoc thoai", "goi dien", "call", "call id", "callid", "log", "sip", "voip", "webrtc",
             "ice", "turn", "stun", "signaling", "mos", "jitter", "rtt", "packet", "packet loss", "goi tin",
             "do chuong", "bat may", "nhac may", "cup may", "ben nhan", "ben goi", "nguoi nhan", "nguoi goi",
-            "caller", "callee", "endcall", "invite", "bye");
+            "caller", "callee", "endcall", "invite", "bye", "relay", "may goi", "may nhan",
+            // Động từ "gọi" đi với kết cục: "Vì sao gọi không được?" không có chữ "cuộc gọi" nào. "gọi" đứng riêng
+            // thì không — trùng "gói" khi bỏ dấu, và "gọi món".
+            "goi khong duoc", "goi khong dc", "khong goi duoc", "khong goi dc", "goi khong", "goi loi", "goi bi",
+            "goi that bai", "goi mai", "goi xong", "goi di", "goi den", "goi sang");
 
     /**
      * Việc khác: thắng cả dấu hiệu cuộc gọi. Chỉ cụm từ đủ đặc trưng — "dịch" đứng riêng trùng
@@ -52,7 +56,7 @@ public class KeywordIntentClassifier {
     private static final Pattern GENERAL = phrases(
             "phan tich", "kiem tra", "xem giup", "loi", "bi loi", "van de", "su co", "nguyen nhan", "chat luong",
             "ket noi", "mang", "wifi", "4g", "5g", "nghe", "tieng", "am thanh", "thanh cong", "that bai",
-            "fail", "video", "camera");
+            "fail", "video", "camera", "do tre", "hai may", "may ben kia");
 
     private static final Pattern ASPECT = phrases(
             "khong nghe", "nghe khong", "nghe bi", "re", "giat", "tre", "do tre", "lag", "vong", "vang", "echo",
@@ -60,7 +64,8 @@ public class KeywordIntentClassifier {
             "cup may", "khong goi duoc", "khong goi dc", "khong ket noi", "khong do chuong", "khong bat may",
             "khong nhac may", "do chuong", "bat may", "nhac may", "thiet lap", "ket noi", "cham", "mang", "wifi", "4g", "5g", "packet",
             "packet loss", "mat goi", "jitter", "rtt", "mos", "ice", "turn", "stun", "signaling", "ben nhan",
-            "ben goi", "nguoi nhan", "nguoi goi", "caller", "callee", "video", "camera", "hinh");
+            "ben goi", "nguoi nhan", "nguoi goi", "caller", "callee", "video", "camera", "hinh", "relay", "may goi",
+            "may nhan");
 
     /** Lời dẫn đầu câu, không phải nội dung trọng tâm: "Cho mình hỏi vì sao …" → "…". */
     private static final Pattern LEADING = Pattern.compile(

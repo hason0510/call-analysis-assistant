@@ -127,6 +127,17 @@ class FileValidatorTest {
     }
 
     @Test
+    @DisplayName("F04 — vượt giới hạn vài byte -> nêu số byte, không ghi '20.0 MB vượt giới hạn 20.0 MB'")
+    void f04BarelyOversizedNamesExactBytes() {
+        long limit = 20L * 1024 * 1024;
+        FileValidation v = new FileValidator(limit).validate("CALL-1", List.of(
+                AttachedFile.notLoaded("caller_webrtc.log", limit + 184)));
+
+        assertThat(v.rejected()).singleElement().satisfies(r -> assertThat(r.message())
+                .contains("dung lượng 20,971,704 byte vượt giới hạn 20,971,520 byte"));
+    }
+
+    @Test
     @DisplayName("F04 — file đã đọc nhưng vẫn vượt giới hạn -> loại")
     void f04LoadedButOversizedIsRejected() {
         FileValidator tiny = new FileValidator(50);
@@ -136,12 +147,15 @@ class FileValidatorTest {
         assertThat(v.rejected()).extracting(RejectedFile::reason).containsExactly(Reason.TOO_LARGE);
     }
 
+    /** U+FFFD viết bằng mã số: ký tự này nằm trực tiếp trong mã nguồn thì dễ bị editor đổi mà không ai thấy. */
+    private static final String R = Character.toString(0xFFFD);
+
     @Test
     @DisplayName("F04 — file nhị phân (có NUL) -> loại vì hỏng, không phải vì 'không nhận diện được'")
     void f04BinaryFileIsCorrupt() {
         // Giống file_rac.log trong docs/kiem-thu-tay.md: printf '\x00\x01\x02 rac\xff\xfe'
         FileValidation v = validator.validate("CALL-1", List.of(
-                file("file_rac.log", List.of("\u0000\u0001\u0002 rac��"))));
+                file("file_rac.log", List.of("\u0000\u0001\u0002 rac" + R + R))));
 
         assertThat(v.rejected()).singleElement()
                 .satisfies(r -> assertThat(r.reason()).isEqualTo(Reason.CORRUPT));
@@ -151,7 +165,7 @@ class FileValidatorTest {
     @DisplayName("F04 — nội dung giải mã UTF-8 hỏng hàng loạt -> loại vì hỏng")
     void f04MostlyReplacementCharactersIsCorrupt() {
         FileValidation v = validator.validate("CALL-1", List.of(
-                file("anh.log", List.of("���PNG����"))));
+                file("anh.log", List.of(R.repeat(3) + "PNG" + R.repeat(4)))));
 
         assertThat(v.rejected()).extracting(RejectedFile::reason).containsExactly(Reason.CORRUPT);
     }
@@ -160,7 +174,7 @@ class FileValidatorTest {
     @DisplayName("vài ký tự hỏng lẻ tẻ trong log thật KHÔNG làm cả file bị loại")
     void fewReplacementCharactersAreTolerated() {
         List<String> lines = new java.util.ArrayList<>(endCallLog("CALL-1"));
-        lines.add("1\t1789700842999\tlog_detail\tLoa ngo�i\tok\tinfo");
+        lines.add("1\t1789700842999\tlog_detail\tLoa ngo" + R + "i\tok\tinfo");
 
         FileValidation v = validator.validate("CALL-1", List.of(file("caller_endcall.log", lines)));
 

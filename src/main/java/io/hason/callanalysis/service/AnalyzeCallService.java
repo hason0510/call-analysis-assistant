@@ -3,6 +3,7 @@ package io.hason.callanalysis.service;
 import io.hason.callanalysis.domain.ai.AiAnalysis;
 import io.hason.callanalysis.domain.ai.AiContext;
 import io.hason.callanalysis.domain.ai.AiContextBuilder;
+import io.hason.callanalysis.domain.ai.MetricCodes;
 import io.hason.callanalysis.domain.evidence.Evidence;
 import io.hason.callanalysis.domain.evidence.EvidenceEngine;
 import io.hason.callanalysis.domain.metrics.CallMetrics;
@@ -93,8 +94,10 @@ public class AnalyzeCallService {
      * @param extraLimitations ghi chú của Request Parser (ví dụ câu hỏi nêu hai Call-ID)
      */
     public CallReport finalReport(Analysis analysis, AiVerdictService.Outcome outcome, List<String> extraLimitations) {
-        AiAnalysis ai = outcome.ai();
         boolean aiUsed = outcome.source() == AiVerdictService.Source.AI;
+        // Mã chỉ số ({MOS_CALLER}) thay bằng tên và giá trị ở đây, không ở AiVerdictService: Outcome giữ đúng chữ AI viết
+        // để runner đếm được AI nhắc chỉ số qua mã hay tự chép số.
+        AiAnalysis ai = aiUsed ? MetricCodes.of(analysis.metrics()).expand(outcome.ai()) : null;
         ReportDecision decision = new ReportDecision(
                 aiUsed ? CallReport.AnalysisSource.AI : CallReport.AnalysisSource.RULE,
                 outcome.verdict(), outcome.qualityFlag(), outcome.issueCategory(), outcome.needsReview(),
@@ -120,6 +123,7 @@ public class AnalyzeCallService {
         timeline.allEvents().forEach(e -> e.attributes().forEach(session::remember));
         java.util.function.UnaryOperator<String> clean = s -> s == null ? null : session.sanitize(s).text();
         return new CallReport(r.callId(), r.verdict(), r.qualityFlag(), r.issueCategory(), r.confidenceLevel(),
+                r.confidenceReasons().stream().map(clean).toList(),
                 clean.apply(r.summary()),
                 r.evidence().stream().map(e -> new CallReport.EvidenceEntry(e.id(), e.source(), e.timestamp(),
                         clean.apply(e.description()), e.sourceRef())).toList(),
@@ -127,10 +131,11 @@ public class AnalyzeCallService {
                         clean.apply(m.naReason()), m.source())).toList(),
                 r.possibleCauses() == null ? null : new CallReport.PossibleCauses(
                         clean.apply(r.possibleCauses().primary()),
-                        r.possibleCauses().alternatives().stream().map(clean).toList()),
+                        r.possibleCauses().alternatives().stream().map(clean).toList(),
+                        clean.apply(r.possibleCauses().reasoning()), r.possibleCauses().basisEvidenceIds()),
                 r.suggestions().stream().map(clean).toList(),
                 r.dataLimitations().stream().map(clean).toList(),
                 r.degraded(), clean.apply(r.analysis()), r.analysisSource(), r.needsReview(), r.fallbackReason(),
-                r.citedEvidenceIds());
+                r.citedEvidenceIds(), r.aiSuggestions().stream().map(clean).toList());
     }
 }

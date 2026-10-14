@@ -13,9 +13,10 @@ import java.util.List;
  * @param fallbackReason vì sao không dùng kết quả AI (mã ngắn, ghi log được); null khi dùng AI hoặc không cần AI
  * @param notes          điều cần nêu ở "Giới hạn dữ liệu" (ví dụ câu hỏi nêu hai Call-ID)
  * @param usage          token của lời gọi phân loại; null khi không gọi AI hoặc AI không trả lời
+ * @param garbled        câu hỏi bị hỏng mã hoá trên đường gửi ({@link GarbledText}) — intent có thể sai
  */
 public record ParsedRequest(String question, Intent intent, String focus, String callId, Source source,
-                            String fallbackReason, List<String> notes, TokenUsage usage) {
+                            String fallbackReason, List<String> notes, TokenUsage usage, boolean garbled) {
 
     public enum Source {
         /** Phân loại bằng AI, đã qua kiểm {@link IntentClassification#fromAi}. */
@@ -40,10 +41,19 @@ public record ParsedRequest(String question, Intent intent, String focus, String
     /** Không có lời gọi AI nào trả lời (đường lui từ khoá, câu hỏi trống). */
     public ParsedRequest(String question, Intent intent, String focus, String callId, Source source,
                          String fallbackReason, List<String> notes) {
-        this(question, intent, focus, callId, source, fallbackReason, notes, null);
+        this(question, intent, focus, callId, source, fallbackReason, notes, null, false);
     }
 
     public boolean isOutOfScope() {
         return intent == Intent.OUT_OF_SCOPE;
+    }
+
+    /**
+     * Câu từ chối, thêm lời nhắc khi câu hỏi bị hỏng mã hoá: ca demo 2026-10-06 bị từ chối chỉ vì chữ
+     * có dấu thành "?", và câu từ chối trần không cho người dùng biết phải sửa gì. Vẫn từ chối — không
+     * đoán rằng câu hỏi gốc nằm trong phạm vi — nên câu hỏng mã hoá không thành đường vòng qua OUT_OF_SCOPE.
+     */
+    public String outOfScopeReply() {
+        return garbled ? OUT_OF_SCOPE_REPLY + " " + GarbledText.NOTE + "." : OUT_OF_SCOPE_REPLY;
     }
 }
