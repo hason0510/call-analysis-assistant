@@ -37,9 +37,14 @@ ai20k_sample/
 !docs/phan-tich-loi-dev.md
 !docs/moc-sprint-3.md
 !docs/demo-sprint-3.md
+!docs/final-evaluation-report.md
+!docs/minh-chung-sprint-3.md
 docs/kiem-thu-tay.md
 docs/ket-qua-demo-sprint-1.md
 docs/ket-qua-for-test.md
 
 # Ảnh chụp / file tạm của Playwright khi kiểm Web UI — có thể chứa log mẫu
 .playwright-mcp/
+
+# Python
+__pycache__/

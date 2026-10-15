@@ -4,7 +4,11 @@ Trợ lý phân tích cuộc gọi: nhận câu hỏi tiếng Việt kèm log cu
 gồm kết luận (`SUCCESS` / `FAIL` / `UNKNOWN`), evidence trích dẫn được về dòng log gốc,
 chỉ số cuộc gọi, đề xuất và giới hạn dữ liệu.
 
-Dự án OJT AI 20K — 6 tuần, 3 sprint. **Đã xong Sprint 2:** Web UI, Chat API, AI (`gpt-4o-mini`) có Guardrails và fallback về rule, Sanitizer đầu vào và đầu ra, Evaluation Runner. Sprint 1 là rule baseline, vẫn là mốc đối chiếu và đường lui khi AI lỗi.
+Dự án OJT AI 20K — 6 tuần, 3 sprint. **Đang ở cuối Sprint 3** (Hardening, Consistency & Handover): độ tin cậy theo
+chính sách, thử lại có kiểm soát, log JSON đã làm sạch, Kibana view + dashboard, 3 tài liệu bàn giao — tiến độ ở mục
+[Trạng thái — Sprint 3](#trạng-thái--sprint-3-67-task-core-34-task-nếu-kịp). Sprint 2: Web UI, Chat API, AI
+(`gpt-4o-mini`) có Guardrails và fallback về rule, Sanitizer đầu vào và đầu ra, Evaluation Runner. Sprint 1 là rule
+baseline, vẫn là mốc đối chiếu và đường lui khi AI lỗi.
 
 ---
 
@@ -33,8 +37,9 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_sample"
   ```
 
-**1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8080/, rồi làm theo 6 kịch bản trong
-[`docs/demo-sprint-2.md`](docs/demo-sprint-2.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì):
+**1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8080/, rồi làm theo 6 scenario của Final Demo trong
+[`docs/demo-sprint-3.md`](docs/demo-sprint-3.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì; kết quả chạy thật
+2026-10-12 ghi dưới từng scenario):
 
 ```powershell
 .\build.ps1 spring-boot:run "-Dspring-boot.run.profiles=web"
@@ -42,7 +47,7 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **520 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **533 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -247,8 +252,8 @@ Không dùng AI (không cần key, không tốn tiền; kết luận lấy từ 
 ```
 
 Có dùng AI (`gpt-4o-mini`): tạo file `.env` ở thư mục gốc của repo, chép từ `.env.example` và điền `OPENAI_API_KEY`,
-rồi chạy lệnh trên **bỏ** `--ai.openai.api-key=`. Chi phí đo được ≈ 0,0007 USD và ≈ 4 s cho mỗi lần chạy một câu hỏi.
-Ví dụ 20 case × 4 câu × 5 lần = 400 lần chạy ≈ 0,3 USD, khoảng 25-30 phút.
+rồi chạy lệnh trên **bỏ** `--ai.openai.api-key=`. Chi phí đo được (lượt 2026-10-14) ≈ 0,001 USD và ≈ 4-6 s cho mỗi lần chạy một câu hỏi.
+Ví dụ 20 case × 4 câu × 5 lần = 400 lần chạy ≈ 0,4 USD, khoảng 40 phút.
 
 `--repeat=5` theo cách đo Consistency của MVP 6.5 (5 lần × các cách hỏi). Thêm `--out=<thư-mục>` để đổi nơi ghi kết quả.
 
@@ -302,13 +307,14 @@ nặng nhất. Mã lỗi trong câu tóm tắt được đọc nguyên văn từ
 
 ```text
 io.hason.callanalysis
-├── cli/               ADAPTER VÀO — 11 lệnh dòng lệnh
+├── cli/               ADAPTER VÀO — 12 lệnh dòng lệnh
 ├── controller/        ADAPTER VÀO — Chat API cho Web UI, chỉ chạy ở profile web (S2-T2)
 ├── service/           ĐIỀU PHỐI
 │   ├── CallLogNormalizationService, AnalyzeCallService      pipeline Sprint 1
 │   ├── ChatAnalysisService, RequestParserService, AiVerdictService   luồng Chat API (S2)
 │   ├── EvaluationService                                    Evaluation Runner (S2-T9)
-│   └── port/SignalingSource, AiAnalyzer, IntentClassifier   cổng ra
+│   └── port/SignalingSource, AiAnalyzer, IntentClassifier,  cổng ra
+│            RequestRecordSink (S3-T9), ApplicationLogTap (S3-T6)
 ├── domain/            LÕI THUẦN — không Spring, không I/O
 │   ├── event/             Canonical Event Model (S1-T2)
 │   ├── parse/             2 parser (end call log, WebRTC log) + FileTypeDetector (S1-T3)
@@ -320,19 +326,21 @@ io.hason.callanalysis
 │   ├── evidence/          Chọn và đánh ID evidence (S1-T7)
 │   ├── rule/              Tín hiệu thô + rule verdict (S1-T7)
 │   ├── request/           Request Parser: intent, trọng tâm, Call-ID (S2-T4)
-│   ├── ai/                Context gửi AI, đầu ra AI (S2-T5)
+│   ├── ai/                Context gửi AI, đầu ra AI (S2-T5); mã chỉ số (S3-T1), RetryPolicy (S3-T8)
+│   ├── confidence/        ConfidencePolicy theo bảng MVP 7.2 (S3-T3)
 │   ├── guardrail/         Guardrails G01-G05 (S2-T6)
 │   ├── security/          Danh mục + Sanitizer dữ liệu nhạy cảm (S1-T9, S2-T7)
 │   ├── report/            Model report, builder, renderer mẫu 4.5 (S1-T8, S2-T2)
-│   └── evaluation/        Chấm benchmark theo metric mục 6.5 (S2-T9)
+│   ├── evaluation/        Chấm benchmark theo metric mục 6.5 (S2-T9), --rescore (S3)
+│   └── observability/     Bản ghi request ghi vào ES cho Kibana (S3-T9)
 └── infrastructure/    ADAPTER RA
-    ├── es/                Elasticsearch
+    ├── es/                Elasticsearch: signaling, bản ghi request (S3-T9)
     ├── ai/                OpenAI (Structured Outputs)
     ├── file/              Đọc file log từ đĩa
     ├── evaluation/        Đọc file case YAML, tìm file log của case
     ├── taxonomy/          Nạp taxonomy.yaml
     ├── security/          Nạp danh mục, dựng Sanitizer
-    ├── logging/           Lọc log qua Sanitizer
+    ├── logging/           Lọc log qua Sanitizer; log JSON đã làm sạch (S3-T5)
     └── report/            Kiểm tra report theo JSON Schema
 ```
 
@@ -346,9 +354,11 @@ Guardrails:
 | `resources/schema/report-v1.schema.json` | Cấu trúc report; report sai schema bị dựng lại từ rule |
 | `resources/schema/ai-analysis.schema.json` · `request-intent.schema.json` | Structured output của AI phân tích và AI phân loại câu hỏi |
 | `resources/prompts/*.system.txt` | Prompt của hai lời gọi AI |
-| `resources/es/signaling-mapping.json` | Mapping Elasticsearch, `dynamic: strict` |
-| `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (19 case, 66 câu) và bộ câu kiểm phân loại |
+| `resources/es/signaling-mapping.json` · `analysis-requests-mapping.json` | Mapping Elasticsearch, `dynamic: strict` |
+| `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (20 case, 69 câu) và bộ câu kiểm phân loại |
 | `scripts/benchmark-variants/make_variants.py` | Tạo file biến thể cho case-016 (F02, tên file sai loại) và case-019 (dữ liệu nhạy cảm giả), đặt ngoài repo |
+| `scripts/error-analysis/analyze_runs.py` | Phân tích lỗi trên các lượt benchmark (S3-T1) |
+| `scripts/kibana/setup_views.py` · `setup_dashboard.py` | Dựng data view, saved search (S3-T9) và dashboard kết quả (S3-T11) trên Kibana |
 
 Kiến trúc theo `Controller → Service → Domain → Infrastructure`, triển khai kiểu
 Hexagonal (Ports & Adapters).
@@ -377,7 +387,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | T10 — AI Provider Proposal | ✅ | [`docs/ai-provider-proposal.md`](docs/ai-provider-proposal.md) — được duyệt 2026-10-05: OpenAI `gpt-4o-mini` |
 | T11 — Chỉ số mở rộng (Nếu kịp) | ✅ | `domain/metrics/`: latency API nội bộ, số WARN / ERROR theo service, ISP / ASN, khoảng trống PAIR_PING |
 
-### Kết quả đo được
+### Kết quả đo được — Sprint 1
 
 | | |
 |---|---|
@@ -385,7 +395,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Parse | 29 238 dòng → 28 522 event, **1 cảnh báo** (bản export signaling của `DE7DD314` bị cắt 200/201), 0 file không nhận diện được |
 | Chỉ số khớp giá trị tính tay | **9 cuộc gọi** (yêu cầu tối thiểu 5); 280/280 giá trị trên 20 cuộc khớp script độc lập `scripts/verify-metrics/run.sh` |
 | Report hợp lệ theo schema v1 | **20/20** |
-| Test | **520** (2026-10-12): 517 unit test (không cần Elasticsearch hay AI thật) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
+| Test | **253** cuối Sprint 1: 250 unit test (không cần Elasticsearch) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
 ## Trạng thái — Sprint 2: 10/11 task xong
 
@@ -403,12 +413,13 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | T10 — Benchmark `dev` | ✅ | `benchmark/dev-cases.yaml` |
 | T11 — So sánh cách dựng context (Nếu kịp) | ⬜ | Chưa làm — khái niệm "semi-structured context" chưa chốt |
 
-Đối chiếu từng task với code, test và số đo: [`docs/minh-chung-sprint-2.md`](docs/minh-chung-sprint-2.md).
+Đối chiếu từng task với code, test và số đo: [`docs/minh-chung-sprint-2.md`](docs/minh-chung-sprint-2.md). Test cuối
+Sprint 2: 390.
 
 ### Kết quả đo được — Sprint 2
 
-Benchmark `dev` (`benchmark/dev-cases.yaml`: 18 case, 63 câu hỏi), mỗi câu chạy 5 lần = 315 lần chạy, `gpt-4o-mini`,
-2026-10-06. Cách tính từng metric: [`docs/evaluation-metrics.md`](docs/evaluation-metrics.md).
+Benchmark `dev` (`benchmark/dev-cases.yaml` lúc đó: 18 case, 63 câu hỏi), mỗi câu chạy 5 lần = 315 lần chạy,
+`gpt-4o-mini`, 2026-10-06. Cách tính từng metric: [`docs/evaluation-metrics.md`](docs/evaluation-metrics.md).
 
 | Metric (MVP mục 6.5) | Kết quả | Target |
 |---|---|---|
@@ -424,123 +435,192 @@ Benchmark `dev` (`benchmark/dev-cases.yaml`: 18 case, 63 câu hỏi), mỗi câu
 | Latency | P50 **3,8 s** · P95 **8,4 s** | — |
 | Chi phí AI | ≈ 0,20 USD / 315 lần chạy (~3 000 token vào, ~175 token ra mỗi lần phân tích) | — |
 
-### Known Limitations
+## Trạng thái — Sprint 3: 6/7 task Core, 3/4 task Nếu kịp
+
+Cập nhật 2026-10-15. Đối chiếu từng task với code, test và số đo:
+[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (code ở commit `bf0114b`; `mvn test` 2026-10-15: 533
+test, 0 lỗi). Lý do từng thay đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–41.
+
+| Task | Trạng thái | Nằm ở |
+|---|---|---|
+| T1 — Improve Accuracy & Consistency | 🟡 | AI nhắc chỉ số bằng mã, code điền giá trị (`MetricCodes`); evidence mang cờ `ruleBasis`; phân tích lỗi `scripts/error-analysis/`. Issue Category Accuracy chờ nhãn của mentor |
+| T2 — Explainability & Suggestion | ✅ | Bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung (`aiSuggestions`); dòng Tóm tắt ca FAIL do code viết (`ReportBuilder`) |
+| T3 — Confidence Design | ✅ | `ConfidencePolicy` theo bảng MVP 7.2, report ghi lý do |
+| T4 — Reliability Hardening | ✅ | Timeout AI / ES / trình duyệt, 429 tách lý do, `GarbledText`, ES tắt vẫn ra report, sanitizer 9,4 s → 1,0 s |
+| T5 — Observability | ✅ | Log JSON đã làm sạch (profile `web`), dòng AI call đúng 7 trường MVP 6.2 (`AiCallLog`) |
+| T6 — Security Evaluation Report | ✅ | [`docs/bao-cao-bao-mat.md`](docs/bao-cao-bao-mat.md) — S01-S08 qua, leakage 0 ở AI input / output / application log |
+| T7 — Peer Evaluation | ⬜ | Chưa làm — cần repo và Runbook của bạn cùng nhóm |
+| T8 — Retry & Error Classification (Nếu kịp) | ✅ | `RetryPolicy`: chỉ thử lại lỗi tạm thời, tối đa 2 lần gọi, ngân sách 45 s cho cả hai |
+| T9 — Kibana View (Nếu kịp) | ✅ | Mỗi request một bản ghi vào index `analysis-requests` (chỉ mã / số / cờ), `scripts/kibana/setup_views.py` |
+| T10 — Batch Analysis (Nếu kịp) | ⬜ | Chưa làm — chờ mentor: đầu vào batch chỉ signaling hay kèm log máy |
+| T11 — Result Dashboard (Nếu kịp) | ✅ | `scripts/kibana/setup_dashboard.py` — Runbook mục 5 |
+
+**Tài liệu bàn giao (MVP 7.4):** [Runbook](docs/runbook.md) ✅ · [Architecture & Security
+Design](docs/architecture-security-design.md) ✅ · [Final Evaluation Report & Known
+Limitations](docs/final-evaluation-report.md) ✅ (còn chờ kết quả `held-out` của mentor) · [Kịch bản Final
+Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12).
+
+**Dataset mới của mentor** (`ai20k_new_dataset`, 7 cuộc, chưa có nhãn): chạy được cả 7 cuộc sau khi sửa 5 lỗi tool —
+signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số media không ghi chiều, cuộc rớt giữa chừng, thêm rule
+`NETWORK_DELAY_JITTER`. Kết luận trên data mẫu không đổi (13/13). Chi tiết: Final Evaluation Report mục 5.
+
+### Kết quả đo được — Sprint 3
+
+Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14, ≈ 0,32 USD.
+
+| Metric (MVP mục 6.5) | Sprint 2 | Cuối Sprint 3 | Target |
+|---|---|---|---|
+| Verdict Accuracy | 100% (280/280) | **100%** (310/310) | ≥ 85% — đo chính thức trên `held-out` do Mentor chạy, chưa có kết quả |
+| Metric Correctness | 100% | **100%** (310/310) | 100% |
+| Security Leakage (input / output) | 0/7 005 · 0 | **0/8 255 · 0** (gồm application log) | 0 |
+| Issue Category Accuracy | N/A | N/A — ground truth chưa có nhãn category | ≥ 70% |
+| Consistency | 100% | **100%**, 19/19 case giống hệt qua 5 lần | ≥ 95% |
+| Template Compliance | 100% | **100%** | 100% |
+| Intent Accuracy | 100% (290/290) | **100%** (320/320) | ≥ 90% |
+| Unsupported Claim — AI trước Guardrails / report cuối | 2,9% / 0% | **0% (0/309) / 0%** | 0% |
+| Pipeline Success Rate | 100% | **100%** (310/310; 1 lần OpenAI quá giờ, lùi về rule) | ≥ 95% |
+| Latency P50 / P95 | 3,8 s / 8,4 s | 3,6 s / 14,9 s — P95 do OpenAI chậm lúc đo, phần không phải AI dưới 1 s | — |
+
+---
+
+## Known Limitations
+
+Cập nhật cuối Sprint 3 (2026-10-15). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
+cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-report.md) mục 7.
+
+**Chưa làm hoặc còn chờ mentor**
+
+- Sprint 3 T7 (Peer Evaluation): cần repo và Runbook của bạn cùng nhóm.
+- Sprint 3 T10 (Batch Analysis): chờ mentor chốt đầu vào batch. Chỉ có signaling thì thử được 5/13 cuộc đúng, 8 cuộc ra
+  `UNKNOWN`; có kèm log máy thì 13/13.
+- Sprint 2 T11 (so sánh cách dựng context): khái niệm "semi-structured context" chưa chốt.
+- Issue Category Accuracy chưa đo được: ground truth chỉ có fail / success. Runner và `--rescore` đã sẵn để chấm khi có
+  nhãn.
+- Kết quả `held-out`: chờ mentor chạy Evaluation Runner và gửi lại.
+- Benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém": không có cuộc gọi chất lượng kém có nhãn.
 
 **Dữ liệu và chỉ số**
 
-- Chỉ số chất lượng (MOS, packet loss, jitter, RTT) chỉ có giá trị thật ở **8 leg / 5 cuộc
-  gọi**. 6 cuộc gọi không có end call log (`5E0800AE`, `6A7CE985`, `F3D7914B`, `7B56D7AD`,
-  `E9D6C112`, `AA9791CE`) nên các chỉ số này là `N/A`. Leg chưa từng nhận gói audio nào thì app
-  ghi 0 vào MOS/loss/RTT; report hiển thị `N/A` kèm lý do thay vì in số 0 đó (MVP mục 4.3).
-- MOS, RTT, jitter trong bảng là giá trị **lúc kết thúc** cuộc gọi: bản ghi tổng kết của app
-  trùng đúng mẫu stats cuối (8/8 leg có media), và log không có bộ đếm để tính lại cho cả cuộc.
-  Report ghi rõ điều này ở mục Giới hạn dữ liệu. Packet loss thì tính được cho **cả cuộc** từ
-  hai bộ đếm cộng dồn `audio.packetsLost` / `audio.packetsReceived`, kèm mẫu cao nhất;
-  `audio.packetLostPercent` chỉ là tỉ lệ trong khoảng giữa hai lần đo nên không dùng cho bảng.
-- "Thời gian với tới callee" (`INVITE` → `TRYING`) chỉ đo được khi callee được đánh thức qua
-  push. Callee đang online nhận `INVITE` qua WebSocket thì không gửi `TRYING`, nên chỉ số này
-  là `N/A`.
-- "Khoảng trống PAIR_PING lớn nhất" (chỉ số proxy) chỉ đo giữa hai lần ping liên tiếp, không
-  thấy khoảng im lặng từ lần ping cuối tới lúc kết thúc.
-- WebRTC log chỉ có mốc thời gian tương đối nên chưa đồng bộ được với timeline signaling.
-  Trong mục Evidence, các dòng WebRTC (ICE) luôn xếp sau các dòng có giờ tuyệt đối, dù có thể
-  xảy ra trước.
+- Trên data mẫu, chỉ số chất lượng (MOS, packet loss, jitter, RTT) chỉ có giá trị thật ở **8 leg / 5 cuộc gọi**. 6 cuộc
+  gọi không có end call log (`5E0800AE`, `6A7CE985`, `F3D7914B`, `7B56D7AD`, `E9D6C112`, `AA9791CE`) nên các chỉ số này
+  là `N/A`. Leg chưa từng nhận gói audio nào thì app ghi 0 vào MOS/loss/RTT; report hiển thị `N/A` kèm lý do thay vì in
+  số 0 đó (MVP mục 4.3).
+- MOS, RTT, jitter trong bảng là giá trị **lúc kết thúc** cuộc gọi: bản ghi tổng kết của app trùng đúng mẫu stats cuối
+  (8/8 leg có media), và log không có bộ đếm để tính lại cho cả cuộc. Report ghi rõ điều này ở mục Giới hạn dữ liệu.
+  Packet loss thì tính được cho **cả cuộc** từ hai bộ đếm cộng dồn `audio.packetsLost` / `audio.packetsReceived`, kèm
+  mẫu cao nhất; `audio.packetLostPercent` chỉ là tỉ lệ trong khoảng giữa hai lần đo nên không dùng cho bảng.
+- "Thời gian với tới callee" (`INVITE` → `TRYING`) chỉ đo được khi callee được đánh thức qua push. Callee đang online
+  nhận `INVITE` qua WebSocket thì không gửi `TRYING`, nên chỉ số này là `N/A`.
+- "Khoảng trống PAIR_PING lớn nhất" (chỉ số proxy) chỉ đo giữa hai lần ping liên tiếp, không thấy khoảng im lặng từ lần
+  ping cuối tới lúc kết thúc.
+- WebRTC log chỉ có mốc thời gian tương đối nên chưa đồng bộ được với timeline signaling. Trong mục Evidence, các dòng
+  WebRTC (ICE) luôn xếp sau các dòng có giờ tuyệt đối, dù có thể xảy ra trước.
 
 **Rule và taxonomy**
 
-- Không có cuộc gọi nào có nhãn bị suy giảm chất lượng, nên `NETWORK_PACKET_LOSS` và
-  `NETWORK_DELAY_JITTER` còn `UNVALIDATED`. Ngưỡng 5% / MOS 3,5 là phỏng đoán, đặt cao hơn mức
-  đo được ở các cuộc thành công (844 mẫu stats của 6 leg: loss cao nhất 3,704%, MOS thấp nhất
-  4,335).
-- Rule gắn cờ chất lượng khi **một** mẫu stats vượt ngưỡng, chưa yêu cầu vượt kéo dài nhiều mẫu
-  liên tiếp: không có dữ liệu để chọn số mẫu (không leg thành công nào có loss > 5 %; chuỗi dài
-  nhất toàn data là 2 mẫu, ở `271D1FAF` thuộc `for_test/`). Vì vậy cờ còn nhạy với mất gói
-  thoáng qua; report bù lại bằng cách nêu cả căn cứ phản bác (MOS thấp nhất, `hasMediaPoor`).
-- `NETWORK_DELAY_JITTER` chưa có nhánh riêng trong rule: mọi suy giảm đều được xếp
-  `NETWORK_PACKET_LOSS`. Điều kiện RTT / jitter trong `taxonomy.yaml` là thiết kế dự kiến, đã
-  đánh dấu "chưa cài".
-- Không có ca `UNKNOWN` nào trong tập có nhãn (nhãn chỉ có `fail/` và `success/`), nên
-  `UNKNOWN` cũng `UNVALIDATED`. Rule trả `UNKNOWN` khi không có dữ liệu signaling, không có log client
-  nào, hoặc không thấy `BYE` (chi tiết ở mục dưới). Trường hợp "evidence mâu thuẫn" của MVP mục 4.1 chưa cài.
-- `TURN_FAILURE` chia theo kiểu để chọn đề xuất: không tạo được socket (chưa request nào rời
-  máy), lỗi ngay khi gửi trên thiết bị, gửi đi mà không có phản hồi nào. Mỗi kiểu có đúng một
-  ca trong `fail/`. Kiểu thứ tư, server có phản hồi nhưng không cấp phát, **chưa có ca mẫu**;
-  report tự ghi điều này vào Giới hạn dữ liệu khi gặp.
-- Ba cuộc không tạo được socket TURN (`703100CF`, `0A6C2821`, `45AA3011`) đều có giao diện VPN
-  `tun0`, nhưng cả ba **cùng một máy** (cùng `deviceId`), tức là chỉ một nguồn bằng chứng. Report
-  nêu VPN như dữ kiện đi kèm, không viết thành nguyên nhân.
-- Mã 428 `privacy_restricted` (server từ chối theo chính sách) được xếp tạm vào
-  `SIGNALING_FAILURE` vì taxonomy của MVP mục 4.2 không có category riêng. Chưa chốt.
-- Cuộc gọi có signaling trông bình thường nhưng không kèm log phía client nào, hoặc đạt
-  `OK_ACK_OK` mà không thấy `BYE`: trả `UNKNOWN` (theo góp ý review Sprint 1, MVP mục 4.1). Thiếu log
-  client của một leg: độ tin cậy tối đa `MEDIUM` (MVP mục 7.2), trừ ca server từ chối `INIT_CALL`
-  kèm mã nguyên văn.
+- Không có cuộc gọi nào có nhãn bị suy giảm chất lượng, nên `NETWORK_PACKET_LOSS` và `NETWORK_DELAY_JITTER` còn
+  `UNVALIDATED` và mọi cờ chất lượng ở độ tin cậy LOW.
+- Luật mất gói là phỏng đoán: ngưỡng 5% mỗi mẫu / MOS 3,5 đặt cao hơn mức đo được ở các cuộc thành công (844 mẫu stats
+  của 6 leg: loss cao nhất 3,704%, MOS thấp nhất 4,335). Như vậy có căn cứ để **không báo nhầm cuộc tốt**, chưa có căn
+  cứ về khả năng **bắt cuộc kém**. Đã đối chiếu Cisco / 3GPP, Twilio, Teams CQD; giữ luật cũ chờ mentor
+  (`docs/design-decisions.md` mục 41).
+- Rule gắn cờ chất lượng khi **một** mẫu stats vượt ngưỡng, chưa yêu cầu vượt kéo dài nhiều mẫu liên tiếp: không có dữ
+  liệu để chọn số mẫu (không leg thành công nào có loss > 5 %; chuỗi dài nhất toàn data là 2 mẫu, ở `271D1FAF` thuộc
+  `for_test/`). Vì vậy cờ còn nhạy với mất gói thoáng qua; report bù lại bằng cách nêu cả căn cứ phản bác (MOS thấp
+  nhất, `hasMediaPoor`).
+- `NETWORK_DELAY_JITTER` (cài 2026-10-14): ngưỡng lấy từ Microsoft Teams CQD — RTT hoặc jitter TRUNG BÌNH > 500 ms /
+  30 ms trên luồng > 500 gói. Có nguồn công khai nhưng chưa kiểm trên data có nhãn. Cuộc ngắn (≤ 500 gói) không xét.
+  Khi cả mất gói và độ trễ cùng vượt, rule xếp `NETWORK_PACKET_LOSS` (MVP mục 10 scenario 2).
+- Không có ca `UNKNOWN` nào trong tập có nhãn (nhãn chỉ có `fail/` và `success/`), nên `UNKNOWN` cũng `UNVALIDATED`.
+  Rule trả `UNKNOWN` khi không có dữ liệu signaling, không có log client nào, hoặc đạt `OK_ACK_OK` mà không thấy `BYE`
+  (MVP mục 4.1). Trường hợp "evidence mâu thuẫn" của MVP mục 4.1 chưa cài.
+- Thiếu log của một bên (chỉ một file đính kèm): kết luận vẫn ra `SUCCESS` / `FAIL` với độ tin cậy tối đa MEDIUM và nêu
+  file thiếu, **không** ra `UNKNOWN` như scenario 5 của MVP mục 10 — vì ground truth của `5E0800AE` (chỉ có một file) là
+  `SUCCESS`. Hai nguồn mâu thuẫn, chưa chốt. Ngoại lệ: server từ chối `INIT_CALL` kèm mã nguyên văn thì không hạ mức.
+- **Cuộc gọi rớt giữa chừng** xếp `ICE_FAILURE` vì taxonomy MVP mục 4.2 không có loại riêng. Tín hiệu `network_lost`
+  (end call log, `originator=remote`) chỉ dùng để giải thích: nó không chứng minh bên kia mất mạng, vì app báo nó ~7 s
+  sau khi hết dữ liệu từ bên kia.
+- **Gọi nhóm** (3 người trở lên) không hỗ trợ. Nhiều thiết bị của **một** người nhận thì có: chỉ số lấy từ máy bắt máy,
+  máy kia nêu ở Giới hạn dữ liệu.
+- `TURN_FAILURE` chia theo kiểu để chọn đề xuất: không tạo được socket (chưa request nào rời máy), lỗi ngay khi gửi trên
+  thiết bị, gửi đi mà không có phản hồi nào. Mỗi kiểu có đúng một ca trong `fail/`. Kiểu thứ tư, server có phản hồi
+  nhưng không cấp phát, **chưa có ca mẫu**; report tự ghi điều này vào Giới hạn dữ liệu khi gặp.
+- Ba cuộc không tạo được socket TURN (`703100CF`, `0A6C2821`, `45AA3011`) đều có giao diện VPN `tun0`, nhưng cả ba
+  **cùng một máy** (cùng `deviceId`), tức là chỉ một nguồn bằng chứng. Report nêu VPN như dữ kiện đi kèm, không viết
+  thành nguyên nhân.
+- Mã 428 `privacy_restricted` (server từ chối theo chính sách) được xếp tạm vào `SIGNALING_FAILURE` vì taxonomy của MVP
+  mục 4.2 không có category riêng. Chưa chốt.
 
-**AI (Sprint 2)**
+**Phần chữ AI viết**
 
-- AI thấy kết luận của rule trong context, và AI lệch rule thì kết luận cuối là `UNKNOWN`. Vì vậy AI không đổi
-  được kết luận của rule; "AI trùng rule 100%" trên benchmark chưa chứng minh AI tự suy luận đúng.
-- Con số trong chữ AI viết: Guardrails G05 chặn số không có trong input (report cuối 0% số bịa), nhưng đầu ra thô của
-  AI vẫn có 0-3% lần viết số sai hoặc tự tính; lần đó report lùi về rule (degraded).
-- G05 chỉ kiểm con số **có nguồn** trong input, không kiểm con số được **gán đúng nghĩa**. AI có thể lấy một số có thật
-  rồi gọi sai tên: demo 2026-10-07 (`271D1FAF`) viết *"mất gói của caller là 11.3208%"* trong khi đó là mẫu stats cao nhất,
-  mất gói cả cuộc là 1.83 %; lần chạy trước gọi MOS lúc kết thúc là "MOS thấp nhất". Kết luận và bảng chỉ số không bị ảnh
-  hưởng (do code tính), chỉ câu chữ phần Phân tích. Sửa ở Sprint 3 T1(a): AI trích mã chỉ số, code điền tên và giá trị.
-- Đề xuất: từ Sprint 3 T2 bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung tối đa 3 câu ("Bổ sung (AI)"); câu AI chép
-  nguyên văn bộ chuẩn bị bỏ, nhưng câu **diễn đạt lại** bộ chuẩn vẫn có thể lọt (không so ngữ nghĩa). Đề xuất cho
-  `NETWORK_PACKET_LOSS` / `NETWORK_DELAY_JITTER` chưa kiểm chứng trên ca thật (không có cuộc chất lượng kém có nhãn).
+- AI thấy kết luận của rule trong context, và AI lệch rule thì kết luận cuối là `UNKNOWN`. Vì vậy AI không đổi được kết
+  luận của rule; "AI trùng rule 100%" trên benchmark chưa chứng minh AI tự suy luận đúng.
+- Guardrails chỉ kiểm phần có cấu trúc (verdict, category, evidence ID, con số có nguồn), **không kiểm nghĩa câu chữ**.
+  G05 chặn số không có trong input: lượt cuối 0/309 đầu ra thô vi phạm, nhưng lượt 2026-10-13 có 5 lần (AI tự trừ hai
+  mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded).
+- Từ Sprint 3 T1a, AI nhắc chỉ số bằng mã và code điền tên + giá trị, nên không còn kiểu gọi sai tên con số như
+  *"mất gói của caller là 11.3208%"* (`271D1FAF`, Sprint 2: đó là mẫu stats cao nhất). Lỗi diễn giải còn gặp trên
+  dataset mới: gắn mã chỉ số vào câu không đúng nghĩa ("không nhận được âm thanh: {PACKET_LOSS_CALLER}"), ghi nhầm bên
+  của `network_lost` (`FE4EF5E7`), gọi RTT lúc kết thúc là "RTT trung bình" (`FC3187B4`), phóng đại "mất gói đáng kể" khi
+  cả cuộc 0,36% (`06BCA48C`). Dòng Tóm tắt ca FAIL đã chuyển sang code viết (`docs/design-decisions.md` mục 40).
+- AI vẫn có lúc tự chép con số trùng giá trị một chỉ số thay vì dùng mã: 30 số ở 21/309 lần trả lời của lượt cuối (cận
+  trên — số trùng ngẫu nhiên như "1" cũng tính). Hiện chỉ đo, không chặn.
+- Evidence AI trích: mới kiểm có chứa dòng căn cứ của rule (94/115 lần có căn cứ), chưa kiểm evidence trích có **đúng**
+  là căn cứ không. Ca SUCCESS không cờ không có dòng căn cứ của rule nên AI tự chọn.
+- Câu hỏi giả định sai (ví dụ hỏi vì sao lỗi khi cuộc gọi không lỗi): AI không còn bịa nguyên nhân nhưng chưa luôn phủ
+  nhận thẳng giả định (`case-020`, kiểm bằng đọc tay).
+- Đề xuất: bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung tối đa 3 câu ("Bổ sung (AI)"); câu AI chép nguyên văn bộ
+  chuẩn bị bỏ, nhưng câu **diễn đạt lại** bộ chuẩn vẫn có thể lọt (không so ngữ nghĩa). Đề xuất cho
+  `NETWORK_PACKET_LOSS` / `NETWORK_DELAY_JITTER` chưa kiểm chứng trên ca thật.
+
+**Câu hỏi và phân loại intent**
+
 - Câu hỏi rất cụt, không dấu, chỉ gồm giá trị đã che vẫn có thể bị xếp ngoài phạm vi: *"sdt … email … goi loi"* ra
-  `OUT_OF_SCOPE` (1/23 câu của `benchmark/intent-check.yaml`, 2026-10-07). Một lần sai chưa đủ căn cứ để sửa prompt; theo
-  dõi ở các lượt đo sau. Câu liệt kê có số điện thoại / token / IP viết đủ ý thì phân loại đúng.
+  `OUT_OF_SCOPE` (1/23 câu của `benchmark/intent-check.yaml`, 2026-10-07). Một lần sai chưa đủ căn cứ để sửa prompt.
+  Câu liệt kê có số điện thoại / token / IP viết đủ ý thì phân loại đúng.
 - Câu hỏi rất dài không bị chặn: không có giới hạn độ dài câu hỏi. Thử 2026-10-12 (không khoá AI): câu 2 KB / 100 KB /
   1 MB đều ra report (0,9 s / 0,6 s / 3,9 s). Câu cỡ 100 KB (~25 nghìn token) vẫn tới AI, tốn thêm ~0,008 USD mỗi lần.
   Câu vượt cửa sổ ngữ cảnh của model (~128 nghìn token, cỡ 1 MB): OpenAI từ chối, report lùi về rule với lý do
-  `INPUT_TOO_LARGE` ("vượt giới hạn độ dài của model" — Sprint 3 T8, đã thử với API thật). Chưa chặn sớm vì người dùng
-  thật hầu như không gõ câu dài cỡ đó; MVP 7.1 nhắc "oversized input" nhưng không nói rõ là đầu vào nào.
-- Câu hỏi bị hỏng mã hoá trước khi tới server (gửi bằng công cụ không dùng UTF-8, ví dụ curl trong Git Bash trên Windows)
-  không khôi phục được. Từ Sprint 3 T4 hệ thống phát hiện và báo (ký tự U+FFFD, `?` giữa chữ cái, UTF-8 đọc như
-  Windows-1252): report thêm một dòng ở "Giới hạn dữ liệu"; nếu câu bị xếp ngoài phạm vi thì câu từ chối kèm lời nhắc gửi
-  lại. Câu rất ngắn chỉ hỏng một chỗ có thể lọt (ngưỡng hai chỗ). Trình duyệt luôn gửi UTF-8 nên web UI không gặp.
+  `INPUT_TOO_LARGE`. Chưa chặn sớm vì người dùng thật hầu như không gõ câu dài cỡ đó; MVP 7.1 nhắc "oversized input"
+  nhưng không nói rõ là đầu vào nào.
+- Câu hỏi bị hỏng mã hoá trước khi tới server (gửi bằng công cụ không dùng UTF-8, ví dụ curl trong Git Bash trên
+  Windows) không khôi phục được. Hệ thống phát hiện và báo (ký tự U+FFFD, `?` giữa chữ cái, UTF-8 đọc như Windows-1252):
+  report thêm một dòng ở "Giới hạn dữ liệu"; nếu câu bị xếp ngoài phạm vi thì câu từ chối kèm lời nhắc gửi lại. Câu rất
+  ngắn chỉ hỏng một chỗ có thể lọt (ngưỡng hai chỗ). Trình duyệt luôn gửi UTF-8 nên web UI không gặp.
 - Khi AI phân loại không dùng được, intent do bộ từ khoá dự phòng quyết định và kém AI. Trên 87 câu có nhãn (`dev` +
   `intent-check`) bộ từ khoá đúng 72 (2026-10-12). Còn từ chối 3 câu trong phạm vi: *"Cuộc này ổn không?"*, *"ben nao tat
   may"*, và một câu có địa chỉ email (luật "viết email" thắng). Còn nhận 5 câu ngoài phạm vi có nhắc tới cuộc gọi hoặc log
   (*"Viết caption Facebook về cuộc gọi này"*, *"dich log nay sang tieng anh"*…): các câu này ra report của cuộc gọi đính
-  kèm chứ không làm việc ngoài phạm vi. Có AI thì đúng hết (lượt mốc 100%).
-  Đã sửa 2026-10-12 ba câu bị từ chối của tập `dev` và kịch bản demo: *"Máy gọi có lấy được địa chỉ relay không?"*,
-  *"Độ trễ giữa hai máy có cao không?"*, *"Vì sao gọi không được?"* (scenario 3). Động từ "gọi" đi với kết cục ("gọi không
-  được", "gọi bị", "gọi xong"…), "relay", "máy gọi", "độ trễ", "hai máy" nay là dấu hiệu cuộc gọi; "gọi" đứng riêng thì
-  không, vì bỏ dấu trùng "gói" và "gọi món".
-- Thiếu log của một bên (chỉ một file đính kèm): kết luận vẫn ra `SUCCESS` / `FAIL` với độ tin cậy tối đa MEDIUM và nêu
-  file thiếu, **không** ra `UNKNOWN` như scenario 5 của MVP mục 10 — vì ground truth của `5E0800AE` (chỉ có một file) là
-  `SUCCESS`. Hai nguồn mâu thuẫn, chưa chốt.
-- `--ai-context` in context với trọng tâm câu hỏi để trống, nên với câu có trọng tâm thì thiếu dòng "Trọng tâm câu hỏi" so
-  với thứ thật sự gửi AI.
-- Ground truth chỉ có fail/success, chưa có issue category, nên Issue Category Accuracy chưa đo được. Không có
-  cuộc gọi chất lượng kém có nhãn, nên benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém".
-- T11 (Nếu kịp) chưa làm: khái niệm "semi-structured context" chưa chốt.
+  kèm chứ không làm việc ngoài phạm vi. Có AI thì đúng hết.
 
 **Bảo mật**
 
 - Signaling nạp vào Elasticsearch local ở dạng gốc, chưa qua Sanitizer (trường nhạy cảm: `appUserId`; thêm `isp`, `asn`;
-  không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào ES —
-  hiện hệ thống chưa ghi kết quả nào vào ES. Cách hiểu này chưa được xác nhận. Nếu phải che cả data nhập, cần mã giả hoá
-  `appUserId` lúc import và sửa cách suy ra leg (end call log vẫn mang `appUserId` gốc). Từ Sprint 3, mọi kết quả ghi vào
-  ES (T9-T11) phải qua Sanitizer.
+  không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào
+  ES. Cách hiểu này chưa được xác nhận. Kết quả phân tích ghi vào ES từ Sprint 3 T9 (index `analysis-requests`) chỉ gồm
+  mã, số và cờ, `call_id` đã mã giả — không có chữ tự do để lộ. Nếu phải che cả data nạp, cần mã giả hoá `appUserId` lúc
+  import và sửa cách suy ra leg (end call log vẫn mang `appUserId` gốc).
 - Bí mật dạng `tên=giá trị` / `tên: giá trị` (mục DROP): trong log che **tới hết dòng** (để `Authorization: Basic dXNl…`
-  không lộ phần sau khoảng trắng); trong **câu hỏi** người dùng gõ chỉ che một từ, hoặc `Basic` / `Bearer` … + một từ, để
-  giữ phần yêu cầu viết tiếp (trước 2026-10-10, câu *"api_key=sk-… phan tich cuoc goi nay giup minh"* mất cả yêu cầu và
-  bị từ chối). Cái giá: bí mật có khoảng trắng gõ thẳng vào câu hỏi (`password=my secret pass`) lộ phần sau từ đầu tiên.
-- Phép đo Security Leakage của runner (Sprint 3): gom IPv4, IPv6 unicast toàn cầu, bí mật, SĐT di động Việt Nam, email,
-  định danh — trong log đính kèm, signaling và câu hỏi; quét chuỗi gửi AI, phản hồi và application log của từng lần chạy.
-  Log của tầng HTTP (chỉ có ở profile `web`) không đi qua runner.
+  không lộ phần sau khoảng trắng); trong **câu hỏi** người dùng gõ chỉ che một từ, hoặc `Basic` / `Bearer` … + một từ,
+  để giữ phần yêu cầu viết tiếp. Cái giá: bí mật có khoảng trắng gõ thẳng vào câu hỏi (`password=my secret pass`) lộ phần
+  sau từ đầu tiên.
+- Phép đo Security Leakage của runner: gom IPv4, IPv6 unicast toàn cầu, bí mật, SĐT di động Việt Nam, email, định danh —
+  trong log đính kèm, signaling và câu hỏi; quét chuỗi gửi AI, phản hồi và application log của từng lần chạy. Log của
+  tầng HTTP (chỉ có ở profile `web`) không đi qua runner.
 
 **Vận hành**
 
-- Signaling bắt buộc lấy từ Elasticsearch. ES tắt thì `--analyze` vẫn chạy và trả `UNKNOWN`
-  kèm lý do, còn `--parse-call` / `--parse-all` dừng với lỗi vì chưa bọc lỗi ES.
-- File Validator (Sprint 2 T3) loại file quá lớn (mặc định 20 MB, cấu hình
-  `call-analysis.files.max-size-per-file`), rỗng, hỏng, không nhận diện được, hoặc end call log mang
-  Call-ID khác. WebRTC log không mang Call-ID nên không kiểm được file WebRTC của cuộc gọi khác.
+- Signaling bắt buộc lấy từ Elasticsearch. ES tắt thì `--analyze*` và Web UI vẫn chạy và trả `UNKNOWN` kèm lý do;
+  `--parse-*` vẫn parse log đính kèm và báo thiếu signaling.
+- File Validator loại file quá lớn (mặc định 20 MB, cấu hình `call-analysis.files.max-size-per-file`), rỗng, hỏng, không
+  nhận diện được, hoặc end call log mang Call-ID khác. WebRTC log không mang Call-ID nên không kiểm được file WebRTC của
+  cuộc gọi khác.
+- Lệnh dòng lệnh với thư mục tên viết thường (như `ai20k_new_dataset`): Call-ID so phân biệt hoa thường nên file log bị
+  loại. Web UI không bị (Call-ID lấy từ log).
+- Độ trễ phụ thuộc OpenAI: lượt cuối P95 14,9 s, chậm nhất 47,7 s. Mỗi lời gọi AI quá giờ sau 30 s, thử lại trong ngân
+  sách 45 s; trình duyệt chờ 150 s. Số đo độ trễ trên máy cá nhân chỉ dùng để so xu hướng.
+- `--ai-context` in context với trọng tâm câu hỏi để trống, nên với câu có trọng tâm thì thiếu dòng "Trọng tâm câu hỏi"
+  so với thứ thật sự gửi AI.
 
 ---
 
