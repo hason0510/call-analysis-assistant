@@ -208,7 +208,7 @@ Các bước xếp thư mục log, viết file case, nạp signaling và chạy:
 
 ---
 
-## 5. Xem request trên Kibana
+## 5. Xem request và dashboard trên Kibana
 
 Server profile `web` ghi mỗi request một bản ghi vào index `analysis-requests` (chỉ mã, số, cờ — không chữ tự do).
 Dựng view một lần:
@@ -216,12 +216,18 @@ Dựng view một lần:
 ```powershell
 docker compose up -d                          # thêm Kibana
 python scripts/kibana/setup_views.py          # data view + 4 saved search; chạy lại được
+python scripts/kibana/setup_dashboard.py      # dashboard kết quả phân tích (T11); cần chạy setup_views.py trước
 ```
 
 Mở http://localhost:5601/app/discover → **Open** → chọn một saved search: *Requests — tất cả*, *fallback*, *lỗi*,
 *chậm (> 10 s)*. Index chỉ có dữ liệu sau khi đã gửi ít nhất một request tới server profile `web`.
 Saved search tự đặt khoảng thời gian 7 ngày. Mở Discover trực tiếp thì Kibana chỉ xem 15 phút gần nhất, nên trang
 trống "No results match your search criteria" dù index có dữ liệu: đổi khoảng thời gian ở góc phải.
+
+Dashboard **Kết quả phân tích cuộc gọi**: http://localhost:5601/app/dashboards#/view/analysis-results-dashboard — số
+report, tỉ lệ UNKNOWN, tỉ lệ fallback, độ trễ P50 / P95, phân bố kết luận / loại lỗi / độ tin cậy, lý do fallback, độ
+trễ theo thời gian (MVP 7.1 T11). Tỉ lệ tính trên request ra report; câu ngoài phạm vi không tính. Dashboard tự đặt
+khoảng thời gian 7 ngày.
 
 ---
 
@@ -265,7 +271,7 @@ request), rồi mục Known Limitations trong README.
 | Web UI | http://localhost:8080/ |
 | Chat API | `POST /api/analyze` (multipart: `message`, `files`) |
 | Elasticsearch | http://localhost:9200, index `signaling-events` |
-| Kibana | http://localhost:5601 — view request: `python scripts/kibana/setup_views.py` |
+| Kibana | http://localhost:5601 — view request: `python scripts/kibana/setup_views.py`; dashboard: `python scripts/kibana/setup_dashboard.py` |
 | Index Elasticsearch | `signaling-events` (signaling nạp vào), `analysis-requests` (bản ghi request, profile `web`) |
 | Kết quả benchmark | `target/evaluation/` (tạm), `benchmark/results/` (lưu lại) |
 | Cấu hình | `src/main/resources/application.yml`, `application-web.yml` |
