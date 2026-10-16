@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.hason.callanalysis.domain.ai.AiUnavailableException;
 import io.hason.callanalysis.domain.ai.AiUnavailableException.Reason;
 import io.hason.callanalysis.domain.ai.RetryPolicy;
+import io.hason.callanalysis.domain.security.OutboundGate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -23,6 +24,7 @@ import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Lời gọi OpenAI Chat Completions với Structured Outputs (`response_format: json_schema`,
@@ -37,6 +39,10 @@ import java.util.Optional;
  * báo cho bên gọi qua {@link Prompt#onRetry()} để bên gọi ghi một dòng log cho lần thử hỏng.
  *
  * Thử lại theo {@link RetryPolicy} (Sprint 3 T8): chỉ lỗi tạm thời, trong ngân sách thời gian của cả lời gọi.
+ *
+ * Trước mọi lời gọi, tin nhắn người dùng (context đã làm sạch, hoặc câu hỏi gửi AI phân loại) đi qua
+ * {@link OutboundGate}: còn dữ liệu nhạy cảm thì không gửi, ném SENSITIVE_DATA_BLOCKED. Đây là nơi DUY NHẤT chuỗi rời
+ * máy, nên chặn ở đây phủ cả hai lời gọi AI. System prompt là file cố định trong repo, không quét.
  */
 @Component
 public class OpenAiChatClient {
@@ -108,6 +114,13 @@ public class OpenAiChatClient {
 
     /** @throws AiUnavailableException mọi trường hợp không có nội dung dùng được */
     public Completion complete(Prompt prompt) {
+        // Trước cả bước kiểm key: chuỗi có vấn đề thì báo đúng lý do kể cả khi chưa cấu hình key, nên chạy không key
+        // (--ai.openai.api-key=) cũng kiểm được cổng này trên toàn bộ data mà không tốn tiền.
+        Set<String> sensitive = OutboundGate.kindsFound(prompt.userMessage());
+        if (!sensitive.isEmpty()) {
+            throw new AiUnavailableException(Reason.SENSITIVE_DATA_BLOCKED,
+                    "Không gửi AI: chuỗi gửi đi còn dữ liệu nhạy cảm loại " + sensitive);
+        }
         if (apiKey == null || apiKey.isBlank()) {
             throw new AiUnavailableException(Reason.NOT_CONFIGURED, "Chưa đặt OPENAI_API_KEY");
         }

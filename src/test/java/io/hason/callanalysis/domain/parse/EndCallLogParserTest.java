@@ -82,7 +82,7 @@ class EndCallLogParserTest {
                 "#H7\t#ts\t#tag\tinitCallConfig\twebrtcConfig",
                 "#H8\t#ts\t#tag\taudio.audioMos\tendCall.duration",
                 "4\t1789700850297\tsignal\t\tremote\tunmuted",
-                "5\t1789700851306\tlocal_candidate\t\trelay\t14.238.62.98",
+                "5\t1789700851306\tlocal_candidate\t\trelay\t203.0.113.98",
                 "6\t1789700851306\tstats\t4.42737\t2698",
                 "7\t1789701211075\tconfig\t{}\t{}",
                 "8\t1789701211078\tendcall\t4.42397\t360535"), context);

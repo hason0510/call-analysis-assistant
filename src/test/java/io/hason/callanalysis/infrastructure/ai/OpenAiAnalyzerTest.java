@@ -28,6 +28,20 @@ class OpenAiAnalyzerTest {
     }
 
     @Test
+    @DisplayName("ai.context-format=text -> tin nhắn gửi AI là bản văn bản (T11 Sprint 2), mặc định vẫn là JSON")
+    void contextFormatSelectsTextOrJson() {
+        OpenAiChatClient client = new OpenAiChatClient(mapper, "http://127.0.0.1:1", "gpt-4o-mini", "", Duration.ofSeconds(1));
+
+        String text = new OpenAiAnalyzer(mapper, client, "text").userMessage(CONTEXT);
+        String json = new OpenAiAnalyzer(mapper, client).userMessage(CONTEXT);
+
+        assertThat(text).contains("Context đã chuẩn hoá (văn bản):", "Kết luận của rule (ruleVerdict): FAIL",
+                "[EV01][SIGNALING, CALLER, -] Signaling INIT_CALL").doesNotContain("\"ruleVerdict\"");
+        assertThat(json).contains("Context đã chuẩn hoá (JSON):", "\"ruleVerdict\"");
+        assertThat(text).startsWith("Câu hỏi của người dùng:\nPhân tích giúp mình");
+    }
+
+    @Test
     @DisplayName("chưa đặt OPENAI_API_KEY -> NOT_CONFIGURED, không gửi request nào")
     void missingKeyIsNotConfigured() {
         assertThatThrownBy(() -> analyzer("").analyze(CONTEXT))

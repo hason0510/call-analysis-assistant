@@ -91,7 +91,7 @@ public class SignalExtractor {
                 iceStates.stream().anyMatch(s -> s.equalsIgnoreCase("failed")),
                 hasFlag(timeline, "transport.hasMediaFail"),
                 noMediaBytes(timeline),
-                !degradedRecords(timeline).isEmpty(),
+                qualityByLeg(timeline).stream().anyMatch(LegQuality::degraded),
                 // Chỉ ghi nhận CẮT BỚT, không phải mọi thiếu hụt dữ liệu: kết luận
                 // "bản export bị cắt" cho một timeline rỗng là nói sai sự thật.
                 timeline.notes().stream().anyMatch(n ->
@@ -117,7 +117,8 @@ public class SignalExtractor {
     }
 
     /**
-     * Căn cứ đo được của cờ chất lượng cho từng leg — cùng ngưỡng với degradedRecords.
+     * Căn cứ đo được của cờ chất lượng cho từng leg. Cờ NETWORK_PACKET_LOSS chỉ dựa vào mất gói CẢ CUỘC
+     * ({@link LegQuality#degraded()}); các số đếm theo mẫu còn lại chỉ để in phần "Đối chiếu".
      *
      * Đếm trên chuỗi mẫu stats, không đếm bản ghi summary vì nó trùng đúng mẫu stats cuối
      * (8/8 leg có media trong data mẫu); chỉ dùng summary khi leg không có mẫu stats nào.
@@ -161,12 +162,35 @@ public class SignalExtractor {
                     .flatMap(Optional::stream).mapToLong(BigDecimal::longValue).max().orElse(0);
             result.add(new LegQuality(leg, samples.size(), lossOver, maxLoss, mosLow, minMos, mediaPoor, packets,
                     average(live, "transport.currentRttMs", BigDecimal.ONE),
-                    average(live, "audio.jitter", BigDecimal.valueOf(1000))));
+                    average(live, "audio.jitter", BigDecimal.valueOf(1000)),
+                    countersRecord(live).flatMap(SignalExtractor::wholeCallLoss).orElse(null)));
         }
         return result;
     }
 
     private static final String PACKETS_RECEIVED = "audio.packetsReceived";
+    private static final String PACKETS_LOST = "audio.packetsLost";
+
+    /**
+     * Mẫu mang hai bộ đếm cộng dồn lớn nhất của leg (packetsReceived cao nhất; hoà thì mẫu sớm nhất) — mẫu dùng để tính
+     * mất gói cả cuộc, cũng là dòng căn cứ của cờ. Leg nhiều thiết bị: máy không bắt máy không có mẫu có âm thanh nào, nên
+     * mẫu này luôn của máy có âm thanh (bẫy #21).
+     */
+    private static Optional<CanonicalEvent> countersRecord(List<CanonicalEvent> live) {
+        return live.stream().max(Comparator.comparing(
+                (CanonicalEvent e) -> decimal(e.attribute(PACKETS_RECEIVED)).orElse(BigDecimal.ZERO)));
+    }
+
+    /** packetsLost ÷ (packetsLost + packetsReceived) × 100, 4 chữ số thập phân; trống khi thiếu bộ đếm. */
+    private static Optional<BigDecimal> wholeCallLoss(CanonicalEvent e) {
+        Optional<BigDecimal> lost = decimal(e.attribute(PACKETS_LOST));
+        Optional<BigDecimal> received = decimal(e.attribute(PACKETS_RECEIVED));
+        if (lost.isEmpty() || received.isEmpty() || lost.get().add(received.get()).signum() <= 0) {
+            return Optional.empty();
+        }
+        return Optional.of(lost.get().multiply(BigDecimal.valueOf(100))
+                .divide(lost.get().add(received.get()), 4, java.math.RoundingMode.HALF_UP));
+    }
 
     /** Trung bình một trường trên các mẫu có trường đó, nhân hệ số đổi đơn vị; null nếu không mẫu nào có. */
     private static BigDecimal average(List<CanonicalEvent> samples, String field, BigDecimal unit) {
@@ -196,7 +220,7 @@ public class SignalExtractor {
             // Câu đề xuất nhắc tới VPN thì dòng log ghi nhận VPN cũng phải trích được
             vpnEvent(timeline, file).ifPresent(basis::add);
         });
-        basis.addAll(worstDegradedRecordPerLeg(timeline));
+        basis.addAll(wholeCallLossRecordPerLeg(timeline));
         basis.addAll(worstDelayRecordPerLeg(timeline));
         // ICE hỏng / không có media: Evidence Engine vốn đã chọn các dòng này làm mốc, nhưng phải liệt kê ở đây thì
         // evidence mới mang cờ ruleBasis — thiếu thì ca ICE_FAILURE (2D9057AA) không có dòng căn cứ nào (Sprint 3 T1b).
@@ -437,23 +461,6 @@ public class SignalExtractor {
                 isZero(e.attribute("audio.bytesReceived")) && isZero(e.attribute("audio.bytesSent")));
     }
 
-    /** Các bản ghi chỉ số vượt ngưỡng chất lượng — quét cả chuỗi stats, không chỉ summary. */
-    private List<CanonicalEvent> degradedRecords(CallTimeline timeline) {
-        return qualityRecords(timeline).filter(e -> {
-            boolean lossHigh = decimal(e.attribute("audio.packetLostPercent"))
-                    .filter(v -> v.compareTo(LOSS_THRESHOLD_PERCENT) > 0).isPresent();
-            boolean mosLow = decimal(e.attribute("audio.audioMos"))
-                    .filter(v -> v.signum() > 0 && v.compareTo(MOS_THRESHOLD) < 0).isPresent();
-            boolean poorFlag = "1".equals(e.attribute("transport.hasMediaPoor"));
-            return lossHigh || mosLow || poorFlag;
-        }).toList();
-    }
-
-    /**
-     * Mỗi leg một dòng: bản ghi vượt ngưỡng có loss cao nhất (hoà thì lấy bản ghi sớm nhất).
-     * Không trích bản ghi cuối như phần evidence chung, vì bản ghi cuối có thể đã hồi về 0%
-     * — 271D1FAF là ví dụ: loss cuối 0% nhưng caller có 18/80 giây mất gói trên 5%.
-     */
     /**
      * Dòng căn cứ của cờ độ trễ: mỗi leg vượt ngưỡng Teams CQD một mẫu stats có RTT hiện tại cao nhất (hoà thì mẫu
      * sớm nhất). Cờ dựa trên TRUNG BÌNH nên không có "dòng bật cờ"; mẫu tệ nhất là dòng người đọc cần mở ra xem.
@@ -475,21 +482,29 @@ public class SignalExtractor {
         return basis;
     }
 
-    private List<CanonicalEvent> worstDegradedRecordPerLeg(CallTimeline timeline) {
-        List<CanonicalEvent> degraded = degradedRecords(timeline);
-        Comparator<CanonicalEvent> worstFirst = Comparator
-                .comparing((CanonicalEvent e) -> decimal(e.attribute("audio.packetLostPercent"))
-                        .orElse(BigDecimal.ZERO))
-                .reversed();
-        List<CanonicalEvent> worst = new ArrayList<>();
-        for (Leg leg : List.of(Leg.CALLER, Leg.CALLEE)) {
-            degraded.stream()
-                    .filter(e -> e.leg() == leg)
-                    .sorted(worstFirst)   // sort ổn định: hoà thì giữ thứ tự timeline
-                    .findFirst()
-                    .ifPresent(worst::add);
+    /**
+     * Dòng căn cứ của cờ mất gói: mỗi leg vượt ngưỡng một mẫu — mẫu mang bộ đếm dùng để tính mất gói cả cuộc. Trước đây
+     * là mẫu có audio.packetLostPercent cao nhất, nhưng con số đó là tỉ lệ TRONG KHOẢNG giữa hai lần đo, không phải căn cứ
+     * của cờ nữa.
+     */
+    private List<CanonicalEvent> wholeCallLossRecordPerLeg(CallTimeline timeline) {
+        List<CanonicalEvent> basis = new ArrayList<>();
+        for (LegQuality q : qualityByLeg(timeline)) {
+            if (!q.degraded()) {
+                continue;
+            }
+            List<CanonicalEvent> live = qualityRecords(timeline)
+                    .filter(e -> e.leg() == q.leg() && e.type() == EventType.MEDIA_STATS)
+                    .filter(e -> decimal(e.attribute(PACKETS_RECEIVED)).filter(v -> v.signum() > 0).isPresent())
+                    .toList();
+            if (live.isEmpty()) {
+                live = qualityRecords(timeline).filter(e -> e.leg() == q.leg())
+                        .filter(e -> decimal(e.attribute(PACKETS_RECEIVED)).filter(v -> v.signum() > 0).isPresent())
+                        .toList();
+            }
+            countersRecord(live).ifPresent(basis::add);
         }
-        return worst;
+        return basis;
     }
 
     private java.util.stream.Stream<CanonicalEvent> qualityRecords(CallTimeline timeline) {

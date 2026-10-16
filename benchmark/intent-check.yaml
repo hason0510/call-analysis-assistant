@@ -113,11 +113,11 @@ case_id: intent-redacted-demo-regression
 call_id: DE7DD314-F432-45CB-BCB4-AE9103CC0919
 files: []
 questions:
-  - text: "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl, IP 113.161.42.7, xem giúp"
+  - text: "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl, IP 203.0.113.7, xem giúp"
     expected_intent: ANALYZE_CALL
   - text: "Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl, xem giúp"
     expected_intent: ANALYZE_CALL
-  - text: "Máy 0912345678 gọi lỗi, IP 113.161.42.7, xem giúp"
+  - text: "Máy 0912345678 gọi lỗi, IP 203.0.113.7, xem giúp"
     expected_intent: ANALYZE_CALL
 expected_verdict: null
 split: dev

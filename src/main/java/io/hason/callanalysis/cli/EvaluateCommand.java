@@ -133,6 +133,9 @@ public class EvaluateCommand implements ApplicationRunner {
         setup.put("Signaling", signalingStatus);
         setup.put("AI", aiConfigured ? model : "không dùng (chưa có key) — mọi report từ rule");
         setup.put("Prompt AI", AiPromptFingerprint.summary());
+        // T11 Sprint 2: cùng prompt, khác cách trình bày context — phải ghi để hai lượt không bị so nhầm
+        setup.put("Context AI", "text".equalsIgnoreCase(context.getEnvironment().getProperty("ai.context-format", "json"))
+                ? "semi-structured (văn bản)" : "structured (JSON)");
         String markdown = new EvaluationReportRenderer().render(summary, setup);
 
         Files.createDirectories(outDir);

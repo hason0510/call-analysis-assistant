@@ -342,7 +342,8 @@ class RuleVerdictEngineTest {
             b.qualityDegraded = true;
             b.qualityByLeg = List.of(new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 15, 4,
                     new java.math.BigDecimal("12"), 0, new java.math.BigDecimal("3.9"), 0, 736,
-                    new java.math.BigDecimal("540"), new java.math.BigDecimal("6")));
+                    new java.math.BigDecimal("540"), new java.math.BigDecimal("6"),
+                    new java.math.BigDecimal("6.1")));
         }));
 
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.NETWORK_PACKET_LOSS);
@@ -526,36 +527,42 @@ class RuleVerdictEngineTest {
                 + " Vì vậy không có candidate để gửi INVITE");
     }
 
-    @Test
-    @DisplayName("cờ chất lượng nêu căn cứ ĐO ĐƯỢC của cuộc gọi, cả ủng hộ lẫn phản bác — không chép định nghĩa (271D1FAF)")
-    void qualityFlagCarriesMeasuredBasis() {
-        // Định nghĩa taxonomy khẳng định "mất gói đủ làm giảm chất lượng thoại" — rule không kiểm điều đó.
-        RuleVerdict v = engine.decide(signals(b -> {
-            b.qualityDegraded = true;
-            b.qualityByLeg = List.of(
-                    new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 80, 18,
-                            new java.math.BigDecimal("11.3208"), 0, new java.math.BigDecimal("4.10477"), 0),
-                    new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLEE, 80, 3,
-                            new java.math.BigDecimal("7.54717"), 0, new java.math.BigDecimal("4.34143"), 0));
-        }));
-
-        assertThat(v.causeBasis()).isEqualTo("caller có 18/80 mẫu stats mất gói > 5 % (cao nhất 11.32 %);"
-                + " callee có 3/80 mẫu stats mất gói > 5 % (cao nhất 7.55 %)."
-                + " Đối chiếu: MOS thấp nhất 4.10477 (caller), app không bật hasMediaPoor ở mẫu nào");
+    private static LegQuality lossLeg(io.hason.callanalysis.domain.event.Leg leg, int samples, int over, String maxLoss,
+                                      String minMos, int mediaPoor, String wholeCallLoss) {
+        return new LegQuality(leg, samples, over, new java.math.BigDecimal(maxLoss), 0, new java.math.BigDecimal(minMos),
+                mediaPoor, 3000, new java.math.BigDecimal("90"), new java.math.BigDecimal("11"),
+                new java.math.BigDecimal(wholeCallLoss));
     }
 
     @Test
-    @DisplayName("câu căn cứ in ngưỡng từ chính hằng số của SignalExtractor — đổi ngưỡng không làm report tự mâu thuẫn")
-    void qualityBasisPrintsTheThresholdsTheFlagUses() {
+    @DisplayName("cờ mất gói nêu mất gói CẢ CUỘC + ngưỡng, kèm đối chiếu số đo theo mẫu, MOS, hasMediaPoor (B5F19381)")
+    void qualityFlagCarriesMeasuredBasis() {
         RuleVerdict v = engine.decide(signals(b -> {
             b.qualityDegraded = true;
-            b.qualityByLeg = List.of(new LegQuality(io.hason.callanalysis.domain.event.Leg.CALLER, 10, 1,
-                    new java.math.BigDecimal("9"), 2, new java.math.BigDecimal("2.9"), 0));
+            b.qualityByLeg = List.of(
+                    lossLeg(io.hason.callanalysis.domain.event.Leg.CALLER, 71, 33, "49.5", "1.94", 2, "8.4772"),
+                    lossLeg(io.hason.callanalysis.domain.event.Leg.CALLEE, 71, 3, "48.1", "3.12", 3, "1.7965"));
         }));
 
-        assertThat(v.causeBasis())
-                .contains("mất gói > " + SignalExtractor.LOSS_THRESHOLD_PERCENT.stripTrailingZeros().toPlainString() + " %")
-                .contains("MOS < " + SignalExtractor.MOS_THRESHOLD.stripTrailingZeros().toPlainString());
+        assertThat(v.issueCategory()).isEqualTo(IssueCategory.NETWORK_PACKET_LOSS);
+        assertThat(v.causeBasis()).isEqualTo("caller mất gói cả cuộc 8.48 % (ngưỡng: mất gói cả cuộc từ 5 %)."
+                + " Đối chiếu: caller có 33/71 mẫu stats mất gói > 5 % (cao nhất 49.5 %),"
+                + " callee có 3/71 mẫu stats mất gói > 5 % (cao nhất 48.1 %), MOS thấp nhất 1.94 (caller),"
+                + " app bật hasMediaPoor ở 5 mẫu");
+        assertThat(v.dataLimitations()).anyMatch(l -> l.contains("cả cuộc từ 5 %") && l.contains("CHƯA kiểm chứng"));
+    }
+
+    @Test
+    @DisplayName("ngưỡng mất gói theo mentor: cả cuộc từ 5 % mới bật; mẫu tăng vọt mà cả cuộc thấp thì không (271D1FAF)")
+    void wholeCallLossThreshold() {
+        var caller = io.hason.callanalysis.domain.event.Leg.CALLER;
+        assertThat(lossLeg(caller, 80, 18, "11.32", "4.10", 0, "1.83").degraded()).isFalse();   // 271D1FAF
+        assertThat(lossLeg(caller, 80, 0, "0", "4.4", 0, "4.99").degraded()).isFalse();
+        assertThat(lossLeg(caller, 80, 0, "0", "4.4", 0, "5").degraded()).isTrue();
+        // MOS rất thấp, app bật hasMediaPoor nhưng mất gói cả cuộc thấp: không tự bật cờ nữa (FE4E4BDC caller)
+        assertThat(lossLeg(caller, 11, 0, "0", "1.0", 4, "0").degraded()).isFalse();
+        assertThat(new LegQuality(caller, 10, 3, new java.math.BigDecimal("40"), 2, new java.math.BigDecimal("2"), 1)
+                .degraded()).isFalse();   // chưa có số mất gói cả cuộc -> không kết luận
     }
 
     @Test

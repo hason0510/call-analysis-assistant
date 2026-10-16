@@ -21,6 +21,8 @@ import java.math.BigDecimal;
  * @param packetsReceived   bộ đếm cộng dồn audio.packetsReceived cao nhất của leg
  * @param avgRttMs          trung bình transport.currentRttMs trên các mẫu ĐÃ có âm thanh; null nếu không có
  * @param avgJitterMs       trung bình audio.jitter (đổi giây → mili) trên các mẫu đã có âm thanh; null nếu không có
+ * @param wholeCallLoss     mất gói CẢ CUỘC (%) = packetsLost ÷ (packetsLost + packetsReceived) ở mẫu có bộ đếm
+ *                          packetsReceived lớn nhất (hai bộ đếm cộng dồn, CLAUDE.md bẫy #3); null nếu leg chưa có âm thanh
  */
 public record LegQuality(
         Leg leg,
@@ -32,8 +34,17 @@ public record LegQuality(
         int mediaPoor,
         long packetsReceived,
         BigDecimal avgRttMs,
-        BigDecimal avgJitterMs
+        BigDecimal avgJitterMs,
+        BigDecimal wholeCallLoss
 ) {
+
+    /**
+     * Ngưỡng mất gói của cờ NETWORK_PACKET_LOSS, theo mentor (2026-10-15): "packet loss < 5 %, jitter < 30 ms là ổn
+     * định", hiểu là mất gói CẢ CUỘC (chủ repo chốt). Trước đây cờ bật khi MỘT mẫu stats > 5 %, hoặc một mẫu MOS < 3,5,
+     * hoặc app bật hasMediaPoor — nhạy với mất gói thoáng qua (271D1FAF: 18/80 mẫu > 5 % nhưng cả cuộc 1,83 %). Số mẫu
+     * vượt, MOS thấp nhất, hasMediaPoor vẫn tính để in phần "Đối chiếu" của câu căn cứ, nhưng không còn bật cờ.
+     */
+    static final BigDecimal WHOLE_CALL_LOSS_POOR_PERCENT = new BigDecimal("5");
 
     /*
      * Ngưỡng độ trễ / jitter: bộ phân loại "Poor" cho luồng âm thanh của Microsoft Teams Call Quality Dashboard
@@ -47,15 +58,23 @@ public record LegQuality(
     static final BigDecimal JITTER_POOR_MS = new BigDecimal("30");
     static final long MIN_PACKETS = 500;
 
-    /** Chỉ dùng cho test viết sẵn trước khi có số liệu độ trễ. */
+    /** Chỉ dùng cho test viết sẵn trước khi có số liệu độ trễ và mất gói cả cuộc. */
     public LegQuality(Leg leg, int samples, int lossOverThreshold, BigDecimal maxLoss, int mosBelowThreshold,
                       BigDecimal minMos, int mediaPoor) {
-        this(leg, samples, lossOverThreshold, maxLoss, mosBelowThreshold, minMos, mediaPoor, 0, null, null);
+        this(leg, samples, lossOverThreshold, maxLoss, mosBelowThreshold, minMos, mediaPoor, 0, null, null, null);
     }
 
-    /** Suy giảm theo mất gói / MOS / app tự báo — điều kiện của NETWORK_PACKET_LOSS. */
+    /** Chỉ dùng cho test viết sẵn trước khi có mất gói cả cuộc. */
+    public LegQuality(Leg leg, int samples, int lossOverThreshold, BigDecimal maxLoss, int mosBelowThreshold,
+                      BigDecimal minMos, int mediaPoor, long packetsReceived, BigDecimal avgRttMs,
+                      BigDecimal avgJitterMs) {
+        this(leg, samples, lossOverThreshold, maxLoss, mosBelowThreshold, minMos, mediaPoor, packetsReceived,
+                avgRttMs, avgJitterMs, null);
+    }
+
+    /** Mất gói cả cuộc ≥ {@link #WHOLE_CALL_LOSS_POOR_PERCENT} — điều kiện của NETWORK_PACKET_LOSS. */
     public boolean degraded() {
-        return lossOverThreshold > 0 || mosBelowThreshold > 0 || mediaPoor > 0;
+        return wholeCallLoss != null && wholeCallLoss.compareTo(WHOLE_CALL_LOSS_POOR_PERCENT) >= 0;
     }
 
     /**

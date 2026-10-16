@@ -30,7 +30,12 @@
   const CALL_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
   function canSubmit() {
-    return files.size > 0 || CALL_ID.test(question.value);
+    return (files.size > 0 || CALL_ID.test(question.value)) && !tooManyFiles();
+  }
+
+  /** Cùng giới hạn với server (AnalyzeController): quá số file thì server từ chối cả request. */
+  function tooManyFiles() {
+    return Boolean(layout && layout.maxFilesPerRequest) && files.size > layout.maxFilesPerRequest;
   }
 
   /** Nút chỉ bật khi có thứ để phân tích; dòng gợi ý nói trước điều sẽ xảy ra khi bấm. */
@@ -38,6 +43,9 @@
     submit.disabled = busy || !canSubmit();
     if (busy) {
       submitHint.textContent = "Đang phân tích, chờ kết quả bên phải.";
+    } else if (tooManyFiles()) {
+      submitHint.textContent = `Tối đa ${layout.maxFilesPerRequest} file mỗi lần phân tích: bỏ bớt `
+          + `${files.size - layout.maxFilesPerRequest} file.`;
     } else if (!canSubmit()) {
       submitHint.textContent = "Đính kèm ít nhất một file log, hoặc ghi Call-ID vào câu hỏi.";
     } else if (!question.value.trim()) {
@@ -48,7 +56,11 @@
   }
   const result = $("result");
 
-  /** Tên file → File. Chọn lại file trùng tên thì thay bản cũ. */
+  /**
+   * Khoá → File. Chọn lại đúng file đã có (cùng tên, cỡ, thời điểm sửa) thì bỏ qua. Cùng tên mà khác file thì giữ cả
+   * hai, không ghi đè: ví dụ callee_endcall.log của hai máy cùng đổ chuông. Server tự nhận loại file và Call-ID theo
+   * nội dung, và gộp hai file trùng nội dung.
+   */
   const files = new Map();
   let layout = null;
 
@@ -66,6 +78,7 @@
     REQUEST_REJECTED: "dịch vụ AI từ chối yêu cầu",
     INVALID_RESPONSE: "AI trả lời sai định dạng",
     REFUSED: "AI từ chối trả lời",
+    SENSITIVE_DATA_BLOCKED: "dữ liệu sắp gửi AI vẫn còn thông tin nhạy cảm nên hệ thống không gửi",
     GUARDRAIL_REJECTED: "câu trả lời của AI không qua bước kiểm tra",
     UNEXPECTED_ERROR: "lỗi không lường trước khi gọi AI",
     REPORT_SCHEMA_INVALID: "report có phần AI không đúng cấu trúc",
@@ -116,6 +129,7 @@
       layout = await response.json();
       $("empty-sections").replaceChildren(
           ...[layout.header[1], ...layout.sections].map((s) => el("li", { text: s })));
+      renderFiles();
     } catch {
       show(banner("critical", "Không kết nối được máy chủ phân tích",
           "Kiểm tra server đã chạy với profile web, rồi tải lại trang."));
@@ -130,15 +144,27 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function sameFile(a, b) {
+    return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+  }
+
   function addFiles(list) {
-    for (const file of list) files.set(file.name, file);
+    for (const file of list) {
+      if ([...files.values()].some((f) => sameFile(f, file))) continue;
+      let key = file.name;
+      for (let n = 2; files.has(key); n++) key = `${file.name}#${n}`;
+      files.set(key, file);
+    }
     renderFiles();
   }
 
   function renderFiles() {
     const max = layout ? layout.maxBytesPerFile : Infinity;
-    fileList.replaceChildren(...[...files.values()].map((file) => {
+    const nameCount = new Map();
+    for (const file of files.values()) nameCount.set(file.name, (nameCount.get(file.name) || 0) + 1);
+    fileList.replaceChildren(...[...files.entries()].map(([key, file]) => {
       const tooBig = file.size > max;
+      const sameName = nameCount.get(file.name) > 1;
       // Quá cỡ vẫn gửi lên: server phải loại và nêu tên file ở "Giới hạn dữ liệu" (MVP mục 6.4, F04).
       return el("li", { class: tooBig ? "file-chip too-big" : "file-chip" },
           el("span", { class: "file-icon", "aria-hidden": "true" }),
@@ -146,10 +172,12 @@
           el("span", { class: "file-size", text: formatSize(file.size) }),
           el("button", {
             type: "button", class: "remove", "aria-label": `Bỏ file ${file.name}`, text: "×",
-            onclick: () => { files.delete(file.name); renderFiles(); },
+            onclick: () => { files.delete(key); renderFiles(); },
           }),
           tooBig && el("span", { class: "file-warning",
-            text: `Vượt giới hạn ${formatSize(max)}: sẽ bị loại khỏi phân tích và nêu trong report.` }));
+            text: `Vượt giới hạn ${formatSize(max)}: sẽ bị loại khỏi phân tích và nêu trong report.` }),
+          sameName && el("span", { class: "file-warning",
+            text: "Trùng tên với file khác đã chọn: cả hai đều được gửi. Kiểm tra lại có đúng cùng một cuộc gọi." }));
     }));
     updateSubmit();
   }
@@ -235,6 +263,9 @@
         break;
       case "INVALID_REQUEST":
         show(banner("critical", "Chưa có gì để phân tích", data.message));
+        break;
+      case "TOO_MANY_FILES":
+        show(banner("critical", "Quá nhiều file đính kèm", data.message));
         break;
       default:
         show(banner("critical", status === 413 ? "File đính kèm quá lớn" : "Phân tích không thành công",

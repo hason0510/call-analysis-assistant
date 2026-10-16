@@ -180,7 +180,7 @@ class WebRtcLogParserTest {
         // Trên data mẫu: 73 dòng error và đúng 73 dòng allocate thành công.
         // Kết luận lỗi hay không thuộc tầng rule, không phải tầng parser.
         ParseResult result = parser.parse(List.of(
-                "turn_port.cc: [0:114][8429] (line 1687): TurnPort(Port[x]-Remote[1.2.3.4:3478/udp]: "
+                "turn_port.cc: [0:114][8429] (line 1687): TurnPort(Port[x]-Remote[192.0.2.4:3478/udp]: "
                         + "Received TURN allocate error response, id=616c, code=401"), context);
 
         CanonicalEvent e = result.events().getFirst();

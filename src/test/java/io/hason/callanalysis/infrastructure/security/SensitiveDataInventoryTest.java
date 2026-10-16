@@ -52,8 +52,8 @@ class SensitiveDataInventoryTest {
     @DisplayName("IP công cộng trong chuỗi ICE candidate bị nhận diện")
     void publicIpInIceCandidateIsDetected() {
         // Chuỗi thật lấy từ ai20k_sample.
-        String candidate = "candidate:2870078463 1 udp 58674431 14.238.62.98 21355 typ relay "
-                + "raddr 42.115.218.73 rport 20425 generation 0 ufrag CS/8";
+        String candidate = "candidate:2870078463 1 udp 58674431 203.0.113.98 21355 typ relay "
+                + "raddr 198.51.100.73 rport 20425 generation 0 ufrag CS/8";
 
         assertThat(byId("ice-candidate-string").matchesValue(candidate)).isTrue();
         assertThat(byId("ice-candidate-string").policy()).isEqualTo(HandlingPolicy.MASK);
@@ -64,7 +64,7 @@ class SensitiveDataInventoryTest {
     void relayRealAddressIsCoveredSeparately() {
         // Che địa chỉ relay mà không che raddr thì coi như không che gì.
         SensitiveField raddr = byId("relay-real-address");
-        assertThat(raddr.matchesValue("typ relay raddr 42.115.218.73 rport 20425")).isTrue();
+        assertThat(raddr.matchesValue("typ relay raddr 198.51.100.73 rport 20425")).isTrue();
         assertThat(raddr.classification()).isEqualTo(DataClassification.SENSITIVE);
     }
 

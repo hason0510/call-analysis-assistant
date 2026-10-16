@@ -13,6 +13,10 @@ spring:
       max-request-size: 300MB
 
 server:
+  # Chỉ nghe ở máy này (góp ý mentor Sprint 2): Chat API không có đăng nhập mà mỗi request tốn tiền gọi OpenAI.
+  # Cần demo qua mạng LAN thì chạy với --server.address=0.0.0.0, biết rằng ai trong mạng cũng gọi được.
+  address: 127.0.0.1
+  # 8081 chứ không 8080: trên máy phát triển, cổng 8080 bị dịch vụ Windows AgentService giữ thường trực.
   port: 8081
 
 # Log JSON có làm sạch (Sprint 3 T5, MVP 7.1 "structured log"). logback-spring.xml chỉ dùng định dạng này ở profile web;

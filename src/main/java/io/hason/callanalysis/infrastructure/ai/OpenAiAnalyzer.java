@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hason.callanalysis.domain.ai.AiAnalysis;
 import io.hason.callanalysis.domain.ai.AiContext;
+import io.hason.callanalysis.domain.ai.AiContextText;
 import io.hason.callanalysis.domain.ai.TokenUsage;
 import io.hason.callanalysis.domain.ai.AiUnavailableException;
 import io.hason.callanalysis.domain.ai.AiUnavailableException.Reason;
 import io.hason.callanalysis.service.port.AiAnalyzer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -28,16 +31,38 @@ public class OpenAiAnalyzer implements AiAnalyzer {
     static final String SCHEMA = "schema/ai-analysis.schema.json";
     static final String SYSTEM_PROMPT = "prompts/analyze-call.system.txt";
 
+    /**
+     * Cách trình bày context (T11 Sprint 2): {@code JSON} — structured, mặc định; {@code TEXT} — semi-structured
+     * ({@link AiContextText}). Cùng dữ kiện, cùng system prompt; chỉ để so sánh trên benchmark.
+     */
+    public enum ContextFormat { JSON, TEXT }
+
     private final ObjectMapper mapper;
     private final OpenAiChatClient client;
     private final JsonNode schema;
     private final String systemPrompt;
+    private final ContextFormat format;
 
     public OpenAiAnalyzer(ObjectMapper mapper, OpenAiChatClient client) {
+        this(mapper, client, ContextFormat.JSON);
+    }
+
+    @Autowired
+    public OpenAiAnalyzer(ObjectMapper mapper, OpenAiChatClient client,
+                          @Value("${ai.context-format:json}") String format) {
+        this(mapper, client, ContextFormat.valueOf(format.trim().toUpperCase(java.util.Locale.ROOT)));
+    }
+
+    public OpenAiAnalyzer(ObjectMapper mapper, OpenAiChatClient client, ContextFormat format) {
         this.mapper = mapper;
         this.client = client;
         this.schema = client.readJson(SCHEMA);
         this.systemPrompt = OpenAiChatClient.readText(SYSTEM_PROMPT);
+        this.format = format;
+    }
+
+    public ContextFormat format() {
+        return format;
     }
 
     @Override
@@ -93,13 +118,17 @@ public class OpenAiAnalyzer implements AiAnalyzer {
      * Toàn bộ phần dữ liệu cuộc gọi rời khỏi máy (phần còn lại của request là system prompt cố định
      * và JSON Schema). Public để `--ai-context` in đúng chuỗi này ra cho người duyệt xem.
      *
-     * JSON gọn, không thụt lề: khoảng trắng cũng là token.
+     * JSON gọn, không thụt lề: khoảng trắng cũng là token. Dạng {@code TEXT}: {@link AiContextText}.
      */
     public String userMessage(AiContext context) {
         StringBuilder text = new StringBuilder("Câu hỏi của người dùng:\n")
                 .append(context.question() == null ? "" : context.question());
         if (context.focus() != null) {
             text.append("\n\nTrọng tâm câu hỏi: ").append(context.focus());
+        }
+        if (format == ContextFormat.TEXT) {
+            return text.append("\n\nContext đã chuẩn hoá (văn bản):\n")
+                    .append(AiContextText.render(context.payload())).toString();
         }
         try {
             return text.append("\n\nContext đã chuẩn hoá (JSON):\n")

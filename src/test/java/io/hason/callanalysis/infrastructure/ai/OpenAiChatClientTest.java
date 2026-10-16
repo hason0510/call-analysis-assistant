@@ -93,6 +93,24 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    @DisplayName("tin nhắn còn dữ liệu nhạy cảm -> SENSITIVE_DATA_BLOCKED, không request nào rời máy, không thử lại")
+    void sensitiveMessageIsNeverSent() throws IOException {
+        OpenAiChatClient client = client(RETRY, Duration.ofSeconds(5), Reply.of(200, OK_BODY));
+        OpenAiChatClient.Prompt leaking = new OpenAiChatClient.Prompt("system",
+                "{\"evidence\":\"relay 203.0.113.98:3478\"}", "s", mapper.createObjectNode(),
+                (reason, ms) -> retried.add(reason));
+
+        assertThatThrownBy(() -> client.complete(leaking))
+                .isInstanceOfSatisfying(AiUnavailableException.class, e -> {
+                    assertThat(e.reason()).isEqualTo(Reason.SENSITIVE_DATA_BLOCKED);
+                    assertThat(e.getMessage()).contains("[ip]").doesNotContain("203.0.113.98");
+                });
+        assertThat(requests.get()).isZero();
+        assertThat(retried).isEmpty();
+        assertThat(client.complete(prompt()).content()).isEqualTo("{}");
+    }
+
+    @Test
     @DisplayName("429 insufficient_quota -> QUOTA_EXCEEDED: chờ không giải quyết được, phải nạp thêm")
     void quotaExceeded() throws IOException {
         assertReason(clientAnswering(429, "{\"error\":{\"message\":\"You exceeded your current quota\","

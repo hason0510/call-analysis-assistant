@@ -155,6 +155,29 @@ class GuardrailsTest {
     }
 
     @Test
+    @DisplayName("G05 — số viết liền đơn vị (250ms, 45s) và phần trăm (11.3%) không có trong input -> REJECTED (góp ý mentor)")
+    void g05CatchesNumbersWrittenWithUnits() {
+        GuardrailResult r = check(ai("FAIL", "ICE_FAILURE", List.of("EV01"),
+                "ICE chờ 250ms rồi thử lại sau 45s; mất gói 11.3%."));
+
+        assertThat(r.status()).isEqualTo(Status.REJECTED);
+        assertThat(r.violations()).extracting(Violation::toString).containsExactly(
+                "G05: số liệu không có trong input: 250ms",
+                "G05: số liệu không có trong input: 45s",
+                "G05: số liệu không có trong input: 11.3");
+    }
+
+    @Test
+    @DisplayName("G05 — số liền đơn vị có trong input thì hợp lệ; mảnh Call-ID, 4G, H264 không bị đọc thành số + đơn vị")
+    void g05AllowsKnownNumbersWithUnitsAndIgnoresHexFragments() {
+        assertThat(check(ai("FAIL", "ICE_FAILURE", List.of("EV02"),
+                "Thiết lập 1505ms, MOS 4,35; mạng 4G, codec H264, cuộc 2D9057AA-C496-48B2-946A, mã 428.")).status())
+                .isEqualTo(Status.PASSED);
+        assertThat(Guardrails.numbers("250ms 45S 1,5s 20MB 48B2 5D 12DB 4G"))
+                .containsExactly(new BigDecimal("250"), new BigDecimal("45"), new BigDecimal("1.5"), new BigDecimal("20"));
+    }
+
+    @Test
     @DisplayName("G05 — mã chỉ số có trong bảng hợp lệ; mã lạ ({MOS_CALLEE} khi bảng không có) -> REJECTED")
     void g05ChecksMetricCodes() {
         assertThat(check(ai("FAIL", "ICE_FAILURE", List.of("EV01"),

@@ -22,11 +22,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Chat API qua HTTP multipart (MVP mục 6.1 T2), AI giả "chưa cấu hình" → report degraded. */
 class AnalyzeControllerTest {
 
+    private static final int MAX_FILES = 10;
+
     private MockMvc mvc(DataSize maxFileSize) {
-        ChatAnalysisService chat = ChatPipelineFixture.chat(new ChatPipelineFixture.RecordingSource(), ctx -> {
+        return mvc(maxFileSize, MAX_FILES, new ChatPipelineFixture.RecordingSource());
+    }
+
+    private MockMvc mvc(DataSize maxFileSize, int maxFiles, ChatPipelineFixture.RecordingSource source) {
+        ChatAnalysisService chat = ChatPipelineFixture.chat(source, ctx -> {
             throw new AiUnavailableException(AiUnavailableException.Reason.NOT_CONFIGURED, "test");
         }, maxFileSize);
-        return MockMvcBuilders.standaloneSetup(new AnalyzeController(chat, new CallFolderReader(maxFileSize))).build();
+        return MockMvcBuilders.standaloneSetup(
+                new AnalyzeController(chat, new CallFolderReader(maxFileSize), maxFiles)).build();
     }
 
     private static MockMultipartFile endCallLog(String name, String role) {
@@ -84,6 +91,29 @@ class AnalyzeControllerTest {
     }
 
     @Test
+    @DisplayName("quá số file mỗi request -> 400 TOO_MANY_FILES, không chạy pipeline; đúng giới hạn thì vẫn phân tích")
+    void tooManyFilesIsRejectedBeforeAnalysis() throws Exception {
+        ChatPipelineFixture.RecordingSource source = new ChatPipelineFixture.RecordingSource();
+        mvc(DataSize.ofMegabytes(20), 2, source).perform(multipart("/api/analyze")
+                        .file(endCallLog("caller_endcall.log", "caller"))
+                        .file(endCallLog("callee_endcall.log", "callee"))
+                        .file(endCallLog("caller_endcall_2.log", "caller"))
+                        .param("message", "Phân tích cuộc gọi này giúp mình"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value(AnalyzeController.TOO_MANY_FILES))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("tối đa 2 file")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("có 3 file")));
+        assertThat(source.queried).isEmpty();
+
+        mvc(DataSize.ofMegabytes(20), 2, source).perform(multipart("/api/analyze")
+                        .file(endCallLog("caller_endcall.log", "caller"))
+                        .file(endCallLog("callee_endcall.log", "callee"))
+                        .param("message", "Phân tích cuộc gọi này giúp mình"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("REPORT"));
+    }
+
+    @Test
     @DisplayName("bố cục cho Web UI lấy từ chính ReportRenderer: đúng nhãn và thứ tự mẫu 4.5")
     void reportLayoutComesFromRenderer() throws Exception {
         mvc(DataSize.ofMegabytes(20)).perform(get("/api/report-layout"))
@@ -93,7 +123,8 @@ class AnalyzeControllerTest {
                 .andExpect(jsonPath("$.header[4]").value("Tóm tắt"))
                 .andExpect(jsonPath("$.sections[0]").value("Evidence chính"))
                 .andExpect(jsonPath("$.sections[4]").value("Giới hạn dữ liệu"))
-                .andExpect(jsonPath("$.maxBytesPerFile").value(20 * 1024 * 1024));
+                .andExpect(jsonPath("$.maxBytesPerFile").value(20 * 1024 * 1024))
+                .andExpect(jsonPath("$.maxFilesPerRequest").value(MAX_FILES));
     }
 
     @Test

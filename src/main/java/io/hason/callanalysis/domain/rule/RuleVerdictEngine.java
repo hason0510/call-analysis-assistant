@@ -231,44 +231,36 @@ public class RuleVerdictEngine {
     /**
      * Căn cứ đo được của cờ chất lượng, in ở dòng "Chính" thay cho định nghĩa chung của taxonomy.
      *
-     * Định nghĩa NETWORK_PACKET_LOSS khẳng định "mất gói đủ làm giảm chất lượng thoại", nhưng
-     * rule chỉ kiểm có mẫu vượt ngưỡng, không kiểm hậu quả. Vì vậy nêu cả bằng chứng ủng hộ lẫn
-     * phản bác. Không có số liệu theo leg (chỉ xảy ra khi gọi thẳng engine) thì trả null để report
-     * quay về định nghĩa.
+     * Cờ bật theo mất gói CẢ CUỘC ({@link LegQuality#degraded()}); câu nêu đúng con số đó và ngưỡng, in từ chính hằng số
+     * để không lệch với điều kiện bật cờ. Phần "Đối chiếu" giữ các số đo theo mẫu — mẫu mất gói > 5 %, MOS thấp nhất,
+     * hasMediaPoor — để người đọc tự cân, vì rule chỉ kiểm mất gói, không kiểm hậu quả với người nghe. Không có số liệu
+     * theo leg (chỉ xảy ra khi gọi thẳng engine) thì trả null để report quay về định nghĩa.
      */
     private static String qualityBasis(List<LegQuality> legs) {
-        List<String> signs = new ArrayList<>();
-        for (LegQuality q : legs) {
-            if (!q.degraded()) {
-                continue;
-            }
-            List<String> parts = new ArrayList<>();
-            if (q.lossOverThreshold() > 0) {
-                parts.add(q.lossOverThreshold() + "/" + q.samples() + " mẫu stats mất gói > "
-                        + plain(SignalExtractor.LOSS_THRESHOLD_PERCENT) + " % (cao nhất "
-                        + plain(q.maxLoss().setScale(2, RoundingMode.HALF_UP)) + " %)");
-            }
-            if (q.mosBelowThreshold() > 0) {
-                parts.add(q.mosBelowThreshold() + "/" + q.samples() + " mẫu MOS < "
-                        + plain(SignalExtractor.MOS_THRESHOLD));
-            }
-            if (q.mediaPoor() > 0) {
-                parts.add(q.mediaPoor() + " mẫu app bật hasMediaPoor");
-            }
-            signs.add(q.leg().name().toLowerCase() + " có " + String.join(", ", parts));
-        }
+        List<String> signs = legs.stream().filter(LegQuality::degraded)
+                .map(q -> q.leg().name().toLowerCase() + " mất gói cả cuộc "
+                        + plain(q.wholeCallLoss().setScale(2, RoundingMode.HALF_UP)) + " %")
+                .toList();
         if (signs.isEmpty()) {
             return null;
         }
         List<String> counter = new ArrayList<>();
+        for (LegQuality q : legs) {
+            if (q.lossOverThreshold() > 0) {
+                counter.add(q.leg().name().toLowerCase() + " có " + q.lossOverThreshold() + "/" + q.samples()
+                        + " mẫu stats mất gói > " + plain(SignalExtractor.LOSS_THRESHOLD_PERCENT) + " % (cao nhất "
+                        + plain(q.maxLoss().setScale(2, RoundingMode.HALF_UP)) + " %)");
+            }
+        }
         legs.stream().filter(q -> q.minMos() != null)
                 .min(Comparator.comparing(LegQuality::minMos))
                 .ifPresent(q -> counter.add("MOS thấp nhất " + plain(q.minMos())
                         + " (" + q.leg().name().toLowerCase() + ")"));
-        if (legs.stream().allMatch(q -> q.mediaPoor() == 0)) {
-            counter.add("app không bật hasMediaPoor ở mẫu nào");
-        }
-        return String.join("; ", signs) + (counter.isEmpty() ? "" : ". Đối chiếu: " + String.join(", ", counter));
+        int mediaPoor = legs.stream().mapToInt(LegQuality::mediaPoor).sum();
+        counter.add(mediaPoor == 0 ? "app không bật hasMediaPoor ở mẫu nào"
+                : "app bật hasMediaPoor ở " + mediaPoor + " mẫu");
+        return String.join("; ", signs) + " (ngưỡng: mất gói cả cuộc từ "
+                + plain(LegQuality.WHOLE_CALL_LOSS_POOR_PERCENT) + " %). Đối chiếu: " + String.join(", ", counter);
     }
 
     /**
@@ -344,8 +336,8 @@ public class RuleVerdictEngine {
 
     private static List<String> withUnvalidatedThresholdNote(List<String> limitations) {
         List<String> all = new ArrayList<>(limitations);
-        all.add("Ngưỡng phát hiện chất lượng kém CHƯA kiểm chứng được:"
-                + " tập data có nhãn không có cuộc gọi nào bị suy giảm chất lượng");
+        all.add("Ngưỡng mất gói (cả cuộc từ " + plain(LegQuality.WHOLE_CALL_LOSS_POOR_PERCENT) + " %, theo mentor)"
+                + " CHƯA kiểm chứng được: tập data có nhãn không có cuộc gọi nào bị suy giảm chất lượng");
         return all;
     }
 

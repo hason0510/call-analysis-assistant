@@ -150,7 +150,7 @@ public final class SensitiveValues {
 
     /**
      * Địa chỉ IPv6 unicast toàn cầu (2000::/3) đúng cú pháp RFC 4291: 8 nhóm 1-4 chữ số hex, hoặc ít nhóm hơn với
-     * đúng một "::". Dạng nhúng IPv4 ({@code ::ffff:1.2.3.4}) không tính — phần IPv4 đã có bộ đọc IPv4 bắt.
+     * đúng một "::". Dạng nhúng IPv4 ({@code ::ffff:192.0.2.4}) không tính — phần IPv4 đã có bộ đọc IPv4 bắt.
      */
     static boolean isGlobalIpv6(String s) {
         int gap = s.indexOf("::");
@@ -209,6 +209,19 @@ public final class SensitiveValues {
         }
     }
 
+    /**
+     * Giá trị nhạy cảm trong một đoạn văn bản tự do, theo loại ({@code ip}, {@code secret}, {@code contact}) — cùng bộ
+     * nhận diện dùng cho dòng log và câu hỏi. Cổng chặn trước khi gửi AI ({@code OutboundGate}) dùng lại hàm này để
+     * không phụ thuộc regex của Sanitizer.
+     */
+    public static Map<String, Set<String>> inFreeText(String text) {
+        Map<String, Set<String>> found = new TreeMap<>();
+        if (text != null) {
+            text.lines().forEach(line -> collectFromFreeText(line, found));
+        }
+        return found;
+    }
+
     /** Số giá trị gốc khác nhau (đếm theo loại — cùng chuỗi ở hai loại tính hai). */
     public int count() {
         return byKind.values().stream().mapToInt(Set::size).sum();
@@ -244,7 +257,7 @@ public final class SensitiveValues {
         return false;
     }
 
-    /** Chữ hoặc số liền kề thì không phải ranh giới — "1.2.3.4" không khớp bên trong "1.2.3.45". */
+    /** Chữ hoặc số liền kề thì không phải ranh giới — "192.0.2.4" không khớp bên trong "192.0.2.45". */
     private static boolean isWordChar(char c) {
         return Character.isLetterOrDigit(c);
     }

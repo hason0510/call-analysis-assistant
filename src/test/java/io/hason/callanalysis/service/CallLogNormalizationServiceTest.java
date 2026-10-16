@@ -273,20 +273,21 @@ class CallLogNormalizationServiceTest {
     }
 
     @Test
-    @DisplayName("cờ chất lượng trích bản ghi mất gói NẶNG NHẤT, không phải bản ghi cuối đã hồi về 0% (271D1FAF)")
-    void qualityBasisIsWorstRecordNotLast() {
+    @DisplayName("căn cứ cờ mất gói là mẫu mang bộ đếm cộng dồn (mất gói cả cuộc), không phải mẫu tăng vọt nhất")
+    void qualityBasisIsTheCountersRecord() {
         List<io.hason.callanalysis.domain.event.CanonicalEvent> basis = basisFrom(Map.of("caller_endcall.log", List.of(
                 "#H1\t#ts\t#tag\tcallId\trole\tplatform",
                 "1\t1789700842905\tinfo\tCALL-1\tcaller\tios",
-                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
-                "6\t1789700850000\tstats\t0\t4.4\t100",
-                "6\t1789700851000\tstats\t7.5\t4.1\t150",
-                "6\t1789700852000\tstats\t12.0\t3.9\t190",
-                "6\t1789700853000\tstats\t0\t4.3\t240")));
+                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived\taudio.packetsLost",
+                "6\t1789700850000\tstats\t0\t4.4\t100\t0",
+                "6\t1789700851000\tstats\t7.5\t4.1\t150\t10",
+                "6\t1789700852000\tstats\t12.0\t3.9\t190\t20",
+                "6\t1789700853000\tstats\t0\t4.3\t240\t20")));
 
+        // 20 ÷ (20 + 240) = 7,69 % cả cuộc -> bật cờ; căn cứ là mẫu cuối (240 gói nhận), không phải mẫu 12 %
         assertThat(basis).singleElement().satisfies(e -> {
-            assertThat(e.attribute("audio.packetLostPercent")).isEqualTo("12.0");
-            assertThat(e.sourceRef().lineNumber()).isEqualTo(6);
+            assertThat(e.attribute("audio.packetsReceived")).isEqualTo("240");
+            assertThat(e.sourceRef().lineNumber()).isEqualTo(7);
         });
     }
 
@@ -476,28 +477,46 @@ class CallLogNormalizationServiceTest {
     }
 
     @Test
-    @DisplayName("căn cứ cờ chất lượng đếm trên chuỗi stats bằng CÙNG ngưỡng bật cờ, không đếm trùng bản ghi summary")
+    @DisplayName("mất gói cả cuộc tính từ bộ đếm cộng dồn; đếm mẫu > 5 % trên chuỗi stats, không đếm trùng bản ghi summary")
     void qualityBasisCountsStatsWithFlagThresholds() {
         // 4 mẫu stats (2 mẫu mất gói > 5 %) + summary trùng mẫu cuối: phải ra 2/4, không phải 2/5
         RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
                 "#H1\t#ts\t#tag\tcallId\trole\tplatform",
                 "1\t1789700842905\tinfo\tCALL-1\tcaller\tios",
-                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
-                "#H8\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived",
-                "6\t1789700850000\tstats\t0\t4.4\t100",
-                "6\t1789700851000\tstats\t7.5\t4.1\t150",
-                "6\t1789700852000\tstats\t12.0\t3.9\t190",
-                "6\t1789700853000\tstats\t0\t4.3\t240",
-                "8\t1789700853001\tendcall\t0\t4.3\t240")));
+                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived\taudio.packetsLost",
+                "#H8\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived\taudio.packetsLost",
+                "6\t1789700850000\tstats\t0\t4.4\t100\t0",
+                "6\t1789700851000\tstats\t7.5\t4.1\t150\t10",
+                "6\t1789700852000\tstats\t12.0\t3.9\t190\t20",
+                "6\t1789700853000\tstats\t0\t4.3\t240\t20",
+                "8\t1789700853001\tendcall\t0\t4.3\t240\t20")));
 
         assertThat(s.qualityDegraded()).isTrue();
         assertThat(s.qualityByLeg()).singleElement().satisfies(q -> {
             assertThat(q.samples()).isEqualTo(4);
+            assertThat(q.wholeCallLoss()).isEqualByComparingTo("7.6923");
             assertThat(q.lossOverThreshold()).isEqualTo(2);
             assertThat(q.maxLoss()).isEqualByComparingTo("12.0");
             assertThat(q.minMos()).isEqualByComparingTo("3.9");
-            assertThat(q.mosBelowThreshold()).isZero();
             assertThat(q.mediaPoor()).isZero();
+        });
+    }
+
+    @Test
+    @DisplayName("mẫu mất gói tăng vọt nhưng cả cuộc dưới 5 % -> không bật cờ (271D1FAF: 18/80 mẫu > 5 %, cả cuộc 1,83 %)")
+    void transientLossDoesNotFlag() {
+        RuleSignals s = signalsFrom(Map.of("caller_endcall.log", List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "1\t1789700842905\tinfo\tCALL-1\tcaller\tios",
+                "#H6\t#ts\t#tag\taudio.packetLostPercent\taudio.audioMos\taudio.packetsReceived\taudio.packetsLost\ttransport.hasMediaPoor",
+                "6\t1789700850000\tstats\t11.3\t3.2\t1000\t10\t1",
+                "6\t1789700851000\tstats\t0\t4.3\t3970\t74\t0")));
+
+        assertThat(s.qualityDegraded()).isFalse();
+        assertThat(s.qualityByLeg()).singleElement().satisfies(q -> {
+            assertThat(q.wholeCallLoss()).isEqualByComparingTo("1.8299");
+            assertThat(q.lossOverThreshold()).isEqualTo(1);
+            assertThat(q.mediaPoor()).isEqualTo(1);
         });
     }
 

@@ -23,7 +23,7 @@ class SensitiveValuesTest {
                 "#H1\t#ts\t#tag\tappUserId\tdeviceId",
                 "1\t1789700842905\tinfo\tUENDCALLUSER9\tDEV-ABCDEF12"));
         AttachedFile webrtc = AttachedFile.of("caller_webrtc.log", List.of(
-                "[001:002][10] connect deviceId=DEVICE0099 to 113.161.42.7:3478",
+                "[001:002][10] connect deviceId=DEVICE0099 to 203.0.113.7:3478",
                 "a=ice-pwd:Zx9Pq2Lm7Vb4Nc1Rt8Yw3Ke",
                 "a=fingerprint:sha-256 AB:CD:EF:01:23:45:67:89",
                 "bind 0.0.0.0 and 127.0.0.1 and 10.1.2.3"));
@@ -36,7 +36,7 @@ class SensitiveValuesTest {
                 .isEqualTo(Map.of("userId", 1, "deviceId", 2));
         assertThat(v.foundIn("Zx9Pq2Lm7Vb4Nc1Rt8Yw3Ke AB:CD:EF:01:23:45:67:89"))
                 .isEqualTo(Map.of("ice-pwd", 1, "fingerprint", 1));
-        assertThat(v.foundIn("113.161.42.7 và 10.1.2.3")).isEqualTo(Map.of("ip", 2));
+        assertThat(v.foundIn("203.0.113.7 và 10.1.2.3")).isEqualTo(Map.of("ip", 2));
         // 0.0.0.0, 127.0.0.1 không định danh ai: không gom
         assertThat(v.foundIn("0.0.0.0 127.0.0.1")).isEmpty();
     }
@@ -45,10 +45,10 @@ class SensitiveValuesTest {
     @DisplayName("so theo ranh giới chữ / số: chuỗi con của chuỗi dài hơn không tính là lộ")
     void tokenBoundary() {
         SensitiveValues v = SensitiveValues.collect(List.of(AttachedFile.of("x.log", List.of(
-                "peer 1.2.3.4 csid=AB12CD34"))), List.of());
+                "peer 192.0.2.4 csid=AB12CD34"))), List.of());
 
-        assertThat(v.foundIn("1.2.3.45 và XAB12CD34")).isEmpty();
-        assertThat(v.foundIn("(1.2.3.4) [AB12CD34]")).isEqualTo(Map.of("ip", 1, "session", 1));
+        assertThat(v.foundIn("192.0.2.45 và XAB12CD34")).isEmpty();
+        assertThat(v.foundIn("(192.0.2.4) [AB12CD34]")).isEqualTo(Map.of("ip", 1, "session", 1));
     }
 
     @Test
@@ -114,11 +114,11 @@ class SensitiveValuesTest {
     @DisplayName("giá trị nhạy cảm trong CÂU HỎI được tính, và không làm mất giá trị của log")
     void questionValues() {
         SensitiveValues fromLog = SensitiveValues.collect(List.of(AttachedFile.of("x.log", List.of(
-                "peer 113.161.42.7"))), List.of());
+                "peer 203.0.113.7"))), List.of());
 
         SensitiveValues v = fromLog.withQuestion("Máy 0912345678 gọi lỗi, token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl, IP 198.51.100.23");
 
-        assertThat(v.foundIn("0912345678 eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl 198.51.100.23 113.161.42.7"))
+        assertThat(v.foundIn("0912345678 eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl 198.51.100.23 203.0.113.7"))
                 .isEqualTo(Map.of("contact", 1, "secret", 1, "ip", 2));
         assertThat(fromLog.count()).isEqualTo(1);                                       // bản gốc không đổi
     }

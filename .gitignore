@@ -15,33 +15,24 @@ ai20k_sample/
 # Môi trường
 .env
 
-# Ghi chú làm việc cá nhân — không đưa vào repo
-*.md
+# Ghi chú làm việc cá nhân — không đưa vào repo. Liệt kê từng loại thay cho chặn cả "*.md" kèm danh sách ngoại lệ
+# (góp ý mentor Sprint 2): tài liệu mới trong docs/ được commit bình thường, không phải nhớ thêm dòng "!docs/…".
+CLAUDE.md
 .claude/
-
-# Ngoại trừ: DELIVERABLE của Sprint 1 (MVP mục 5.3), mentor phải đọc được
-!README.md
-!docs/architecture-v1.md
-!docs/ai-provider-proposal.md
-!docs/design-decisions.md
-!docs/demo-sprint-1.md
-# Tài liệu Sprint 2 (MVP mục 6.6): minh chứng, cách đo, kịch bản và kết quả demo
-!docs/minh-chung-sprint-2.md
-!docs/evaluation-metrics.md
-!docs/demo-sprint-2.md
-!docs/ket-qua-demo-sprint-2.md
-# Tài liệu Sprint 3 (MVP mục 7.4): bàn giao, Security Evaluation Report, phân tích lỗi T1, số đo mốc
-!docs/runbook.md
-!docs/architecture-security-design.md
-!docs/bao-cao-bao-mat.md
-!docs/phan-tich-loi-dev.md
-!docs/moc-sprint-3.md
-!docs/demo-sprint-3.md
-!docs/final-evaluation-report.md
-!docs/minh-chung-sprint-3.md
+docs/sprint-*-plan.md
+docs/sprint-*-tien-do.md
+docs/thu-tu-commit-*.md
+docs/*.patch
+docs/cau-hoi-mentor.md
+docs/acceptance-criteria.md
 docs/kiem-thu-tay.md
+docs/kiem-tra-nop-sprint-*.md
 docs/ket-qua-demo-sprint-1.md
+# Kết quả chạy trên for_test/ của mentor — có trích log mẫu
 docs/ket-qua-for-test.md
+
+# Kết quả Evaluation Runner (.md + .json từng lần chạy) — số chính thức chép vào docs/final-evaluation-report.md
+benchmark/results/
 
 # Ảnh chụp / file tạm của Playwright khi kiểm Web UI — có thể chứa log mẫu
 .playwright-mcp/

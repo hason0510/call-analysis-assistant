@@ -6,6 +6,7 @@ import io.hason.callanalysis.infrastructure.file.CallFolderReader;
 import io.hason.callanalysis.service.ChatAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,25 +36,49 @@ public class AnalyzeController {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyzeController.class);
 
+    static final String TOO_MANY_FILES = "TOO_MANY_FILES";
+
     private final ChatAnalysisService chat;
     private final long maxBytesPerFile;
+    private final int maxFilesPerRequest;
 
-    public AnalyzeController(ChatAnalysisService chat, CallFolderReader reader) {
+    public AnalyzeController(ChatAnalysisService chat, CallFolderReader reader,
+                             @Value("${call-analysis.files.max-files-per-request:10}") int maxFilesPerRequest) {
         this.chat = chat;
         this.maxBytesPerFile = reader.maxBytesPerFile();
+        this.maxFilesPerRequest = maxFilesPerRequest;
     }
 
     @PostMapping(path = "/api/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ChatAnalysisService.Response> analyze(
+    public ResponseEntity<?> analyze(
             @RequestParam(name = "message", required = false) String message,
             @RequestParam(name = "files", required = false) List<MultipartFile> files) {
-        List<AttachedFile> attached = files == null ? List.of()
-                : files.stream().filter(AnalyzeController::isRealFile).map(this::toAttached).toList();
+        List<MultipartFile> real = files == null ? List.of()
+                : files.stream().filter(AnalyzeController::isRealFile).toList();
+        if (real.size() > maxFilesPerRequest) {
+            return tooManyFiles(real.size());
+        }
+        List<AttachedFile> attached = real.stream().map(this::toAttached).toList();
         ChatAnalysisService.Response response = chat.handle(message, attached);
         HttpStatus status = response.type() == ChatAnalysisService.Type.INVALID_REQUEST
                 ? HttpStatus.BAD_REQUEST : HttpStatus.OK;
         return ResponseEntity.status(status).body(response);
+    }
+
+    /**
+     * Quá số file cho phép: từ chối cả request TRƯỚC khi đọc nội dung file và trước lời gọi AI phân loại câu hỏi, nên
+     * request kiểu này không tốn bộ nhớ hay tiền AI. Một cuộc gọi thường có 4 file; leg có nhiều thiết bị thì thêm 2 file
+     * mỗi máy (dataset mới: 6 file), nên giới hạn mặc định 10 vẫn dư. Không có report nên không ghi bản ghi Kibana; dòng
+     * log dưới đây là dấu vết duy nhất.
+     */
+    private ResponseEntity<Map<String, String>> tooManyFiles(int count) {
+        log.atWarn().addKeyValue("result_status", TOO_MANY_FILES).addKeyValue("files", count)
+                .addKeyValue("max_files", maxFilesPerRequest).log("Request rejected");
+        return ResponseEntity.badRequest().body(Map.of("type", TOO_MANY_FILES, "message",
+                "Mỗi lần phân tích nhận tối đa " + maxFilesPerRequest + " file, yêu cầu này có " + count
+                        + " file. Một cuộc gọi thường có 4 file (end call log và WebRTC log của caller và callee):"
+                        + " bỏ bớt file rồi gửi lại."));
     }
 
     /**
@@ -75,7 +100,8 @@ public class AnalyzeController {
                 "title", ReportRenderer.TITLE.substring(2),
                 "header", ReportRenderer.HEADER,
                 "sections", ReportRenderer.SECTIONS.stream().map(s -> s.substring(3)).toList(),
-                "maxBytesPerFile", maxBytesPerFile);
+                "maxBytesPerFile", maxBytesPerFile,
+                "maxFilesPerRequest", maxFilesPerRequest);
     }
 
     /** File quá giới hạn KHÔNG được đọc nội dung: File Validator loại và nêu tên (MVP mục 6.4, F04). */

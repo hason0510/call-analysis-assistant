@@ -28,6 +28,9 @@ logging:
 call-analysis:
   files:
     max-size-per-file: 20MB
+    # Số file tối đa mỗi request của Chat API (góp ý mentor Sprint 2). Một cuộc gọi thường có 4 file; leg nhiều thiết
+    # bị thêm 2 file mỗi máy (dataset mới: 6). Quá giới hạn thì từ chối trước khi đọc file và trước lời gọi AI.
+    max-files-per-request: 10
 
 # File .env (springboot3-dotenv). Chép giá trị sang System properties vì SanitizerHolder đọc
 # CALL_ANALYSIS_PSEUDONYM_KEY bằng System.getProperty, không qua Spring: Logback dùng sanitizer

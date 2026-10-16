@@ -136,36 +136,30 @@ categories:
     definition: >-
       Cuộc gọi thiết lập và chạy được nhưng mất gói đủ làm giảm chất lượng thoại.
     symptoms:
-      - "audio.packetLostPercent vượt ngưỡng ở các mẫu stats giữa cuộc gọi"
-      - "audio.audioMos tụt"
-      - "transport.hasMediaPoor = 1"
+      - "mất gói cả cuộc (audio.packetsLost ÷ (packetsLost + packetsReceived)) từ 5 % trở lên"
+      - "audio.audioMos tụt, transport.hasMediaPoor = 1 (đối chiếu, không tự bật cờ)"
     requiredEvidence:
       - source: ENDCALL
-        field: audio.packetLostPercent
+        field: audio.packetsLost
       - source: ENDCALL
-        field: audio.audioMos
-    # Mô tả ĐÚNG điều rule đang kiểm (SignalExtractor.degradedRecords): chỉ cần MỘT mẫu vượt
-    # ngưỡng. Chưa yêu cầu "kéo dài N mẫu liên tiếp" vì không có dữ liệu để chọn N: không leg
-    # thành công nào có loss > 5 %, chuỗi dài nhất toàn data là 2 mẫu ở 271D1FAF (for_test/,
-    # không dùng để hiệu chỉnh). Bỏ transport.countMediaPoor: > 0 duy nhất ở callee 2D9057AA,
-    # leg KHÔNG có media (ICE failed) — đó là dấu hiệu mất media, không phải mất gói.
+        field: audio.packetsReceived
+    # Mô tả ĐÚNG điều rule đang kiểm (LegQuality.degraded): mất gói CẢ CUỘC từ 5 % — ngưỡng mentor đưa 2026-10-15
+    # ("packet loss < 5 %, jitter < 30 ms là ổn định"), chủ repo chốt hiểu là cả cuộc. Trước đó cờ bật khi MỘT mẫu stats
+    # > 5 %, MOS < 3,5 hoặc hasMediaPoor = 1: nhạy với mất gói thoáng qua (271D1FAF: 18/80 mẫu > 5 % nhưng cả cuộc
+    # 1,83 %). Bảng độ nhạy: scripts/quality-thresholds/sensitivity.py.
     detectionConditions:
-      - "ít nhất một mẫu stats có audio.packetLostPercent > 5.0"
-      - "audio.audioMos < 3.5 (bỏ qua MOS = 0 của leg chưa có media)"
-      - "transport.hasMediaPoor = 1"
+      - "một leg có mất gói cả cuộc (audio.packetsLost ÷ (packetsLost + packetsReceived)) ≥ 5 %"
     knownAmbiguity: >-
-      Mất gói thoáng qua là bình thường. Phải xét CHUỖI bản ghi stats chứ không chỉ đọc
-      bản ghi summary (endcall) cuối cùng, vì summary chỉ chụp lúc kết thúc.
-    # Ví dụ trên data: DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi.
+      Mất gói thoáng qua là bình thường: cờ dựa trên mất gói cả cuộc nên một đợt ngắn không bật cờ (đợt đó vẫn được
+      nêu ở phần đối chiếu). audio.packetLostPercent là tỉ lệ TRONG KHOẢNG giữa hai lần đo, không phải của cả cuộc.
+    # Ví dụ trên data: DE7DD314 có loss cuối = 0 nhưng từng lên 2,0% giữa cuộc gọi; cả cuộc 0,03 %.
     # Để ở comment chứ không ở knownAmbiguity/calibration.evidence: category UNVALIDATED
     # thì ReportBuilder in calibration.evidence vào limitations của MỌI report thuộc category.
     calibration:
       status: UNVALIDATED
       evidence: >-
-        KHÔNG có ca mẫu chất lượng kém trong tập có nhãn. Đường nền đo được trên 844 mẫu stats của 6 leg thuộc success/:
-        loss cao nhất 3,704%, MOS thấp nhất 4,335.
-        Ngưỡng cảnh báo vì vậy phải đặt CAO HƠN 3,7% và MOS THẤP HƠN 4,3,
-        nếu không sẽ gắn cờ nhầm cho cuộc gọi tốt. Con số 5.0 / 3.5 là phỏng đoán.
+        KHÔNG có ca mẫu chất lượng kém trong tập có nhãn. Ngưỡng 5 % mất gói cả cuộc do mentor đưa (2026-10-15).
+        Đường nền trên 6 leg có âm thanh thuộc success/: mất gói cả cuộc cao nhất 0,11 %, không leg nào chạm ngưỡng.
 
   - id: NETWORK_DELAY_JITTER
     definition: >-

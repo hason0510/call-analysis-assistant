@@ -2,6 +2,7 @@ package io.hason.callanalysis.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hason.callanalysis.domain.ai.AiContext;
+import io.hason.callanalysis.domain.ai.AiContextText;
 import io.hason.callanalysis.infrastructure.ai.OpenAiAnalyzer;
 import io.hason.callanalysis.infrastructure.file.CallFolderReader;
 import io.hason.callanalysis.service.AnalyzeCallService;
@@ -84,8 +85,13 @@ public class AiContextCommand implements ApplicationRunner {
     private void printOne(Path folder, String question) throws IOException {
         AiContext ai = build(folder, question);
         log.info("Câu hỏi (đã làm sạch): {}", ai.question());
-        log.info("Context gửi AI:\n{}", mapper.writerWithDefaultPrettyPrinter().writeValueAsString(ai.payload()));
-        log.info("Độ dài phần dữ liệu gửi đi (JSON gọn): {} ký tự", openAi.userMessage(ai).length());
+        if (openAi.format() == OpenAiAnalyzer.ContextFormat.TEXT) {
+            log.info("Context gửi AI (văn bản, ai.context-format=text):\n{}", AiContextText.render(ai.payload()));
+        } else {
+            log.info("Context gửi AI:\n{}", mapper.writerWithDefaultPrettyPrinter().writeValueAsString(ai.payload()));
+        }
+        log.info("Độ dài tin nhắn gửi đi ({}): {} ký tự", openAi.format() == OpenAiAnalyzer.ContextFormat.TEXT
+                ? "văn bản" : "JSON gọn", openAi.userMessage(ai).length());
         log.info("Đã thay theo inventory: {}", ai.redactions().isEmpty() ? "không có gì" : ai.redactions());
     }
 

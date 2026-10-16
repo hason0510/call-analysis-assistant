@@ -139,8 +139,8 @@ class SensitiveDataSanitizerTest {
     @Test
     @DisplayName("S05 — IP client (v4, v6, đã che dở) bị che; TURN server chỉ đổi địa chỉ, giữ cổng 3478")
     void s05IpAddressesAreMasked() {
-        String out = clean("Net[wlan0:192.168.26.x/24] 203.0.113.7 2001:db8:456:a046:1:2:3:4 2402:800:75d9:x:x:x:x:x "
-                + "22.202.73.x -Remote[198.51.100.10:3478/udp]");
+        String out = clean("Net[wlan0:192.168.26.x/24] 203.0.113.7 2001:db8:456:a046:1:2:3:4 2001:db8:75d9:x:x:x:x:x "
+                + "198.51.100.x -Remote[198.51.100.10:3478/udp]");
 
         assertThat(out).doesNotContain("203.0.113.7").doesNotContain("2001:db8").doesNotContain("2402:800")
                 .doesNotContain("192.168").doesNotContain("22.202.73").doesNotContain("198.51.100.10")

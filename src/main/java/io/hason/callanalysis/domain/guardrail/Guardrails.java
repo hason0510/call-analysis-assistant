@@ -33,11 +33,18 @@ import java.util.regex.Pattern;
 public class Guardrails {
 
     /**
-     * Một con số đứng riêng: không dính chữ hay số phía trước/sau, nên bỏ qua "EV02", "2D9057AA",
-     * "H264". Dấu phẩy thập phân kiểu Việt ("3,5") được chấp nhận.
+     * Đơn vị được phép viết liền sau số ("250ms", "45s", "20MB"). Trước đây số dính chữ phía sau bị bỏ qua hết, nên
+     * "250ms" lọt G05 (góp ý mentor Sprint 2). Chỉ nhận đơn vị có ít nhất một chữ cái KHÔNG thuộc hệ hex, để mảnh
+     * Call-ID / UUID như "48B2", "5D", "12DB" không bị đọc thành số + đơn vị.
+     */
+    private static final String UNIT = "(?i:kbps|mbps|bps|khz|hz|fps|min|sec|ms|kb|mb|gb|s|h)";
+
+    /**
+     * Một con số đứng riêng: phía trước không dính chữ hay số, phía sau là hết từ hoặc một {@link #UNIT}; nên bỏ qua
+     * "EV02", "2D9057AA", "H264", "4G". Dấu phẩy thập phân kiểu Việt ("3,5") được chấp nhận. Nhóm 1 là đơn vị nếu có.
      */
     private static final Pattern NUMBER =
-            Pattern.compile("(?<![\\p{L}\\d.,])\\d+(?:[.,]\\d+)?(?![\\p{L}\\d])");
+            Pattern.compile("(?<![\\p{L}\\d.,])\\d+(?:[.,]\\d+)?(?=(" + UNIT + ")?(?![\\p{L}\\d]))");
 
     /**
      * @param knownEvidenceIds ID evidence mà Evidence Engine đã cấp cho cuộc gọi này
@@ -151,7 +158,7 @@ public class Guardrails {
             Matcher m = NUMBER.matcher(text);
             while (m.find()) {
                 if (!allowed.contains(toNumber(m.group()))) {
-                    unsupported.add(m.group());
+                    unsupported.add(m.group(1) == null ? m.group() : m.group() + m.group(1));
                 }
             }
         }
