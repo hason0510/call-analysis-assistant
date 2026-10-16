@@ -37,7 +37,7 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_sample"
   ```
 
-**1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8080/, rồi làm theo 6 scenario của Final Demo trong
+**1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8081/, rồi làm theo 6 scenario của Final Demo trong
 [`docs/demo-sprint-3.md`](docs/demo-sprint-3.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì; kết quả chạy thật
 2026-10-12 ghi dưới từng scenario):
 
@@ -47,7 +47,7 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **533 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **534 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -55,7 +55,8 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 |---|---|---|
 | Mọi report ra `UNKNOWN`, giới hạn dữ liệu ghi *"Không truy vấn được signaling"* | Elasticsearch chưa bật hoặc chưa nạp | `docker compose up -d elasticsearch`, chạy lại lệnh nạp |
 | `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như lệnh mẫu |
-| Web không mở được, cổng 8080 đang bị chiếm | Chương trình khác dùng cổng 8080 | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"`, mở http://localhost:8089/ |
+| Web không mở được, cổng 8081 đang bị chiếm | Chương trình khác dùng cổng 8081 | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"`, mở http://localhost:8089/ |
+| Mở web từ máy khác không được | Server chỉ nghe ở `127.0.0.1` (Chat API không có đăng nhập, mỗi request tốn tiền AI) | Thêm `"-Dspring-boot.run.arguments=--server.address=0.0.0.0"`; khi đó ai trong mạng cũng gọi được |
 | Banner vàng *"Report dựng từ rule vì AI không dùng được"* | Chưa có key, AI lỗi, hoặc OpenAI trả 429 — banner ghi rõ lý do, ví dụ *"giới hạn tốc độ gọi"* hay *"hết hạn mức"* | Đúng thiết kế (fallback). Giới hạn tốc độ: thử lại sau ít phút; hết hạn mức: nạp thêm; chưa có key: điền key |
 | Report hoặc câu từ chối có dòng *"Câu hỏi có ký tự bị hỏng mã hoá"* | curl / dòng lệnh Windows làm hỏng chữ có dấu trước khi gửi | Gõ trên Web UI, gõ không dấu, hoặc gửi từ file UTF-8: `-F "message=<cau-hoi.txt"` |
 
@@ -90,7 +91,7 @@ curl http://localhost:9200/_cluster/health
 # 5. Chạy toàn bộ 20 cuộc gọi và đối chiếu ground truth
 ./mvnw spring-boot:run -Dspring-boot.run.arguments="--analyze-all=../ai20k_sample"
 
-# 6. Web UI + Chat API tại http://localhost:8080/
+# 6. Web UI + Chat API tại http://localhost:8081/
 ./mvnw spring-boot:run "-Dspring-boot.run.profiles=web"
 
 # 7. Evaluation Runner trên benchmark dev (lần đầu: tạo file biến thể, xem dưới)
@@ -464,6 +465,20 @@ Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12).
 signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số media không ghi chiều, cuộc rớt giữa chừng, thêm rule
 `NETWORK_DELAY_JITTER`. Kết luận trên data mẫu không đổi (13/13). Chi tiết: Final Evaluation Report mục 5.
 
+**Theo nhận xét Sprint 2 của mentor (nhận 2026-10-15):**
+
+| Mentor đề xuất | Trạng thái |
+|---|---|
+| Retry có kiểm soát cho lời gọi OpenAI | ✅ Sprint 3 T8 |
+| Profile web chỉ nghe `127.0.0.1`; giới hạn số file mỗi request | ✅ `server.address: 127.0.0.1`; tối đa 10 file (`call-analysis.files.max-files-per-request`), quá thì từ chối trước khi đọc file và gọi AI |
+| Giao diện không ghi đè file trùng tên | ✅ cùng tên mà khác file thì giữ cả hai và cảnh báo |
+| IP ví dụ theo RFC 5737; dọn `.gitignore` | ✅ IP trong tài liệu, inventory và test đổi sang `192.0.2.x` / `198.51.100.x` / `203.0.113.x` (IPv6: `2001:db8::`); `.gitignore` liệt kê từng file riêng thay cho chặn `*.md` |
+| Sửa regex G05 cho số liền đơn vị (`250ms`, `45s`), đo lại Unsupported Claim | ✅ `Guardrails` + test; đo lại `dev` ×5 (15/10): **0/310** — không còn là cận dưới |
+| Cổng fail-closed trước khi gửi AI | ✅ `OutboundGate` trong `OpenAiChatClient`, cả hai lời gọi AI; chạy không key trên 27 cuộc: 0 lần chặn nhầm |
+| Ngưỡng packet loss / jitter, bảng độ nhạy | ✅ mất gói CẢ CUỘC từ 5 % mới gắn cờ (trước: một mẫu > 5 % / MOS < 3,5 / hasMediaPoor); jitter trung bình 30 ms đã khớp sẵn. Bảng độ nhạy: `scripts/quality-thresholds/sensitivity.py`. `dev` không đổi; `271D1FAF` và 3 cuộc dataset mới hết cờ, kịch bản demo scenario 2 chuyển sang `B5F19381` |
+| T11 Sprint 2 (structured vs semi-structured) | ✅ `ai.context-format=text` (`AiContextText`), hai lượt `dev` ×5: accuracy / consistency như nhau (100%), văn bản ít hơn 7,5 % token, JSON cho evidence tốt hơn (trích đủ căn cứ 96 so với 77/115) → giữ JSON. Final Evaluation Report mục 3b |
+| Quay demo đủ 6 kịch bản trên trình duyệt; Peer Evaluation | ⬜ |
+
 ### Kết quả đo được — Sprint 3
 
 Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14, ≈ 0,32 USD.
@@ -479,7 +494,11 @@ Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần 
 | Intent Accuracy | 100% (290/290) | **100%** (320/320) | ≥ 90% |
 | Unsupported Claim — AI trước Guardrails / report cuối | 2,9% / 0% | **0% (0/309) / 0%** | 0% |
 | Pipeline Success Rate | 100% | **100%** (310/310; 1 lần OpenAI quá giờ, lùi về rule) | ≥ 95% |
-| Latency P50 / P95 | 3,8 s / 8,4 s | 3,6 s / 14,9 s — P95 do OpenAI chậm lúc đo, phần không phải AI dưới 1 s | — |
+| Latency P50 / P95 | 3,8 s / 8,4 s | 3,6 s / 14,9 s — P95 do OpenAI chậm lúc đo, phần không phải AI dưới 1 s. Lượt chạy lại cùng prompt sau đó một giờ: 3,0 s / 4,5 s, 0 fallback (Final Evaluation Report mục 2) | — |
+
+**Đo lại sau góp ý của mentor** (2026-10-15, cùng prompt, có G05 mới, cổng fail-closed, ngưỡng mất gói cả cuộc): mọi
+metric như cột "Cuối Sprint 3", Unsupported Claim 0/310 với G05 mới, 0 fallback, P50 / P95 3,1 s / 4,3 s. Chi tiết và so
+sánh T11: Final Evaluation Report mục 3b.
 
 ---
 
@@ -520,14 +539,13 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 
 - Không có cuộc gọi nào có nhãn bị suy giảm chất lượng, nên `NETWORK_PACKET_LOSS` và `NETWORK_DELAY_JITTER` còn
   `UNVALIDATED` và mọi cờ chất lượng ở độ tin cậy LOW.
-- Luật mất gói là phỏng đoán: ngưỡng 5% mỗi mẫu / MOS 3,5 đặt cao hơn mức đo được ở các cuộc thành công (844 mẫu stats
-  của 6 leg: loss cao nhất 3,704%, MOS thấp nhất 4,335). Như vậy có căn cứ để **không báo nhầm cuộc tốt**, chưa có căn
-  cứ về khả năng **bắt cuộc kém**. Đã đối chiếu Cisco / 3GPP, Twilio, Teams CQD; giữ luật cũ chờ mentor
-  (`docs/design-decisions.md` mục 41).
-- Rule gắn cờ chất lượng khi **một** mẫu stats vượt ngưỡng, chưa yêu cầu vượt kéo dài nhiều mẫu liên tiếp: không có dữ
-  liệu để chọn số mẫu (không leg thành công nào có loss > 5 %; chuỗi dài nhất toàn data là 2 mẫu, ở `271D1FAF` thuộc
-  `for_test/`). Vì vậy cờ còn nhạy với mất gói thoáng qua; report bù lại bằng cách nêu cả căn cứ phản bác (MOS thấp
-  nhất, `hasMediaPoor`).
+- Ngưỡng mất gói theo mentor (đổi 2026-10-15): Cờ `NETWORK_PACKET_LOSS` bật khi một leg mất gói CẢ CUỘC từ 5 %
+  (packetsLost ÷ (packetsLost + packetsReceived)) — mentor: "packet loss < 5 %, jitter < 30 ms là ổn định". Trước đó cờ
+  bật khi MỘT mẫu stats > 5 %, MOS < 3,5 hoặc hasMediaPoor = 1. Số mẫu vượt, MOS thấp nhất, hasMediaPoor vẫn in ở phần
+  "Đối chiếu" nhưng không tự bật cờ: cuộc MOS rất thấp mà mất gói cả cuộc thấp (`FE4E4BDC`: MOS 1,00, một mẫu mất 100 %)
+  nay là `SUCCESS` không cờ. Bảng độ nhạy: `scripts/quality-thresholds/sensitivity.py` (design-decisions mục 46).
+- Mất gói cả cuộc là bình quân cả cuộc gọi: một đợt mất gói nặng nhưng ngắn trong cuộc gọi dài không bật cờ (đợt đó vẫn
+  được nêu ở phần "Đối chiếu"). Đó là đánh đổi của ngưỡng "cả cuộc", chưa có data có nhãn để kiểm.
 - `NETWORK_DELAY_JITTER` (cài 2026-10-14): ngưỡng lấy từ Microsoft Teams CQD — RTT hoặc jitter TRUNG BÌNH > 500 ms /
   30 ms trên luồng > 500 gói. Có nguồn công khai nhưng chưa kiểm trên data có nhãn. Cuộc ngắn (≤ 500 gói) không xét.
   Khi cả mất gói và độ trễ cùng vượt, rule xếp `NETWORK_PACKET_LOSS` (MVP mục 10 scenario 2).
@@ -556,8 +574,9 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - AI thấy kết luận của rule trong context, và AI lệch rule thì kết luận cuối là `UNKNOWN`. Vì vậy AI không đổi được kết
   luận của rule; "AI trùng rule 100%" trên benchmark chưa chứng minh AI tự suy luận đúng.
 - Guardrails chỉ kiểm phần có cấu trúc (verdict, category, evidence ID, con số có nguồn), **không kiểm nghĩa câu chữ**.
-  G05 chặn số không có trong input: lượt cuối 0/309 đầu ra thô vi phạm, nhưng lượt 2026-10-13 có 5 lần (AI tự trừ hai
-  mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded).
+  G05 chặn số không có trong input: lượt cuối 0/309 đầu ra thô vi phạm, nhưng hai lượt 2026-10-13 có 4 và 5 lần (AI tự
+  trừ hai mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded). G05 hiện **bỏ sót số
+  viết liền đơn vị** (`250ms`, `45s`) nên Unsupported Claim 0% là cận dưới — đang sửa theo góp ý mentor.
 - Từ Sprint 3 T1a, AI nhắc chỉ số bằng mã và code điền tên + giá trị, nên không còn kiểu gọi sai tên con số như
   *"mất gói của caller là 11.3208%"* (`271D1FAF`, Sprint 2: đó là mẫu stats cao nhất). Lỗi diễn giải còn gặp trên
   dataset mới: gắn mã chỉ số vào câu không đúng nghĩa ("không nhận được âm thanh: {PACKET_LOSS_CALLER}"), ghi nhầm bên
@@ -595,6 +614,11 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 
 **Bảo mật**
 
+- Chat API không có đăng nhập. Server chỉ nghe ở `127.0.0.1`, nên chỉ người dùng trên máy chạy server gọi được; mở ra
+  mạng LAN (`--server.address=0.0.0.0`) thì ai trong mạng cũng gọi được và tiêu tiền OpenAI.
+- Chưa có cổng fail-closed: context gửi AI chỉ qua Sanitizer, chưa có bước quét lại độc lập ngay trước khi gửi (đang làm,
+  góp ý mentor). Benchmark đo 0 rò rỉ, nhưng đó là đo sau, không phải chặn trước.
+- IP công cộng thật đã được thay khỏi các file hiện tại (2026-10-15), nhưng vẫn còn trong lịch sử git của các commit cũ.
 - Signaling nạp vào Elasticsearch local ở dạng gốc, chưa qua Sanitizer (trường nhạy cảm: `appUserId`; thêm `isp`, `asn`;
   không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào
   ES. Cách hiểu này chưa được xác nhận. Kết quả phân tích ghi vào ES từ Sprint 3 T9 (index `analysis-requests`) chỉ gồm
@@ -610,6 +634,8 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 
 **Vận hành**
 
+- Mỗi request của Chat API nhận tối đa 10 file. Request bị từ chối vì quá số file không có bản ghi trong index
+  `analysis-requests` (bị chặn trước khi phân tích), chỉ có một dòng log `TOO_MANY_FILES`.
 - Signaling bắt buộc lấy từ Elasticsearch. ES tắt thì `--analyze*` và Web UI vẫn chạy và trả `UNKNOWN` kèm lý do;
   `--parse-*` vẫn parse log đính kèm và báo thiếu signaling.
 - File Validator loại file quá lớn (mặc định 20 MB, cấu hình `call-analysis.files.max-size-per-file`), rỗng, hỏng, không

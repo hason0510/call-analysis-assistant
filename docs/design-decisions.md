@@ -897,6 +897,104 @@ theo Teams thì B5F19381 (mất gói 8,48 %, MOS thấp nhất 1,94) thành "Goo
 cao nhất 24 ms) — kết luận không đổi, 13/13. Dataset mới: chỉ FC3187B4 đổi, từ SUCCESS không cờ sang SUCCESS +
 NETWORK_DELAY_JITTER (RTT trung bình 538 / 547 ms cả cuộc).
 
+
+## 42. Hardening theo nhận xét Sprint 2 của mentor (2026-10-15)
+
+**Quyết định.**
+- **Profile web chỉ nghe `127.0.0.1`.** Chat API không có đăng nhập mà mỗi request gọi OpenAI có trả phí; nghe mọi
+  interface thì ai trong mạng cũng tiêu được tiền của chủ key. Demo qua LAN thì bật tay `--server.address=0.0.0.0`.
+  Cổng mặc định 8081 (`bf0114b`): trên máy phát triển, cổng 8080 bị dịch vụ Windows `AgentService` giữ thường trực.
+  README, runbook và kịch bản demo trước đó vẫn ghi 8080 — nay sửa theo 8081.
+- **Tối đa 10 file mỗi request** (`call-analysis.files.max-files-per-request`). Kiểm ở controller, TRƯỚC khi đọc nội dung
+  file và trước lời gọi AI phân loại, nên request kiểu này không tốn bộ nhớ hay tiền AI. 10 = 4 file chuẩn của một cuộc
+  gọi + dư cho leg nhiều thiết bị (dataset mới `fc3187b4`: 6 file). Web UI biết giới hạn qua `/api/report-layout` và
+  tắt nút gửi trước khi tới server.
+- **Web UI không ghi đè file trùng tên.** Trước đây `Map` theo tên file nên kéo `callee_endcall.log` của máy thứ hai vào
+  là mất file của máy thứ nhất, không báo gì. Nay: cùng tên + cùng cỡ + cùng thời điểm sửa là cùng một file (bỏ qua);
+  cùng tên mà khác file thì giữ cả hai và cảnh báo. Server không phải đổi: loại file và Call-ID nhận theo nội dung,
+  dedupe ở mức file (CLAUDE.md bẫy #15).
+- **IP ví dụ theo RFC 5737 / RFC 3849.** IP công cộng thật (lấy từ data mẫu, gồm địa chỉ TURN server) nằm trong tài
+  liệu, `sensitive-data-inventory.yaml` và test; nay là `192.0.2.x`, `198.51.100.x`, `203.0.113.x`, `2001:db8::`.
+  Sanitizer và bộ đo leakage coi mọi IPv4 (trừ 0.0.0.0, 255.255.255.255, 127.x) là địa chỉ thật, nên test giữ nguyên ý
+  nghĩa. Lịch sử git cũ vẫn còn IP thật — không viết lại lịch sử.
+- **`.gitignore` liệt kê từng file riêng** thay cho chặn `*.md` kèm danh sách ngoại lệ, để tài liệu mới không bị bỏ sót
+  khi commit. Thêm `benchmark/results/` và `docs/*.patch`: trước đây không bị bỏ qua, `git add .` sẽ kéo vào.
+
+**Ảnh hưởng.** Không đổi logic kết luận. Test: 534 (thêm `AnalyzeControllerTest.tooManyFilesIsRejectedBeforeAnalysis`).
+Request bị từ chối vì quá số file chỉ để lại một dòng log `TOO_MANY_FILES`, không có bản ghi Kibana.
+
+
+## 43. G05 bắt số viết liền đơn vị (góp ý mentor Sprint 2, 2026-10-15)
+
+**Quyết định.** Regex số của G05 nhận số có đơn vị viết liền phía sau: `ms`, `s`, `sec`, `min`, `h`, `kbps`, `mbps`,
+`bps`, `kb`, `mb`, `gb`, `hz`, `khz`, `fps` (không phân biệt hoa thường). Vi phạm ghi cả đơn vị (`250ms`) cho dễ đọc.
+
+**Vì sao.** Regex cũ đòi sau số không có chữ cái, nên `250ms`, `45s` không được xét — "Unsupported Claim 0%" chỉ là
+cận dưới (mentor). Mới chỉ nhận đơn vị trong danh sách, và mỗi đơn vị có ít nhất một chữ cái KHÔNG thuộc hệ hex: mảnh
+Call-ID / UUID như `48B2`, `5D`, `12DB` vẫn không bị đọc thành "số + đơn vị". Bỏ `b` (byte) và `db` vì toàn chữ hex.
+
+**Ảnh hưởng.** Không đổi số liệu nào đã đo cho tới khi chạy lại benchmark: file kết quả cũ không lưu chữ AI viết, nên
+không chấm lại offline được. `MetricMentions` (đo tỉ lệ AI nhắc chỉ số qua mã) dùng chung hàm đọc số nên cũng đếm thêm
+số có đơn vị.
+
+## 44. Cổng fail-closed ngay trước khi gửi AI (góp ý mentor Sprint 2, 2026-10-15)
+
+**Quyết định.** `OpenAiChatClient.complete` quét tin nhắn người dùng (context phân tích, hoặc câu hỏi gửi AI phân loại)
+bằng `domain/security/OutboundGate` TRƯỚC mọi bước khác. Còn IP, bí mật (JWT, Bearer, `sk-`, cặp `token=…`), SĐT hay
+email thì không gửi: ném `SENSITIVE_DATA_BLOCKED`, bên gọi lùi về rule như mọi lỗi AI khác. Không thử lại.
+
+**Vì sao.** Trước đây context chỉ qua Sanitizer; benchmark đo 0 rò rỉ nhưng đó là đo SAU. Cổng dùng bộ nhận diện của phép
+đo Security Leakage (`SensitiveValues.inFreeText`), không dùng regex của Sanitizer — Sanitizer sót dạng nào thì cổng vẫn
+có cơ hội bắt. Đặt ở `OpenAiChatClient` vì đó là nơi DUY NHẤT chuỗi rời máy, phủ cả hai lời gọi AI. Đặt trước bước
+kiểm key để chạy không key (`--ai.openai.api-key=`) vẫn kiểm được cổng trên toàn bộ data mà không tốn tiền.
+
+**Kiểm báo nhầm.** Chạy không key trên `dev` (65 lời gọi phân tích), `for_test/` và `ai20k_new_dataset`: 0 lần chặn —
+mọi lời gọi ra `NOT_CONFIGURED`. Giá trị Sanitizer đã thay (`[IP]`, `[REDACTED]`, mã giả `USER_a81f2c`) không tính.
+
+**Giới hạn.** Cổng chỉ nhận dữ liệu có HÌNH DẠNG riêng (IP, token, SĐT, email). Định danh dạng chuỗi ngẫu nhiên
+(`appUserId`, `deviceId`) không có hình dạng riêng — vẫn chỉ Sanitizer xử lý, và phép đo leakage kiểm sau.
+
+## 45. Context semi-structured để so sánh với JSON (T11 Sprint 2, theo ví dụ mentor 2026-10-15)
+
+**Quyết định.** `domain/ai/AiContextText` dựng bản VĂN BẢN của đúng `AiContext.Payload` — không thêm, không bớt dữ kiện
+— theo hình dạng mentor gửi (dòng kết luận của rule, `[EVxx][nguồn, leg, giờ] mô tả`, danh sách chỉ số). Chọn bằng
+`ai.context-format=json|text` (mặc định `json`). Runner ghi dòng "Context AI" để hai lượt không bị so nhầm.
+
+**Vì sao giữ tên trường trong ngoặc.** System prompt gọi tên các phần (`ruleVerdict`, `evidence`, `ruleBasis`,
+`metrics`…). Giữ tên đó trong bản văn bản ("Evidence (evidence)", "căn cứ của rule (ruleBasis)") thì dùng được đúng một
+prompt cho cả hai dạng — hai lượt đo chỉ khác cách trình bày, cùng dấu vân tay prompt. Danh sách số G05 được nhắc lại
+không đổi vì dữ kiện không đổi; test khẳng định mọi văn bản đó đều có trong bản văn bản.
+
+**Kết quả** (`dev` ×5 mỗi dạng, 2026-10-15, Final Evaluation Report mục 3b): accuracy và consistency như nhau (100%) — trên
+`dev` không phân biệt được, vì AI thấy kết luận của rule. Bản văn bản ít hơn 7,5 % token vào (4 768 so với 5 153 mỗi lời
+gọi phân tích); latency chênh trong mức dao động. Bản JSON cho evidence tốt hơn: AI trích đủ căn cứ của rule 96/115 lần
+so với 77/115, trích hết mọi evidence 6 so với 20 lần. **Giữ JSON làm mặc định.**
+
+## 46. Ngưỡng mất gói: cả cuộc từ 5 % (mentor, 2026-10-15)
+
+**Quyết định.** `NETWORK_PACKET_LOSS` bật khi một leg có mất gói CẢ CUỘC từ 5 %: packetsLost ÷ (packetsLost +
+packetsReceived) ở mẫu stats mang bộ đếm lớn nhất (`LegQuality.degraded`). Một mẫu > 5 %, MOS < 3,5, hasMediaPoor = 1
+không còn tự bật cờ; vẫn được đếm và in ở phần "Đối chiếu" của câu căn cứ. Dòng căn cứ của cờ là mẫu mang bộ đếm.
+
+**Vì sao.** Mentor: "packet loss < 5 %, jitter < 30 ms là ổn định"; chủ repo chốt hiểu là cả cuộc (phương án 1 trong bảng
+độ nhạy). Luật cũ (mục 41 "Không đổi luật mất gói") là phỏng đoán và nhạy với mất gói thoáng qua.
+
+**Bảng độ nhạy** (`scripts/quality-thresholds/sensitivity.py`, đọc thẳng end call log, độc lập với Java):
+
+| Phương án | success/ (4 cuộc có end call log) | for_test/ | ai20k_new_dataset (7) |
+|---|---|---|---|
+| Cũ: một mẫu > 5 % / MOS < 3,5 / hasMediaPoor | 0 | 1 (271D1FAF) | 5 |
+| Cả cuộc ≥ 1 % | 0 | 1 | 3 |
+| Cả cuộc ≥ 2 % / 3 % | 0 | 0 | 2 (B5F19381, FE4E4BDC) |
+| **Cả cuộc ≥ 5 % (chọn)** | 0 | 0 | 1 (B5F19381) |
+| Cả cuộc ≥ 10 % (Teams CQD) | 0 | 0 | 0 |
+| Jitter TB ≥ 20 / **30** / 50 ms | 1 (70A1F889) / **0** / 0 | 0 | 0 |
+
+**Ảnh hưởng.** `dev` không đổi (không cuộc nào trong `dev` bị gắn cờ, trước cũng như sau); `--analyze-all`: 13/13.
+Dataset mới: `06BCA48C`, `4FD495C1`, `FE4E4BDC` thành `SUCCESS` không cờ. Kịch bản demo scenario 2 đổi từ `271D1FAF`
+(cả cuộc 1,83 %) sang `B5F19381` (8,48 %), chưa có nhãn. Đánh đổi: cuộc MOS rất thấp mà mất gói cả cuộc thấp
+(`FE4E4BDC`: MOS 1,00) không bị gắn cờ.
+
 ---
 
 ## Còn để mở
@@ -919,6 +1017,6 @@ Mở thêm ở Sprint 2 (chi tiết: README, mục Known Limitations):
 
 - **AI lệch rule nên `UNKNOWN` hay giữ kết luận AI kèm cờ** (mục 23).
 - **Đề xuất: rule giữ, AI bổ sung** — trên `for_test/`, đề xuất của rule tốt hơn ở 4/7 cuộc.
-- **"Semi-structured context" của T11 nghĩa là gì** — chưa chốt.
+- **"Semi-structured context" của T11** — mentor gửi ví dụ ngày 2026-10-15 (cùng dữ kiện với JSON, viết thành văn bản); đang làm.
 - **Rule `NETWORK_DELAY_JITTER`** đã cài theo ngưỡng Teams CQD (mục 41) nhưng vẫn `UNVALIDATED`; cần cuộc gọi có nhãn
   chất lượng kém để kiểm.

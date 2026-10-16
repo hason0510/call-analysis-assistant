@@ -181,7 +181,7 @@ File cho cả ba lần: `callee_endcall.log`, `callee_webrtc.log` của `2D9057A
 |---|---|---|
 | 1 | `Cuộc gọi này có thành công không?` | `FAIL · ICE_FAILURE · MEDIUM` |
 | 2 | `kiem tra cuoc goi nay giup minh` (không dấu) | như trên |
-| 3 | `Cuộc gọi từ máy 0912345678 (IP 113.161.42.7) bị lỗi, phân tích giúp mình` | như trên |
+| 3 | `Cuộc gọi từ máy 0912345678 (IP 203.0.113.7) bị lỗi, phân tích giúp mình` | như trên |
 
 Câu 4a cũng dùng đúng hai file này — tính cả nó là bốn cách hỏi cùng một kết luận.
 
@@ -192,7 +192,7 @@ Câu 4a cũng dùng đúng hai file này — tính cả nó là bốn cách hỏ
 2. **Đúng thứ gửi cho AI**, xem bằng lệnh không gọi AI, không tốn tiền:
 
    ```powershell
-   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Cuoc goi tu may 0912345678 (IP 113.161.42.7) bi loi'"
+   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Cuoc goi tu may 0912345678 (IP 203.0.113.7) bi loi'"
    ```
 
    Dòng đầu in câu hỏi đã làm sạch: `Cuoc goi tu may [CONTACT_REDACTED] (IP [IP_REDACTED]) bi loi`. Chạy thử
@@ -200,7 +200,7 @@ Câu 4a cũng dùng đúng hai file này — tính cả nó là bốn cách hỏ
 3. Log của server (cửa sổ đang chạy `spring-boot:run`): dòng log AI chỉ gồm các trường MVP 6.2 cho phép, không có nội dung.
 4. Số đo cả tập (benchmark `dev`, 315 lần chạy): **0/7 005** giá trị nhạy cảm gốc lọt vào dữ liệu gửi AI, 0 trong phản hồi.
 
-Có thể hỏi thêm dạng liệt kê `Máy 0912345678 gọi lỗi, token eyJ…, IP 113.161.42.7, xem giúp` — vẫn ra cùng kết luận
+Có thể hỏi thêm dạng liệt kê `Máy 0912345678 gọi lỗi, token eyJ…, IP 203.0.113.7, xem giúp` — vẫn ra cùng kết luận
 (kiểm 2026-10-07). **Nếu thử bằng curl thay vì web:** curl trên Windows làm hỏng chữ có dấu trong tham số dòng lệnh, câu
 hỏi tới server thành `M?y … g?i l?i` và có thể bị xếp ngoài phạm vi. Gửi câu từ file UTF-8: `-F "message=<cau-hoi.txt"`
 (`docs/ket-qua-demo-sprint-2.md` mục 3).

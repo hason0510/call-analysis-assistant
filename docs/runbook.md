@@ -129,17 +129,20 @@ Lệnh này không gọi AI.
 .\build.ps1 spring-boot:run "-Dspring-boot.run.profiles=web"
 ```
 
-Mở http://localhost:8080/. Nhập câu hỏi, kéo thả file log của một cuộc gọi (ví dụ hai file trong
-`../ai20k_sample/fail/2D9057AA-…/`), bấm gửi. Kịch bản thử đủ 6 scenario: `docs/demo-sprint-2.md`.
+Mở http://localhost:8081/. Nhập câu hỏi, kéo thả file log của một cuộc gọi (ví dụ hai file trong
+`../ai20k_sample/fail/2D9057AA-…/`), bấm gửi. Kịch bản thử đủ 6 scenario: `docs/demo-sprint-3.md`.
 
-- Cổng 8080 bận: thêm `"-Dspring-boot.run.arguments=--server.port=8089"`.
+- Server chỉ nghe ở `127.0.0.1`: Chat API không có đăng nhập mà mỗi request tốn tiền gọi OpenAI. Cần mở từ máy khác
+  trong mạng LAN thì thêm `"-Dspring-boot.run.arguments=--server.address=0.0.0.0"` — khi đó ai trong mạng cũng gọi được.
+- Mỗi lần phân tích nhận tối đa 10 file (`call-analysis.files.max-files-per-request`). Một cuộc gọi thường có 4 file.
+- Cổng 8081 bận: thêm `"-Dspring-boot.run.arguments=--server.port=8089"`.
 - Log của server in dạng JSON, mỗi dòng một sự kiện. Muốn đọc log dạng chữ: `"-Dspring-boot.run.profiles=web,plain-log"`.
 - Dừng server: `Ctrl + C`.
 
 Gọi API trực tiếp:
 
 ```powershell
-curl.exe -X POST localhost:8080/api/analyze -F "message=Phan tich cuoc goi nay giup minh" `
+curl.exe -X POST localhost:8081/api/analyze -F "message=Phan tich cuoc goi nay giup minh" `
     -F "files=@../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086/callee_endcall.log"
 ```
 
@@ -167,7 +170,7 @@ Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `-
 .\build.ps1 test
 ```
 
-Kết quả đúng: 508 test, 0 lỗi. 3 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 3 test
+Kết quả đúng: 534 test, 0 lỗi. 3 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 3 test
 này tự bỏ qua. Unit test không cần Elasticsearch hay key AI.
 
 ### 4.2. Benchmark `dev`
@@ -250,7 +253,9 @@ Kibana dừng cùng Elasticsearch khi `docker compose down`.
 | `--evaluate` in `Signaling: có cho 0/… Call-ID` ở đầu báo cáo | Chưa nạp signaling của bộ log đang dùng | Chạy bước 2.5 với đúng thư mục log đó |
 | `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như các lệnh mẫu |
 | Build báo lỗi phiên bản Java, hoặc in nhiều `WARNING` về `sun.misc.Unsafe` | Maven chạy trên JDK 24 trở lên | Dùng `.\build.ps1` thay cho `mvn`; JDK 21 đặt ở chỗ lạ thì đặt `$env:JAVA_HOME_21` |
-| Web không mở được | Cổng 8080 bận | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"` |
+| Web không mở được | Cổng 8081 bận | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"` |
+| Mở được trên máy chạy server, máy khác thì không | Server chỉ nghe ở `127.0.0.1` | Thêm `"-Dspring-boot.run.arguments=--server.address=0.0.0.0"` (mục 3.1) |
+| Banner *"Quá nhiều file đính kèm"* | Quá 10 file một lần | Bỏ bớt file; giới hạn đặt ở `call-analysis.files.max-files-per-request` |
 | Cổng 9200 bận khi bật Elasticsearch | Có Elasticsearch khác đang chạy | Dừng bản kia, hoặc đổi cổng trong `docker-compose.yml` và `spring.elasticsearch.uris` |
 | Banner vàng *"Report dựng từ rule vì AI không dùng được"* | AI không dùng được; banner ghi lý do | Chưa có key: điền `.env`. *"Khoá AI không hợp lệ"*: kiểm tra `OPENAI_API_KEY`. *"Giới hạn tốc độ gọi"*: thử lại sau ít phút. *"Hết hạn mức"*: nạp thêm tiền cho tài khoản OpenAI. *"Vượt giới hạn độ dài của model"*: hỏi câu ngắn hơn. Quá giờ / mất mạng: hệ thống đã tự thử lại một lần |
 | Report hoặc câu từ chối có dòng *"Câu hỏi có ký tự bị hỏng mã hoá"* | Câu hỏi có dấu bị hỏng trước khi tới server (curl, dòng lệnh Windows) | Gõ trên Web UI, gõ không dấu, hoặc gửi từ file UTF-8 |
@@ -268,7 +273,7 @@ request), rồi mục Known Limitations trong README.
 
 | | |
 |---|---|
-| Web UI | http://localhost:8080/ |
+| Web UI | http://localhost:8081/ |
 | Chat API | `POST /api/analyze` (multipart: `message`, `files`) |
 | Elasticsearch | http://localhost:9200, index `signaling-events` |
 | Kibana | http://localhost:5601 — view request: `python scripts/kibana/setup_views.py`; dashboard: `python scripts/kibana/setup_dashboard.py` |

@@ -21,7 +21,7 @@ curl.exe -s http://localhost:9200/_cluster/health                  # đợi "gre
 .\build.ps1 spring-boot:run "-Dspring-boot.run.profiles=web,plain-log"
 ```
 
-Mở http://localhost:8080/. Profile `plain-log` để log server in dạng chữ, dễ đọc trên màn hình; bỏ nó đi nếu muốn cho
+Mở http://localhost:8081/. Profile `plain-log` để log server in dạng chữ, dễ đọc trên màn hình; bỏ nó đi nếu muốn cho
 xem log JSON (scenario 6). Kiểm `.env` có `OPENAI_API_KEY`.
 
 Mở sẵn các thư mục sau trong Explorer để kéo thả file:
@@ -29,7 +29,8 @@ Mở sẵn các thư mục sau trong Explorer để kéo thả file:
 | Tắt | Thư mục trong `..\ai20k_sample\` |
 |---|---|
 | `EE129C8F` | `success\EE129C8F-EAD0-4302-AB68-920D32F8B8B7` |
-| `271D1FAF` | `for_test\271D1FAF-26D4-4150-AC3F-9204505BD84B` |
+| `271D1FAF` | `for_test\271D1FAF-26D4-4150-AC3F-9204505BD84B` (chỉ để so ngưỡng mới, scenario 2) |
+| `B5F19381` | `..\ai20k_new_dataset\b5f19381-9733-8c14-f148-3dd427cff29a` (thư mục cạnh `ai20k_sample`) |
 | `1B009D42` | `fail\1B009D42-49CD-479E-B26C-3A2994AEB720` |
 | `2D9057AA` | `fail\2D9057AA-C496-48B2-946A-98FA2896D086` |
 | `703100CF` | `fail\703100CF-5742-467E-9E0E-34E45F60FF58` |
@@ -68,21 +69,27 @@ Ba chỗ Sprint 3 thêm vào report, sẽ thấy ở mọi scenario:
 | Tóm tắt có `4.42133 [MOS (caller)]` | AI chỉ viết mã chỉ số, code điền giá trị và tên — AI không tự chép số |
 | Giới hạn: *"File calleer_webrtc.log được gán lại từ CALLEE sang CALLER"* | Tên file gõ sai trong data gốc; hệ thống gán theo nội dung (vai SDP), không theo tên |
 
-## Scenario 2 — Chất lượng kém: `271D1FAF` (2,5 phút)
+## Scenario 2 — Chất lượng kém: `B5F19381` (2,5 phút)
+
+> **Đổi 2026-10-15.** Ngưỡng mất gói nay là mất gói CẢ CUỘC từ 5 % (mentor: "packet loss < 5 %, jitter < 30 ms là ổn
+> định"). Ca cũ `271D1FAF` cả cuộc chỉ 1,83 % nên không còn bị gắn cờ. `B5F19381` (dataset mới của mentor) là cuộc duy nhất
+> vượt ngưỡng: caller mất gói cả cuộc 8,48 %. Kết quả dưới đây là của rule (`--analyze`, 2026-10-15); **chưa bấm lại trên
+> web với AI sau khi đổi ngưỡng** — chạy thử một lần trước buổi demo.
 
 **MVP mong:** `SUCCESS` + cờ chất lượng, `NETWORK_PACKET_LOSS`.
 
 - Câu hỏi: `Vì sao bên gọi nghe bị giật?`
-- File: cả 4 file log của `271D1FAF`
+- File: cả 4 file log của `B5F19381`
 
 | Thấy gì | Nói gì |
 |---|---|
-| `Cờ chất lượng: Có - NETWORK_PACKET_LOSS` | Rule quét chuỗi stats từng giây, không chỉ bản ghi lúc kết thúc |
-| Chính: *"caller có 18/80 mẫu stats mất gói > 5 % (cao nhất 11.32 %) … Đối chiếu: MOS thấp nhất 4.10477"* | Nêu cả bằng chứng ủng hộ lẫn phản bác |
+| `Cờ chất lượng: Có - NETWORK_PACKET_LOSS` | Cờ dựa trên mất gói cả cuộc (hai bộ đếm cộng dồn), không bật vì một đợt ngắn |
+| Chính: *"caller mất gói cả cuộc 8.48 % (ngưỡng: mất gói cả cuộc từ 5 %). Đối chiếu: caller có 33/71 mẫu stats mất gói > 5 % (cao nhất 49.51 %) … MOS thấp nhất 1.943 (caller), app bật hasMediaPoor ở 5 mẫu"* | Nêu con số bật cờ và ngưỡng, kèm số đo theo mẫu để đối chiếu |
 | `LOW — bằng chứng yếu: ngưỡng chất lượng kém chưa kiểm chứng trên data có nhãn` | Không có cuộc chất lượng kém nào có nhãn: hệ thống tự nói ra thay vì giả vờ chắc chắn |
 | Đầu report ghi *"Phân tích, ưu tiên: bên gọi nghe bị giật"* | Request Parser tách trọng tâm câu hỏi |
 
-`271D1FAF` nằm trong `for_test/`: không có nhãn, không dùng để chỉnh rule hay prompt. Đây là ca duy nhất cho scenario 2.
+`B5F19381` chưa có nhãn (dataset mới, đang hỏi mentor). Có thể mở thêm `271D1FAF` (`for_test/`) để cho thấy ngưỡng mới:
+nhiều mẫu tăng vọt tới 11 % nhưng cả cuộc 1,83 % thì báo `SUCCESS` không cờ.
 
 Chủ động nói một điểm yếu: dòng *"Bổ sung (AI): Kiểm tra chất lượng mạng của bên gọi…"* là AI diễn đạt lại đề xuất
 chuẩn ngay phía trên. Bộ lọc bỏ được câu chép nguyên văn, chưa bỏ được câu diễn đạt lại (Known Limitations).
@@ -162,7 +169,7 @@ File cho cả ba lần: `callee_endcall.log`, `callee_webrtc.log` của `2D9057A
 |---|---|---|
 | 1 | `Cuộc gọi này có thành công không?` | `FAIL · ICE_FAILURE · MEDIUM`, căn cứ `EV07, EV12, EV13` |
 | 2 | `kiem tra cuoc goi nay giup minh` (không dấu) | như trên |
-| 3 | `Cuộc gọi từ máy 0912345678 (IP 113.161.42.7) bị lỗi, phân tích giúp mình` | như trên |
+| 3 | `Cuộc gọi từ máy 0912345678 (IP 203.0.113.7) bị lỗi, phân tích giúp mình` | như trên |
 
 Tính cả 4a là bốn cách hỏi, cùng kết luận, cùng mức tin cậy, cùng căn cứ.
 
@@ -173,7 +180,7 @@ Tính cả 4a là bốn cách hỏi, cùng kết luận, cùng mức tin cậy, 
 2. Đúng thứ gửi cho AI, xem bằng lệnh không gọi AI:
 
    ```powershell
-   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Cuoc goi tu may 0912345678 (IP 113.161.42.7) bi loi'"
+   .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--ai-context=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086 '--question=Cuoc goi tu may 0912345678 (IP 203.0.113.7) bi loi'"
    ```
 
    Câu hỏi in ra đã thành `Cuoc goi tu may [CONTACT_REDACTED] (IP [IP_REDACTED]) bi loi`.

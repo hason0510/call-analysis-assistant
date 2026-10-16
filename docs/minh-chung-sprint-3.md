@@ -99,6 +99,25 @@ bắt buộc trong `report-v1.schema.json`): *"Độ tin cậy: MEDIUM — thi�
 | Kịch bản Final Demo (6 scenario MVP mục 10) | `docs/demo-sprint-3.md` — kết quả chạy thật 2026-10-12 ghi dưới từng scenario |
 | Mốc so sánh đầu Sprint 3 | `docs/moc-sprint-3.md` |
 
+## Sửa theo nhận xét Sprint 2 của mentor (2026-10-15, sau commit `bf0114b`)
+
+`mvn test` sau các sửa: **547 test, 0 lỗi** (Docker bật, 3 test Testcontainers cũng chạy). Lý do từng sửa:
+`docs/design-decisions.md` mục 42–46.
+
+| Mentor đề xuất | Code | Test | Bằng chứng chạy thật |
+|---|---|---|---|
+| Profile web nghe `127.0.0.1` | `resources/application-web.yml` (`server.address`) | — | Server thật chỉ nghe `127.0.0.1:8081` |
+| Giới hạn số file mỗi request | `controller/AnalyzeController` (`max-files-per-request`, mặc định 10), `static/app.js` | `AnalyzeControllerTest::tooManyFilesIsRejectedBeforeAnalysis` | Gửi 11 file → HTTP 400 `TOO_MANY_FILES`, không gọi AI |
+| UI không ghi đè file trùng tên | `static/app.js` (`addFiles`, `sameFile`) | — (JS) | Thử bằng Playwright: hai file cùng tên đều giữ, có cảnh báo |
+| IP ví dụ RFC 5737, dọn `.gitignore` | 11 file tài liệu / inventory / test; `.gitignore` | 547 test qua sau khi đổi IP | Quét lại: 0 IP công cộng trong file git theo dõi |
+| G05 bắt số liền đơn vị | `domain/guardrail/Guardrails` (`UNIT`) | `GuardrailsTest::g05CatchesNumbersWrittenWithUnits`, `::g05AllowsKnownNumbersWithUnitsAndIgnoresHexFragments` | `dev` ×5: Unsupported Claim 0/310 với G05 mới |
+| Cổng fail-closed trước AI | `domain/security/OutboundGate`, `infrastructure/ai/OpenAiChatClient` (`SENSITIVE_DATA_BLOCKED`) | `OutboundGateTest` (2), `OpenAiChatClientTest::sensitiveMessageIsNeverSent` | Chạy không key trên 27 cuộc: 0 lần chặn nhầm; `dev` ×5 có AI: 0 lần chặn |
+| Ngưỡng mất gói / jitter, bảng độ nhạy | `domain/rule/LegQuality` (mất gói cả cuộc ≥ 5 %), `SignalExtractor`, `RuleVerdictEngine`; `taxonomy.yaml`; `scripts/quality-thresholds/sensitivity.py` | `RuleVerdictEngineTest::qualityFlagCarriesMeasuredBasis`, `::wholeCallLossThreshold`; `CallLogNormalizationServiceTest::qualityBasisIsTheCountersRecord`, `::transientLossDoesNotFlag` | `--analyze-all`: data mẫu 13/13; dataset mới chỉ `B5F19381` còn cờ mất gói |
+| T11 Sprint 2 (structured vs semi-structured) | `domain/ai/AiContextText`, `OpenAiAnalyzer` (`ai.context-format`), runner ghi dòng "Context AI" | `AiContextTextTest` (3), `OpenAiAnalyzerTest::contextFormatSelectsTextOrJson` | Hai lượt `dev` ×5 — Final Evaluation Report mục 3b |
+| Retry có kiểm soát | `domain/ai/RetryPolicy` (Sprint 3 T8, đã có ở `bf0114b`) | `RetryPolicyTest`, `OpenAiChatClientTest` | Mục 7.1, T8 |
+
+Chưa làm: quay video demo 6 kịch bản trên trình duyệt, Peer Evaluation (T7).
+
 ## Kết quả đo
 
 Bảng metric MVP 6.5 so Sprint 2 với cuối Sprint 3: README mục "Kết quả đo được — Sprint 3" và

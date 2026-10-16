@@ -108,7 +108,7 @@ chứng."* Call-ID trích bằng regex từ câu hỏi.
 | (4a) *Vì sao bên nhận không nghe được gì?* | `ANALYZE_WITH_FOCUS` | `FAIL · ICE_FAILURE · MEDIUM` | 4/13 |
 | *Cuộc gọi này có thành công không?* | `ANALYZE_CALL` | `FAIL · ICE_FAILURE · MEDIUM` | 5/13 |
 | *kiem tra cuoc goi nay giup minh* | `ANALYZE_CALL` | `FAIL · ICE_FAILURE · MEDIUM` | 13/13 |
-| *Máy 0912345678 gọi lỗi, token eyJ…, IP 113.161.42.7, xem giúp* | `ANALYZE_CALL` | `FAIL · ICE_FAILURE · MEDIUM` | 4/13 |
+| *Máy 0912345678 gọi lỗi, token eyJ…, IP 203.0.113.7, xem giúp* | `ANALYZE_CALL` | `FAIL · ICE_FAILURE · MEDIUM` | 4/13 |
 
 Bốn cách hỏi cho cùng kết luận, cùng category, cùng độ tin cậy. Phần chữ thì khác nhau (số evidence được trích dao động
 4-13) — kết luận ổn định, phần chữ thì không, đúng như đo ở benchmark.
