@@ -8,7 +8,7 @@
 > `benchmark/results/`; số được chép vào đây). Ô ⏳ là việc còn chờ.
 >
 > Code đã đổi sau lượt đo này (2026-10-19, mục 8). Số đo của bản code cuối, so với Sprint 2: mục 9 (lượt chạy lại trước
-> khi nộp — mọi metric như lượt này).
+> khi nộp — mọi metric như lượt này). Phân tích hàng loạt (T10, làm sau mục 9, không đổi luồng phân tích): mục 10.
 
 ## 1. Cấu hình đo
 
@@ -228,6 +228,8 @@ Các lỗi diễn giải còn gặp trên dataset mới:
 - Giới hạn độ dài câu hỏi (4 000 ký tự) chỉ áp ở Chat API; Evaluation Runner và CLI không chặn.
 - WebRTC log chỉ có mốc tương đối, chưa đồng bộ với timeline signaling.
 - Signaling nạp vào ES ở dạng gốc (`appUserId`), chưa qua Sanitizer — chờ mentor xác nhận cách hiểu MVP 6.2.
+- Phân tích hàng loạt (T10) chỉ bằng dữ liệu trong ES không kết luận được SUCCESS và chỉ thấy triệu chứng phía server
+  (lỗi TURN hiện thành `SIGNALING_FAILURE`): ES không có log máy. Muốn thống kê có ý nghĩa phải kèm `--logs`. Mục 10.
 
 ## 8. Thay đổi sau lượt đo cuối (2026-10-19)
 
@@ -297,3 +299,39 @@ AI vs Rule: 19/19 case Rule = AI = Final = Ground Truth (bảng giống mục 3)
 Kết luận: các sửa ở mục 8 không làm đổi kết luận nào trên `dev`; mọi metric `Bắt buộc` và `Báo cáo` có đo được đều đạt
 target. Latency gần lượt đo lại 15/10 (3,1 s / 4,3 s, cùng prompt); P95 14,9 s của lượt 14/10 là do OpenAI chậm lúc đo
 (mục 2).
+
+## 10. Phân tích hàng loạt (T10, 2026-10-19)
+
+> MVP 7.1 T10 (Nếu kịp): *"Phân tích hàng loạt các Call-ID trong ES local, thống kê phân bố verdict / issue category"*.
+> Lệnh `--batch-analyze`, lý do thiết kế: design-decisions mục 48. Làm sau mục 9 và không sửa dòng nào của luồng phân
+> tích (chỉ thêm lệnh, thống kê, adapter ES), nên số đo mục 9 vẫn là của bản nộp. `mvn test`: 590 test, 0 lỗi.
+
+Đầu vào: 27 Call-ID trong index signaling (20 `ai20k_sample` + 7 `ai20k_new_dataset`), mỗi cuộc qua đúng pipeline của
+Web UI, chỉ rule (0 USD, tất định). Elasticsearch chỉ chứa signaling — log máy do người dùng đính kèm (MVP 1.2) — nên
+chạy hai chế độ:
+
+| | Chỉ signaling (không `--logs`) | Signaling + log máy (`--logs` hai dataset) |
+|---|---|---|
+| Số cuộc | 27 | 27 (27/27 tìm được thư mục log) |
+| `SUCCESS` | 0 | 13 (2 có cờ chất lượng kém) |
+| `FAIL` | 11 | 14 |
+| `UNKNOWN` | 16 (59,3 %) | 0 |
+| Loại lỗi | 11 `SIGNALING_FAILURE` | 6 `TURN_FAILURE` · 5 `SIGNALING_FAILURE` · 3 `ICE_FAILURE` · 1 `NETWORK_PACKET_LOSS` · 1 `NETWORK_DELAY_JITTER` |
+| Độ tin cậy | 11 MEDIUM · 16 LOW | 11 HIGH · 14 MEDIUM · 2 LOW |
+| Đúng nhãn (13 cuộc `success/` + `fail/`) | 5/13 | 13/13 |
+
+Đọc hai cột:
+
+- **Chỉ signaling không kết luận được SUCCESS — đó là đúng, không phải lỗi.** Signaling cho biết cuộc gọi có thiết lập
+  được không, không cho biết âm thanh có tới không: `2D9057AA` signaling hoàn hảo mà 0 byte âm thanh (bẫy #12). Rule xét
+  media trước khi được kết luận SUCCESS, không có log máy thì trả UNKNOWN (MVP 3.3). 16 cuộc UNKNOWN, khi có đủ log, ra
+  13 SUCCESS và 3 FAIL `ICE_FAILURE` (`2D9057AA` và hai cuộc rớt giữa chừng `70C388AD`, `FE4EF5E7`).
+- **FAIL từ signaling tin được:** cả 11 cuộc cũng ra FAIL khi có đủ log. Không cuộc nào đổi từ SUCCESS sang FAIL hay ngược
+  lại giữa hai chế độ — chỉ UNKNOWN được thay bằng kết luận.
+- **Loại lỗi từ signaling chỉ là triệu chứng phía server.** 6 cuộc lỗi TURN hiện ra thành `SIGNALING_FAILURE`: server chỉ
+  thấy cuộc gọi không nối được, nguyên nhân TURN nằm trong WebRTC log. Thống kê loại lỗi của nhóm chỉ signaling vì vậy
+  không dùng để kết luận nguyên nhân.
+
+Vì vậy báo cáo (`target/batch/*.md`) và dashboard Kibana "Phân tích hàng loạt — toàn kho" (index `call-analysis-results`)
+luôn tách hai nhóm theo nguồn dữ liệu của TỪNG cuộc, và in mục "Cách đọc" khi có cuộc chỉ có signaling. Muốn thống kê
+phân bố có ý nghĩa thì cần log máy (`--logs`); chế độ mentor muốn dùng là câu 17 còn chờ trả lời.

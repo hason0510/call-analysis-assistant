@@ -5,7 +5,7 @@ Tài liệu này dùng để dựng, chạy, kiểm thử và xử lý lỗi th�
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-19 (sau rà soát theo MVP) |
+| Cập nhật lần cuối | 2026-10-19 (sau rà soát theo MVP và T10 phân tích hàng loạt) |
 | Đã chạy thử trên | Windows 11, PowerShell 7, JDK 21, Docker Desktop |
 | Chưa chạy thử | macOS, Linux — lệnh tương đương ghi ở cuối mỗi mục |
 
@@ -161,6 +161,16 @@ Phân tích một cuộc gọi và in report:
 .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--analyze=../ai20k_sample/fail/2D9057AA-C496-48B2-946A-98FA2896D086"
 ```
 
+Phân tích hàng loạt mọi Call-ID trong Elasticsearch (T10), chỉ rule, không tốn tiền:
+
+```powershell
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--batch-analyze --logs=../ai20k_sample --logs=../ai20k_new_dataset"
+```
+
+Kết quả: `target/batch/batch-<thời điểm>.md` + `.json`, và index `call-analysis-results` (dashboard ở mục 5). `--logs`
+là tuỳ chọn: bỏ đi thì mọi cuộc chỉ có signaling — phần lớn ra `UNKNOWN` vì thiếu log máy, đó là đúng (báo cáo có mục
+"Cách đọc"). Lượt mới thay lượt cũ trong index.
+
 Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `--ai-context*`, `--ai-analyze*`…): README, mục
 "Toàn bộ lệnh".
 
@@ -174,7 +184,7 @@ Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `-
 .\build.ps1 test
 ```
 
-Kết quả đúng: 565 test, 0 lỗi. 4 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 4 test
+Kết quả đúng: 590 test, 0 lỗi. 6 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 6 test
 này tự bỏ qua. Unit test không cần Elasticsearch hay key AI.
 
 ### 4.2. Benchmark `dev`
@@ -223,7 +233,7 @@ Dựng view một lần:
 ```powershell
 docker compose up -d                          # thêm Kibana
 python scripts/kibana/setup_views.py          # data view + 4 saved search; chạy lại được
-python scripts/kibana/setup_dashboard.py      # dashboard kết quả phân tích (T11); cần chạy setup_views.py trước
+python scripts/kibana/setup_dashboard.py      # 2 dashboard: kết quả phân tích (T11), hàng loạt (T10); cần setup_views.py trước
 ```
 
 Mở http://localhost:5601/app/discover → **Open** → chọn một saved search: *Requests — tất cả*, *fallback*, *lỗi*,
@@ -235,6 +245,11 @@ Dashboard **Kết quả phân tích cuộc gọi**: http://localhost:5601/app/da
 report, tỉ lệ UNKNOWN, tỉ lệ fallback, độ trễ P50 / P95, phân bố kết luận / loại lỗi / độ tin cậy, lý do fallback, độ
 trễ theo thời gian (MVP 7.1 T11). Tỉ lệ tính trên request ra report; câu ngoài phạm vi không tính. Dashboard tự đặt
 khoảng thời gian 7 ngày.
+
+Dashboard **Phân tích hàng loạt — toàn kho**: http://localhost:5601/app/dashboards#/view/batch-results-dashboard — đọc
+index `call-analysis-results` của lệnh `--batch-analyze` (mục 3.2): số cuộc, tỉ lệ cuộc chỉ có signaling, tỉ lệ UNKNOWN
+(chung và riêng cuộc có log máy), phân bố kết luận / loại lỗi / độ tin cậy tách màu theo nguồn dữ liệu (MVP 7.1 T10).
+Trống cho tới khi chạy lệnh đó; không phụ thuộc khoảng thời gian.
 
 ---
 
@@ -255,6 +270,9 @@ Kibana dừng cùng Elasticsearch khi `docker compose down`.
 |---|---|---|
 | Mọi report ra `UNKNOWN`, mục "Giới hạn dữ liệu" ghi *"Không truy vấn được signaling"* | Elasticsearch chưa bật, chưa sẵn sàng, hoặc chưa nạp | Kiểm tra `curl.exe -s http://localhost:9200/_cluster/health`; chạy lại bước 2.4 và 2.5 |
 | `--evaluate` in `Signaling: có cho 0/… Call-ID` ở đầu báo cáo | Chưa nạp signaling của bộ log đang dùng | Chạy bước 2.5 với đúng thư mục log đó |
+| `--batch-analyze` báo *"Không lấy được danh sách Call-ID từ Elasticsearch"* | Elasticsearch chưa bật hoặc chưa nạp signaling | Như dòng đầu: bước 2.4 và 2.5 |
+| `--batch-analyze` ra gần hết `UNKNOWN` | Không có `--logs`, hoặc thư mục log không chứa thư mục con trùng Call-ID (dòng "Log máy: … tìm thấy cho 0/… cuộc") | Đúng thiết kế: chỉ signaling thì không kiểm được âm thanh. Thêm `--logs=<thư mục log>` |
+| Dashboard "Phân tích hàng loạt" trống | Chưa chạy `--batch-analyze` | Chạy lệnh ở mục 3.2 rồi tải lại trang |
 | `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như các lệnh mẫu |
 | Build báo lỗi phiên bản Java, hoặc in nhiều `WARNING` về `sun.misc.Unsafe` | Maven chạy trên JDK 24 trở lên | Dùng `.\build.ps1` thay cho `mvn`; JDK 21 đặt ở chỗ lạ thì đặt `$env:JAVA_HOME_21` |
 | Web không mở được | Cổng 8081 bận | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"` |
@@ -282,7 +300,7 @@ request), rồi mục Known Limitations trong README.
 | Chat API | `POST /api/analyze` (multipart: `message`, `files`) |
 | Elasticsearch | http://localhost:9200, index `signaling-events` |
 | Kibana | http://localhost:5601 — view request: `python scripts/kibana/setup_views.py`; dashboard: `python scripts/kibana/setup_dashboard.py` |
-| Index Elasticsearch | `signaling-events` (signaling nạp vào), `analysis-requests` (bản ghi request, profile `web`) |
+| Index Elasticsearch | `signaling-events` (signaling nạp vào), `analysis-requests` (bản ghi request, profile `web`), `call-analysis-results` (lượt `--batch-analyze` mới nhất) |
 | Kết quả benchmark | `target/evaluation/` (tạm), `benchmark/results/` (lưu lại) |
 | Cấu hình | `src/main/resources/application.yml`, `application-web.yml` |
 | Chi phí AI | khoảng 0,001 USD mỗi câu hỏi (2 lời gọi: phân loại + phân tích); độ trễ P50 khoảng 3-4 s, P95 dao động 4-15 s theo tốc độ OpenAI (lượt 14-15/10) |

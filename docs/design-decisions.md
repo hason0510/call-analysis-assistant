@@ -1021,6 +1021,39 @@ Rà soát từng mục MVP với code (không với README) tìm ra năm chỗ m
    để lệch. Trần 2 000 token ra (dài nhất từng đo 224). Câu hỏi quá 4 000 ký tự bị Chat API từ chối trước lời gọi AI
    (dài nhất trong benchmark 139) — chặn ở controller như giới hạn số file, runner và CLI không chặn.
 
+## 48. Phân tích hàng loạt: Call-ID từ ES, log máy tuỳ chọn, tách theo nguồn dữ liệu (T10, 2026-10-19)
+
+MVP 7.1 T10: *"Phân tích hàng loạt các Call-ID trong ES local, thống kê phân bố verdict / issue category"*. Chỗ khó:
+ES chỉ chứa signaling (MVP 1.2 — log máy do người dùng đính kèm), mà signaling không cho biết âm thanh có tới không.
+Chạy thử 27 Call-ID chỉ bằng signaling: 0 SUCCESS, 11 FAIL, 16 UNKNOWN; 6 cuộc lỗi TURN hiện thành `SIGNALING_FAILURE`.
+Có log máy: 13 SUCCESS, 14 FAIL, 0 UNKNOWN (Final Evaluation Report mục 10).
+
+- **Danh sách Call-ID lấy từ ES** (`CallCatalog`, composite aggregation có phân trang), không từ thư mục — đúng chữ MVP.
+  Cổng riêng, không thêm hàm vào `SignalingSource`: cổng đó là interface một hàm, test dựng bằng lambda.
+- **Log máy tuỳ chọn** (`--logs`, lặp được): thư mục trùng tên Call-ID, so không phân biệt hoa thường (bẫy #23). Không
+  bắt buộc vì MVP nói "trong ES"; không bỏ hẳn vì chỉ signaling thì phân bố gần như vô nghĩa. Mentor chọn chế độ nào là
+  câu 17 (`cau-hoi-mentor.md`); làm cả hai thì câu trả lời nào cũng không phải sửa code.
+- **Tách theo nguồn dữ liệu của TỪNG cuộc** (`SourceGroup`, xét theo timeline chứ không theo "có thư mục" — thư mục có
+  thể chỉ chứa file bị loại). Gộp chung thì "59 % UNKNOWN" lẫn hai nghĩa: thiếu log máy, và đủ log mà vẫn không kết luận
+  được. Báo cáo in mục "Cách đọc" khi có cuộc chỉ có signaling; dashboard tách màu theo nguồn.
+- **Không đổi rule để signaling-only "đẹp" hơn.** Cho rule kết luận SUCCESS từ signaling đẹp thì `2D9057AA` thành SUCCESS
+  sai (bẫy #12); đổi loại lỗi của nhóm chỉ signaling thành UNKNOWN thì Web UI đổi theo (cùng rule). Giữ rule, ghi rõ
+  trong báo cáo rằng loại lỗi ở nhóm này là triệu chứng phía server.
+- **Đúng pipeline của Web UI** (`AnalyzeCallService`), không đường phân tích riêng — kết quả batch và kết quả hỏi từng
+  cuộc không thể lệch nhau. Lệnh bỏ `signaling.json` khỏi danh sách file trước khi đọc: signaling lấy từ ES.
+- **Chỉ rule, không AI.** Kết luận của AI hoặc trùng rule, hoặc bị Guardrails hạ thành UNKNOWN (mục 23) — không bao giờ
+  là kết luận khác. AI không thêm thông tin cho phân bố, chỉ thêm tiền và nhiễu (UNKNOWN do lệch rule).
+- **Ghi ES: index riêng `call-analysis-results`, lượt mới thay lượt cũ.** Không ghi vào `analysis-requests` (T9): trộn
+  vào thì tỉ lệ fallback và độ trễ của request web sai. Xoá rồi tạo lại index thay vì ghi đè theo id: id là mã giả, mà
+  khoá mã giả ngẫu nhiên giữa các lần chạy khi chưa đặt `CALL_ANALYSIS_PSEUDONYM_KEY` — ghi đè khi đó vẫn sinh bản trùng.
+  Chỉ mã / số / cờ, Call-ID mã giả (MVP 6.2), như `RequestRecord`. Ghi lỗi không làm mất lượt: báo cáo file vẫn ra.
+- **Một cuộc lỗi không dừng cả lượt:** bỏ cuộc đó, nêu trong báo cáo ("Không phân tích được"), không im lặng.
+
+**Kiểm:** 25 test mới (thống kê đếm tay, báo cáo, service với pipeline thật, tìm thư mục, tài liệu khớp mapping strict,
+2 test ES thật: phân trang danh sách Call-ID, index bị thay chứ không cộng dồn). Chạy thật hai chế độ trên 27 Call-ID;
+index giữ 27 bản ghi sau hai lượt. Không sửa dòng nào của luồng phân tích → số đo `dev` mục 9 của Final Evaluation
+Report không đổi.
+
 ## Còn để mở
 
 Năm mục từng để mở ở bản trước nay đã chốt — xem mục 11, 17, 19, 20, 21.

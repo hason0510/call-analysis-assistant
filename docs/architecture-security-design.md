@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-19 (cuối Sprint 3, sau góp ý mentor và rà soát theo MVP) |
+| Cập nhật lần cuối | 2026-10-19 (cuối Sprint 3, sau góp ý mentor, rà soát theo MVP và T10) |
 | Thay cho | `docs/architecture-v1.md` (kiến trúc Sprint 1, chưa có AI và Web UI) |
-| Chi tiết từng quyết định | `docs/design-decisions.md` (47 mục) — tài liệu này trỏ tới số mục, không chép lại |
+| Chi tiết từng quyết định | `docs/design-decisions.md` (48 mục) — tài liệu này trỏ tới số mục, không chép lại |
 | Bẫy dữ liệu | `docs/bay-du-lieu.md` — các tài liệu trích theo số hiệu ("bẫy #13") |
 
 Tài liệu mô tả hệ thống ở trạng thái hiện tại: kiến trúc, luồng dữ liệu, phần nào code làm và phần nào AI làm, cách
@@ -39,20 +39,21 @@ Theo `Controller → Service → Domain → Infrastructure`, triển khai kiểu
 ```text
 io.hason.callanalysis
 ├── controller/       ADAPTER VÀO — Chat API (POST /api/analyze), chỉ bật ở profile "web"
-├── cli/              ADAPTER VÀO — các lệnh dòng lệnh (--analyze, --evaluate, --import-signaling…)
+├── cli/              ADAPTER VÀO — các lệnh dòng lệnh (--analyze, --evaluate, --batch-analyze, --import-signaling…)
 ├── service/          ĐIỀU PHỐI — ChatAnalysisService, AnalyzeCallService, AiVerdictService,
-│   │                 RequestParserService, CallLogNormalizationService, EvaluationService
-│   └── port/         CỔNG RA — SignalingSource, AiAnalyzer, IntentClassifier, ApplicationLogTap
+│   │                 RequestParserService, CallLogNormalizationService, EvaluationService, BatchAnalysisService
+│   └── port/         CỔNG RA — SignalingSource, AiAnalyzer, IntentClassifier, ApplicationLogTap,
+│                     RequestRecordSink, CallCatalog, BatchResultSink
 ├── domain/           LÕI — không Spring, không I/O
 │   ├── parse/  signaling/  timeline/  metrics/  rule/  confidence/  evidence/
-│   ├── ai/  guardrail/  request/  report/  validation/  security/  evaluation/  taxonomy/
+│   ├── ai/  guardrail/  request/  report/  validation/  security/  evaluation/  batch/  taxonomy/
 └── infrastructure/   ADAPTER RA — es/ (Elasticsearch), ai/ (OpenAI), file/, logging/, security/, report/
 ```
 
 **Luật bắt buộc:** `domain` không import `infrastructure`, không có annotation Spring, không đọc file, không gọi mạng.
 
 Luật này cho ba thứ đo được: pipeline tất định (cùng input ra cùng output — điều kiện của Consistency ≥ 95%); toàn
-bộ logic test được không cần Elasticsearch hay AI (561 unit test, 2026-10-19); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
+bộ logic test được không cần Elasticsearch hay AI (584 unit test, 2026-10-19); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
 hai cổng `AiAnalyzer` và `IntentClassifier` (MVP 6.6).
 
 **Adapter chỉ làm việc cơ học.** `ElasticsearchSignalingSource` map document thành `RawSignalingRecord` rồi dừng; parse
@@ -388,6 +389,10 @@ thì không có lý do N/A và ngược lại; `degraded` khi và chỉ khi có 
   fallback, latency từng bước, token, tên lớp lỗi) — chỉ mã, số, cờ; ghi bất đồng bộ, Elasticsearch lỗi không làm hỏng
   request. `scripts/kibana/setup_views.py` dựng data view và 4 saved search trên Kibana: tất cả, fallback, lỗi, chậm
   (mục 39).
+- Lệnh `--batch-analyze` (T10) ghi mỗi Call-ID một bản ghi vào index `call-analysis-results`: verdict, loại lỗi, độ tin
+  cậy, nguồn dữ liệu, số evidence — chỉ mã, số, cờ, `call_id` mã giả; lượt mới thay lượt cũ. Index riêng để không làm
+  sai tỉ lệ fallback / độ trễ của request web. `scripts/kibana/setup_dashboard.py` dựng dashboard đọc index này
+  (design-decisions mục 48).
 
 ---
 

@@ -8,9 +8,9 @@ test tham số hoá tính từng bộ tham số).
 | | |
 |---|---|
 | Code | `main` @ `bf0114b` — *feat: Sprint 3 — hardening, đo lường và xử lý dataset mới*, tác giả `hason123`, 2026-10-14: 125 file, +7 174 / −368 dòng, trong đó 35 file test (+2 062 dòng) |
-| Test | `mvn test` 2026-10-19: **565 test, 0 lỗi** (Docker bật, 4 test Testcontainers cũng chạy). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
+| Test | `mvn test` 2026-10-19: **590 test, 0 lỗi** (Docker bật, 6 test Testcontainers cũng chạy; 565 trước T10). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
 | Benchmark | `dev` 20 case, 69 câu × 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14 — `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` |
-| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–47 |
+| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–48 |
 
 ## Tự kiểm lại
 
@@ -18,7 +18,7 @@ test tham số hoá tính từng bộ tham số).
 git show --stat bf0114b                                   # danh sách file Sprint 3
 git show bf0114b -- src/main/java/io/hason/callanalysis/domain/confidence/   # xem code một task (ví dụ T3)
 export JAVA_HOME="/c/Users/Admin/.jdks/jbr-21.0.10"
-mvn test                                                  # 565 test
+mvn test                                                  # 590 test
 mvn test -Dtest=ConfidencePolicyTest                      # chạy riêng test của một task
 # Chấm lại lượt benchmark cuối theo đáp án hiện tại — không gọi AI, không cần ES, không tốn tiền
 mvn spring-boot:run -Dspring-boot.run.arguments="--rescore=benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.json"
@@ -32,7 +32,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 | Mục MVP | Nội dung | Trạng thái |
 |---|---|---|
 | 7.1 | 7 task Core (T1–T7) | 6/7 — T1 🟡 (Issue Category Accuracy chờ nhãn), T7 ⬜ (cần repo của bạn cùng nhóm) |
-| 7.1 | 4 task Nếu kịp (T8–T11) | 3/4 — T10 ⬜ (chờ mentor chốt đầu vào batch) |
+| 7.1 | 4 task Nếu kịp (T8–T11) | 4/4 — T10 làm 2026-10-19 (đầu vào mentor muốn dùng vẫn hỏi ở câu 17; làm cả hai chế độ) |
 | 7.2 | Confidence Design theo bảng | ✅ `ConfidencePolicy`, test từng dòng bảng |
 | 7.3 | Peer Evaluation | ⬜ |
 | 7.4 | 3 tài liệu bàn giao + Final Demo | ✅ — Final Evaluation Report còn chờ kết quả `held-out` của mentor |
@@ -53,7 +53,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 | **T7 Peer Evaluation** ⬜ | Chạy sản phẩm bạn cùng nhóm theo Runbook của họ, báo cáo ≥ 2 issue | — | — | Chưa làm: cần repo + Runbook của bạn cùng nhóm |
 | **T8 Retry & Error Classification** (Nếu kịp) | Controlled retry, phân loại lỗi | `domain/ai/RetryPolicy` (file mới; chỉ `TIMEOUT` / `PROVIDER_ERROR`, `max-attempts: 2` = tối đa 2 lần gọi, ngân sách 45 s — `application.yml`); `OpenAiChatClient` (thêm `AUTH_FAILED`, `INPUT_TOO_LARGE`, `REQUEST_REJECTED`); `AiCallLog` dòng `RETRY` | `RetryPolicyTest` (14), `OpenAiChatClientTest` (8): `transientErrorIsRetried`, `retriesAreBounded`, `permanentErrorsAreNotRetried`, `timeoutIsRetriedWithinBudget`, `noRetryBeyondBudget`, `httpErrorsAreClassified`; `AiCallLogTest::retryLine` | Cổng chết → 1 lần thử lại rồi fallback; API thật với khoá giả → `AUTH_FAILED`; câu 1 MB → `INPUT_TOO_LARGE`. Lượt cuối: OpenAI trả 3 lỗi nhà cung cấp, thử lại xử lý được |
 | **T9 Kibana View** (Nếu kịp) | Ghi log và kết quả vào ES local; Kibana view request / latency / fallback / lỗi | `domain/observability/RequestRecord`, `service/port/RequestRecordSink`, `infrastructure/es/ElasticsearchRequestRecordSink` (file mới); `resources/es/analysis-requests-mapping.json`; `scripts/kibana/setup_views.py` (data view + 4 saved search) | `ElasticsearchRequestRecordSinkTest` (2) — `noNullsNoFreeText`; `ChatAnalysisServiceTest::everyRequestLeavesOneRecord`, `::unexpectedErrorIsRecorded` | 6 request → 6 tài liệu trong index `analysis-requests`; saved search "fallback" hiện đúng trên Kibana |
-| **T10 Batch Analysis** (Nếu kịp) ⬜ | | — | — | Chưa làm: chờ mentor chốt đầu vào batch chỉ signaling hay kèm log máy |
+| **T10 Batch Analysis** (Nếu kịp) | Phân tích hàng loạt các Call-ID trong ES local, thống kê phân bố verdict / issue category | `cli/BatchAnalyzeCommand`, `service/BatchAnalysisService`, `domain/batch/` (`SourceGroup`, `BatchResult`, `BatchSummary`, `BatchReportRenderer`), `service/port/CallCatalog` + `BatchResultSink`, `infrastructure/es/ElasticsearchCallCatalog` + `ElasticsearchBatchResultSink`, `infrastructure/file/CallLogDirectory`, `resources/es/call-analysis-results-mapping.json`; dashboard thứ hai trong `scripts/kibana/setup_dashboard.py` (file mới trừ script) | `BatchSummaryTest` (4), `BatchReportRendererTest` (5), `BatchAnalysisServiceTest` (6), `CallLogDirectoryTest` (6), `ElasticsearchBatchResultSinkTest` (2), `SignalingImporterIntegrationTest::catalogListsEveryCallIdAcrossPages`, `::batchResultsReplacePreviousRun` | 27 Call-ID trong ES. Chỉ signaling: 0 SUCCESS · 11 FAIL · 16 UNKNOWN (thiếu log máy), loại lỗi chỉ là triệu chứng. Kèm `--logs`: 13 SUCCESS · 14 FAIL · 0 UNKNOWN, 13/13 cuộc có nhãn đúng. Dashboard "Phân tích hàng loạt — toàn kho" hiển thị đúng. Final Evaluation Report mục 10 |
 | **T11 Result Dashboard** (Nếu kịp) | Dashboard: phân bố verdict, UNKNOWN rate, fallback rate, latency | `scripts/kibana/setup_dashboard.py` (dùng index của T9) | Chưa có test tự động (script Python gọi API Kibana) | Cách chạy và link dashboard: `docs/runbook.md` mục 5 |
 
 ## Dataset mới của mentor (`ai20k_new_dataset`, 7 cuộc, chưa có nhãn)

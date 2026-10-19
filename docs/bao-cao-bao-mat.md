@@ -31,7 +31,7 @@ nhận câu từ chối. **Đã sửa** theo phương án C (2026-10-10); chạy
 
 ## 2. S01-S08
 
-`mvn test` 2026-10-10: **413 test, 0 lỗi**; chạy lại 2026-10-19: **565 test, 0 lỗi**. Các test mang tên ca:
+`mvn test` 2026-10-10: **413 test, 0 lỗi**; chạy lại 2026-10-19: **565 test, 0 lỗi** (590 sau T10, cùng ngày). Các test mang tên ca:
 
 | Ca | Test | Kiểm |
 |---|---|---|
@@ -130,7 +130,9 @@ Temp của Windows — quét **0 file** mà vẫn in "còn sót=0" ở mọi dò
 
 Signaling nạp vào Elasticsearch local ở dạng gốc (`appUserId`, `isp`, `asn`). MVP 6.2 đặt "dữ liệu ghi vào ES local"
 dưới mục Output; dự án hiểu là kết quả phân tích ghi vào ES — từ Sprint 3 T9 là index `analysis-requests`, chỉ gồm mã,
-số và cờ, `call_id` đã mã giả. Nếu mentor tính cả dữ liệu nạp: mã giả `appUserId` lúc import và sửa cách suy ra leg.
+số và cờ, `call_id` đã mã giả; T10 (2026-10-19) thêm index `call-analysis-results` cùng nguyên tắc (mỗi Call-ID một bản
+ghi: verdict, loại lỗi, độ tin cậy, nguồn dữ liệu, số evidence; test `ElasticsearchBatchResultSinkTest` khẳng định không
+có trường chữ tự do). Nếu mentor tính cả dữ liệu nạp: mã giả `appUserId` lúc import và sửa cách suy ra leg.
 Bản export thô có thêm `message` (chữ tự do mang User-ID, Call-ID gốc) và `clientIp`: cả hai KHÔNG được nạp; từ
 `message` chỉ giữ cờ có kiểu `noSessionsFound` (2026-10-19).
 

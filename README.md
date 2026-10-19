@@ -47,7 +47,7 @@ dưới từng scenario — 2026-10-12, riêng scenario 2 đổi sang `B5F19381`
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **565 test, 0 lỗi**. 4 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **590 test, 0 lỗi**. 6 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -171,6 +171,7 @@ Importer quét đệ quy mọi file `signaling.json` dưới thư mục được
 | `--sanitize-dir=<thư-mục> --out=<thư-mục-ra>` | Làm sạch toàn bộ log thô để kiểm độc lập bằng `scripts/verify-sanitizer` |
 | `--evaluate=<file case> --logs=<thư-mục log> [--repeat=n] [--out=<thư-mục>]` | **Evaluation Runner**: chạy bộ case YAML (mẫu MVP mục 6.3) qua đúng luồng Chat API, chấm metric mục 6.5, ghi `.md` + `.json` vào `target/evaluation/` |
 | `--rescore=<file .json> [--cases=<file case>] [--out=<thư mục>]` | Chấm lại một lượt `--evaluate` từ file `.json` của nó theo đáp án hiện tại của file case — không gọi AI, không cần Elasticsearch |
+| `--batch-analyze [--logs=<thư-mục log>]… [--out=<thư mục>]` | **Phân tích hàng loạt** (S3-T10): mọi Call-ID trong Elasticsearch, chỉ rule; thống kê phân bố verdict / loại lỗi tách theo nguồn dữ liệu, ghi `.md` + `.json` vào `target/batch/` và index `call-analysis-results` cho dashboard. `--logs` lặp được, tuỳ chọn: thư mục trùng Call-ID được dùng làm log máy |
 | profile `web` | Bật Web UI và `POST /api/analyze` (multipart: `message` + `files`) |
 
 Trên PowerShell dùng `.\build.ps1` thay cho `./mvnw` và đặt tham số `-D…` trong nháy kép, ví dụ
@@ -308,14 +309,16 @@ nặng nhất. Mã lỗi trong câu tóm tắt được đọc nguyên văn từ
 
 ```text
 io.hason.callanalysis
-├── cli/               ADAPTER VÀO — 12 lệnh dòng lệnh
+├── cli/               ADAPTER VÀO — 13 lệnh dòng lệnh
 ├── controller/        ADAPTER VÀO — Chat API cho Web UI, chỉ chạy ở profile web (S2-T2)
 ├── service/           ĐIỀU PHỐI
 │   ├── CallLogNormalizationService, AnalyzeCallService      pipeline Sprint 1
 │   ├── ChatAnalysisService, RequestParserService, AiVerdictService   luồng Chat API (S2)
 │   ├── EvaluationService                                    Evaluation Runner (S2-T9)
+│   ├── BatchAnalysisService                                 phân tích hàng loạt (S3-T10)
 │   └── port/SignalingSource, AiAnalyzer, IntentClassifier,  cổng ra
-│            RequestRecordSink (S3-T9), ApplicationLogTap (S3-T6)
+│            RequestRecordSink (S3-T9), ApplicationLogTap (S3-T6),
+│            CallCatalog, BatchResultSink (S3-T10)
 ├── domain/            LÕI THUẦN — không Spring, không I/O
 │   ├── event/             Canonical Event Model (S1-T2)
 │   ├── parse/             2 parser (end call log, WebRTC log) + FileTypeDetector (S1-T3)
@@ -333,9 +336,10 @@ io.hason.callanalysis
 │   ├── security/          Danh mục + Sanitizer dữ liệu nhạy cảm (S1-T9, S2-T7)
 │   ├── report/            Model report, builder, renderer mẫu 4.5 (S1-T8, S2-T2)
 │   ├── evaluation/        Chấm benchmark theo metric mục 6.5 (S2-T9), --rescore (S3)
+│   ├── batch/             Thống kê phân tích hàng loạt theo nguồn dữ liệu (S3-T10)
 │   └── observability/     Bản ghi request ghi vào ES cho Kibana (S3-T9)
 └── infrastructure/    ADAPTER RA
-    ├── es/                Elasticsearch: signaling, bản ghi request (S3-T9)
+    ├── es/                Elasticsearch: signaling, bản ghi request (S3-T9), danh sách Call-ID + kết quả hàng loạt (S3-T10)
     ├── ai/                OpenAI (Structured Outputs)
     ├── file/              Đọc file log từ đĩa
     ├── evaluation/        Đọc file case YAML, tìm file log của case
@@ -359,7 +363,7 @@ Guardrails:
 | `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (20 case, 69 câu) và bộ câu kiểm phân loại |
 | `scripts/benchmark-variants/make_variants.py` | Tạo file biến thể cho case-016 (F02, tên file sai loại) và case-019 (dữ liệu nhạy cảm giả), đặt ngoài repo |
 | `scripts/error-analysis/analyze_runs.py` | Phân tích lỗi trên các lượt benchmark (S3-T1) |
-| `scripts/kibana/setup_views.py` · `setup_dashboard.py` | Dựng data view, saved search (S3-T9) và dashboard kết quả (S3-T11) trên Kibana |
+| `scripts/kibana/setup_views.py` · `setup_dashboard.py` | Dựng data view, saved search (S3-T9), dashboard kết quả (S3-T11) và dashboard phân tích hàng loạt (S3-T10) trên Kibana |
 
 Kiến trúc theo `Controller → Service → Domain → Infrastructure`, triển khai kiểu
 Hexagonal (Ports & Adapters).
@@ -436,11 +440,11 @@ Benchmark `dev` (`benchmark/dev-cases.yaml` lúc đó: 18 case, 63 câu hỏi), 
 | Latency | P50 **3,8 s** · P95 **8,4 s** | — |
 | Chi phí AI | ≈ 0,20 USD / 315 lần chạy (~3 000 token vào, ~175 token ra mỗi lần phân tích) | — |
 
-## Trạng thái — Sprint 3: 6/7 task Core, 3/4 task Nếu kịp
+## Trạng thái — Sprint 3: 6/7 task Core, 4/4 task Nếu kịp
 
 Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đo:
-[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (`mvn test` 2026-10-19: 565 test, 0 lỗi). Lý do từng thay
-đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–47.
+[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (`mvn test` 2026-10-19: 590 test, 0 lỗi). Lý do từng thay
+đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–48.
 
 | Task | Trạng thái | Nằm ở |
 |---|---|---|
@@ -453,7 +457,7 @@ Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đ
 | T7 — Peer Evaluation | ⬜ | Chưa làm — cần repo và Runbook của bạn cùng nhóm |
 | T8 — Retry & Error Classification (Nếu kịp) | ✅ | `RetryPolicy`: chỉ thử lại lỗi tạm thời, tối đa 2 lần gọi, ngân sách 45 s cho cả hai |
 | T9 — Kibana View (Nếu kịp) | ✅ | Mỗi request một bản ghi vào index `analysis-requests` (chỉ mã / số / cờ), `scripts/kibana/setup_views.py` |
-| T10 — Batch Analysis (Nếu kịp) | ⬜ | Chưa làm — chờ mentor: đầu vào batch chỉ signaling hay kèm log máy |
+| T10 — Batch Analysis (Nếu kịp) | ✅ | `--batch-analyze`: mọi Call-ID trong ES qua đúng pipeline, chỉ rule; thống kê tách "chỉ signaling" / "signaling + log máy"; index `call-analysis-results` + dashboard "Phân tích hàng loạt — toàn kho" |
 | T11 — Result Dashboard (Nếu kịp) | ✅ | `scripts/kibana/setup_dashboard.py` — Runbook mục 5 |
 
 **Tài liệu bàn giao (MVP 7.4):** [Runbook](docs/runbook.md) ✅ · [Architecture & Security
@@ -504,18 +508,31 @@ sánh T11: Final Evaluation Report mục 3b.
 input quá lớn — 67/67 test qua; `dev` ×5 (345 lần chạy, ≈ 0,32 USD) — mọi metric như cột "Cuối Sprint 3", Unsupported
 Claim 0/310, 0 fallback, P50 / P95 2,95 s / 4,04 s. Bảng so với Sprint 2: Final Evaluation Report mục 9.
 
+**Phân tích hàng loạt** (T10, 2026-10-19, 27 Call-ID trong ES, chỉ rule, 0 USD). T10 làm sau lượt chạy lại trên và không
+sửa dòng nào của luồng phân tích, nên số đo trên vẫn là của bản nộp. Final Evaluation Report mục 10.
+
+| Nguồn dữ liệu | SUCCESS | FAIL | UNKNOWN | Loại lỗi |
+|---|---|---|---|---|
+| Chỉ signaling (không `--logs`) | 0 | 11 | 16 | 11 `SIGNALING_FAILURE` |
+| Signaling + log máy (`--logs` hai dataset) | 13 (2 có cờ chất lượng) | 14 | 0 | 6 TURN · 5 SIGNALING · 3 ICE · 1 PACKET_LOSS · 1 DELAY_JITTER |
+
+Chỉ có signaling thì không cuộc nào được kết luận SUCCESS: signaling không cho biết âm thanh có tới không (`2D9057AA`
+signaling hoàn hảo mà 0 byte âm thanh), nên UNKNOWN ở nhóm này là "thiếu log máy". Loại lỗi ở nhóm này chỉ là triệu chứng
+phía server: 6 cuộc lỗi TURN hiện ra thành `SIGNALING_FAILURE`. Báo cáo và dashboard tách hai nhóm và ghi rõ điều này.
+
 ---
 
 ## Known Limitations
 
-Cập nhật cuối Sprint 3 (2026-10-15). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
+Cập nhật cuối Sprint 3 (2026-10-19). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
 cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-report.md) mục 7.
 
 **Chưa làm hoặc còn chờ mentor**
 
 - Sprint 3 T7 (Peer Evaluation): cần repo và Runbook của bạn cùng nhóm.
-- Sprint 3 T10 (Batch Analysis): chờ mentor chốt đầu vào batch. Chỉ có signaling thì thử được 5/13 cuộc đúng, 8 cuộc ra
-  `UNKNOWN`; có kèm log máy thì 13/13.
+- Sprint 3 T10 (Batch Analysis) chỉ dùng signaling (đúng chữ "Call-ID trong ES local") thì gần như vô dụng: trên 13 cuộc
+  có nhãn 5 đúng, 8 `UNKNOWN`, và lỗi TURN hiện thành `SIGNALING_FAILURE`. Có `--logs` thì 13/13. Đã làm cả hai chế
+  độ và tách nhóm trong báo cáo; chế độ mentor muốn dùng vẫn chờ trả lời (câu 17).
 - Issue Category Accuracy chưa đo được: ground truth chỉ có fail / success. Runner và `--rescore` đã sẵn để chấm khi có
   nhãn.
 - Kết quả `held-out`: chờ mentor chạy Evaluation Runner và gửi lại.
