@@ -10,6 +10,11 @@ Dashboard "Kết quả phân tích cuộc gọi" gồm:
 
 Tỉ lệ tính trên request ra report (result_status REPORT) — câu ngoài phạm vi và request hỏng không có kết luận.
 
+Dashboard thứ hai "Phân tích hàng loạt — toàn kho" đọc index `call-analysis-results` do lệnh `--batch-analyze` (T10)
+ghi: mỗi Call-ID trong Elasticsearch một bản ghi, lượt mới thay lượt cũ. Mọi biểu đồ tách theo nguồn dữ liệu
+(`source_group`): cuộc chỉ có signaling thì UNKNOWN nghĩa là thiếu log máy, loại lỗi chỉ là triệu chứng phía server.
+Chưa chạy `--batch-analyze` thì dashboard này trống.
+
 Cần data view `analysis-requests` của T9:  python scripts/kibana/setup_views.py
 Chạy lại bao nhiêu lần cũng được: mọi đối tượng có id cố định và được ghi đè.
 
@@ -27,6 +32,9 @@ import urllib.error
 from setup_views import DATA_VIEW_ID, call, wait_for_kibana
 
 DASHBOARD_ID = 'analysis-results-dashboard'
+BATCH_DASHBOARD_ID = 'batch-results-dashboard'
+BATCH_DATA_VIEW_ID = 'call-analysis-results'
+ALL_CALLS = 'call_id : *'
 REPORTS = 'result_status : "REPORT"'
 
 
@@ -69,7 +77,7 @@ def ratio_columns(column_id, label, numerator_kql, denominator_kql):
     }
 
 
-def lens(object_id, title, vis_type, columns, column_order, visualization, query=''):
+def lens(object_id, title, vis_type, columns, column_order, visualization, query='', data_view=DATA_VIEW_ID):
     layer = 'layer1'
     return {
         'type': 'lens', 'id': object_id,
@@ -83,13 +91,13 @@ def lens(object_id, title, vis_type, columns, column_order, visualization, query
                 'adHocDataViews': {}, 'internalReferences': [],
             },
         },
-        'references': [{'type': 'index-pattern', 'id': DATA_VIEW_ID, 'name': f'indexpattern-datasource-layer-{layer}'}],
+        'references': [{'type': 'index-pattern', 'id': data_view, 'name': f'indexpattern-datasource-layer-{layer}'}],
     }
 
 
-def metric(object_id, title, columns, column_order, accessor, query=''):
+def metric(object_id, title, columns, column_order, accessor, query='', data_view=DATA_VIEW_ID):
     return lens(object_id, title, 'lnsMetric', columns, column_order,
-                {'layerId': 'layer1', 'layerType': 'data', 'metricAccessor': accessor}, query)
+                {'layerId': 'layer1', 'layerType': 'data', 'metricAccessor': accessor}, query, data_view)
 
 
 def bar(object_id, title, field, label, query=REPORTS):
@@ -144,20 +152,76 @@ LAYOUT = [
 ]
 
 
+def stacked(object_id, title, field, label, query=ALL_CALLS):
+    """Cột ngang xếp chồng: `field` theo trục, tách màu theo nguồn dữ liệu (source_group) — T10."""
+    return lens(object_id, title, 'lnsXY',
+                {'g': terms(label, field, 'm'), 's': terms('Nguồn dữ liệu', 'source_group', 'm', 3),
+                 'm': count('Số cuộc')}, ['g', 's', 'm'],
+                {'preferredSeriesType': 'bar_horizontal_stacked', 'legend': {'isVisible': True, 'position': 'bottom'},
+                 'valueLabels': 'show',
+                 'layers': [{'layerId': 'layer1', 'layerType': 'data', 'seriesType': 'bar_horizontal_stacked',
+                             'xAccessor': 'g', 'splitAccessor': 's', 'accessors': ['m']}]},
+                query, BATCH_DATA_VIEW_ID)
+
+
+def batch_visualizations():
+    return [
+        metric('br-calls', 'Số cuộc gọi', {'m': count('Số cuộc gọi')}, ['m'], 'm', data_view=BATCH_DATA_VIEW_ID),
+        metric('br-signaling-only', 'Cuộc chỉ có signaling (thiếu log máy)',
+               ratio_columns('r', 'Chỉ có signaling', 'source_group : "SIGNALING_ONLY"', ALL_CALLS),
+               ['r', 'rX0', 'rX1', 'rX2'], 'r', data_view=BATCH_DATA_VIEW_ID),
+        metric('br-unknown-rate', 'Tỉ lệ UNKNOWN',
+               ratio_columns('r', 'Tỉ lệ UNKNOWN', 'verdict : "UNKNOWN"', ALL_CALLS),
+               ['r', 'rX0', 'rX1', 'rX2'], 'r', data_view=BATCH_DATA_VIEW_ID),
+        metric('br-unknown-rate-logs', 'Tỉ lệ UNKNOWN — cuộc có log máy',
+               ratio_columns('r', 'UNKNOWN có log máy', 'verdict : "UNKNOWN" and source_group : "WITH_CLIENT_LOGS"',
+                             'source_group : "WITH_CLIENT_LOGS"'),
+               ['r', 'rX0', 'rX1', 'rX2'], 'r', data_view=BATCH_DATA_VIEW_ID),
+        stacked('br-verdict', 'Phân bố kết luận theo nguồn dữ liệu', 'verdict', 'Kết luận'),
+        stacked('br-category', 'Loại lỗi theo nguồn dữ liệu (chỉ signaling: triệu chứng phía server)',
+                'issue_category', 'Loại lỗi',
+                '(verdict : "FAIL" or (verdict : "SUCCESS" and quality_flag : true)) and issue_category : *'),
+        stacked('br-confidence', 'Độ tin cậy theo nguồn dữ liệu', 'confidence', 'Độ tin cậy'),
+    ]
+
+
+BATCH_LAYOUT = [
+    ('br-calls', 0, 0, 12, 7), ('br-signaling-only', 12, 0, 12, 7), ('br-unknown-rate', 24, 0, 12, 7),
+    ('br-unknown-rate-logs', 36, 0, 12, 7),
+    ('br-verdict', 0, 7, 24, 14), ('br-category', 24, 7, 24, 14), ('br-confidence', 0, 21, 24, 12),
+]
+
+
 def dashboard():
+    return build_dashboard(DASHBOARD_ID, 'Kết quả phân tích cuộc gọi',
+                           'Sprint 3 T11 — index analysis-requests (T9). Tỉ lệ tính trên request ra report.',
+                           LAYOUT, time_restore=True)
+
+
+def batch_dashboard():
+    return build_dashboard(BATCH_DASHBOARD_ID, 'Phân tích hàng loạt — toàn kho',
+                           'Sprint 3 T10 — index call-analysis-results (--batch-analyze), lượt mới nhất. Tách theo nguồn'
+                           ' dữ liệu: chỉ signaling thì UNKNOWN là thiếu log máy.',
+                           BATCH_LAYOUT, time_restore=False)
+
+
+def build_dashboard(dashboard_id, title, description, layout, time_restore):
     panels, references = [], []
-    for i, (object_id, x, y, w, h) in enumerate(LAYOUT):
+    for i, (object_id, x, y, w, h) in enumerate(layout):
         name = f'panel_{i}'
         panels.append({'type': 'lens', 'panelIndex': str(i), 'panelRefName': name,
                        'gridData': {'x': x, 'y': y, 'w': w, 'h': h, 'i': str(i)}, 'embeddableConfig': {}})
         references.append({'type': 'lens', 'id': object_id, 'name': name})
+    # Index của T10 không có trường thời gian (ảnh chụp lượt mới nhất) nên không khoá khoảng thời gian
+    timing = ({'timeRestore': True, 'timeFrom': 'now-7d', 'timeTo': 'now', 'refreshInterval': {'pause': True, 'value': 0}}
+              if time_restore else {'timeRestore': False})
     return {
-        'type': 'dashboard', 'id': DASHBOARD_ID,
+        'type': 'dashboard', 'id': dashboard_id,
         'attributes': {
-            'title': 'Kết quả phân tích cuộc gọi',
-            'description': 'Sprint 3 T11 — index analysis-requests (T9). Tỉ lệ tính trên request ra report.',
+            'title': title,
+            'description': description,
             'panelsJSON': json.dumps(panels), 'optionsJSON': json.dumps({'useMargins': True, 'hidePanelTitles': False}),
-            'timeRestore': True, 'timeFrom': 'now-7d', 'timeTo': 'now', 'refreshInterval': {'pause': True, 'value': 0},
+            **timing,
             'kibanaSavedObjectMeta': {'searchSourceJSON': json.dumps({'query': {'query': '', 'language': 'kuery'},
                                                                       'filter': []})},
         },
@@ -178,13 +242,22 @@ def main():
     except urllib.error.HTTPError:
         sys.exit(f'Chưa có data view "{DATA_VIEW_ID}". Chạy trước: python scripts/kibana/setup_views.py')
 
-    objects = visualizations() + [dashboard()]
+    # Data view của T10: không đặt trường thời gian — index là ảnh chụp lượt mới nhất, không phải chuỗi theo thời gian
+    call(base, 'POST', '/api/data_views/data_view', {
+        'data_view': {'id': BATCH_DATA_VIEW_ID, 'title': 'call-analysis-results',
+                      'name': 'Call analysis — batch results'},
+        'override': True,
+    })
+
+    objects = visualizations() + [dashboard()] + batch_visualizations() + [batch_dashboard()]
     result = call(base, 'POST', '/api/saved_objects/_bulk_create?overwrite=true', objects)
     failed = [o for o in result.get('saved_objects', []) if 'error' in o]
     if failed:
         sys.exit('Lỗi khi tạo: ' + json.dumps(failed, ensure_ascii=False))
-    print(f'Đã tạo {len(objects) - 1} biểu đồ và dashboard "Kết quả phân tích cuộc gọi".')
-    print(f'Mở: {base}/app/dashboards#/view/{DASHBOARD_ID}')
+    print(f'Đã tạo {len(objects) - 2} biểu đồ và 2 dashboard.')
+    print(f'Kết quả phân tích cuộc gọi (T11): {base}/app/dashboards#/view/{DASHBOARD_ID}')
+    print(f'Phân tích hàng loạt (T10):       {base}/app/dashboards#/view/{BATCH_DASHBOARD_ID}'
+          '  — trống nếu chưa chạy --batch-analyze')
 
 
 if __name__ == '__main__':

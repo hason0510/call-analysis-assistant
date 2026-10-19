@@ -1,0 +1,19 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "@timestamp":     { "type": "date" },
+      "call_id":        { "type": "keyword" },
+      "source_group":  { "type": "keyword" },
+      "verdict":        { "type": "keyword" },
+      "issue_category": { "type": "keyword" },
+      "quality_flag":   { "type": "boolean" },
+      "confidence":     { "type": "keyword" },
+      "evidence_count": { "type": "integer" }
+    }
+  }
+}

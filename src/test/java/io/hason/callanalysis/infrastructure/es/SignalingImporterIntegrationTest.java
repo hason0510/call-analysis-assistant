@@ -4,8 +4,13 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.hason.callanalysis.domain.batch.BatchResult;
+import io.hason.callanalysis.domain.batch.SourceGroup;
 import io.hason.callanalysis.domain.signaling.RawSignalingRecord;
 import io.hason.callanalysis.domain.signaling.SignalingFetch;
+import io.hason.callanalysis.domain.taxonomy.ConfidenceLevel;
+import io.hason.callanalysis.domain.taxonomy.IssueCategory;
+import io.hason.callanalysis.domain.taxonomy.Verdict;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
 import org.junit.jupiter.api.AfterAll;
@@ -21,13 +26,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Import thật vào Elasticsearch chạy trong Docker — phần mà unit test không với tới được:
  * mapping `dynamic: strict` có nhận document không, `_id` tất định có thật sự chặn bản trùng
- * không, và chia lô có làm rơi document nào không.
+ * không, và chia lô có làm rơi document nào không. Thêm phần Elasticsearch của T10 (phân tích hàng loạt): danh sách
+ * Call-ID qua composite aggregation, và index kết quả bị thay chứ không cộng dồn.
  *
  * Không có Docker thì bỏ qua (disabledWithoutDocker), để `mvn test` vẫn chạy được không cần
  * Docker như Sprint 1 cam kết.
@@ -147,6 +155,34 @@ class SignalingImporterIntegrationTest {
 
         assertThat(report.problems()).isEmpty();
         assertThat(fetch.records()).extracting(RawSignalingRecord::noSessionsFound).containsExactly(true, false);
+    }
+
+    @Test
+    @DisplayName("T10: danh sách Call-ID -> mọi Call-ID khác nhau, sắp xếp tăng dần, đi qua nhiều trang")
+    void catalogListsEveryCallIdAcrossPages() throws IOException {
+        writeSampleData();
+        new SignalingImporter(client, new ObjectMapper(), 2).importFrom(dataRoot);
+
+        // trang 1 Call-ID: hai Call-ID phải qua hai trang + một trang rỗng; 5 document chỉ ra 2 Call-ID
+        assertThat(new ElasticsearchCallCatalog(client, 1).callIds()).containsExactly(CALL_A, CALL_B);
+        assertThat(new ElasticsearchCallCatalog(client).callIds()).containsExactly(CALL_A, CALL_B);
+    }
+
+    @Test
+    @DisplayName("T10: ghi kết quả hàng loạt hai lần -> index chỉ giữ lượt sau, không cộng dồn")
+    void batchResultsReplacePreviousRun() throws IOException {
+        ElasticsearchBatchResultSink sink = new ElasticsearchBatchResultSink(client);
+        BatchResult a = new BatchResult("CALL_aaaaaa", SourceGroup.SIGNALING_ONLY, Verdict.UNKNOWN,
+                IssueCategory.UNKNOWN, false, ConfidenceLevel.LOW, 6);
+        BatchResult b = new BatchResult("CALL_bbbbbb", SourceGroup.WITH_CLIENT_LOGS, Verdict.SUCCESS, null,
+                false, ConfidenceLevel.HIGH, 20);
+
+        sink.replaceAll(Instant.parse("2026-10-19T13:00:00Z"), List.of(a, b));
+        sink.replaceAll(Instant.parse("2026-10-19T14:00:00Z"), List.of(b));
+
+        assertThat(client.count(c -> c.index(ElasticsearchBatchResultSink.INDEX)).count()).isEqualTo(1);
+        assertThat(client.count(c -> c.index(ElasticsearchBatchResultSink.INDEX)
+                .query(q -> q.term(t -> t.field("verdict").value("SUCCESS")))).count()).isEqualTo(1);
     }
 
     private long countDocuments() throws IOException {
