@@ -38,8 +38,8 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
   ```
 
 **1. Thử trên web** — chạy lệnh dưới, mở http://localhost:8081/, rồi làm theo 6 scenario của Final Demo trong
-[`docs/demo-sprint-3.md`](docs/demo-sprint-3.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì; kết quả chạy thật
-2026-10-12 ghi dưới từng scenario):
+[`docs/demo-sprint-3.md`](docs/demo-sprint-3.md) (câu hỏi gõ gì, kéo thả file nào, phải thấy gì; kết quả chạy thật ghi
+dưới từng scenario — 2026-10-12, riêng scenario 2 đổi sang `B5F19381` ngày 2026-10-15):
 
 ```powershell
 .\build.ps1 spring-boot:run "-Dspring-boot.run.profiles=web"
@@ -47,7 +47,7 @@ Ba cách thử sản phẩm, độc lập với nhau. Lệnh viết cho **PowerS
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **534 test, 0 lỗi**. 3 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **565 test, 0 lỗi**. 4 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -398,7 +398,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | Report hợp lệ theo schema v1 | **20/20** |
 | Test | **253** cuối Sprint 1: 250 unit test (không cần Elasticsearch) + 3 test tích hợp ES thật qua Testcontainers (import lặp 2 lần không sinh bản trùng, chia lô bulk) |
 
-## Trạng thái — Sprint 2: 10/11 task xong
+## Trạng thái — Sprint 2: 11/11 task xong
 
 | Task | Trạng thái | Nằm ở |
 |---|---|---|
@@ -412,7 +412,7 @@ Lý do đằng sau các quyết định thiết kế: xem [`docs/design-decision
 | T8 — Fallback | ✅ | `service/AiVerdictService` |
 | T9 — Evaluation Runner | ✅ | `cli/EvaluateCommand`, `service/EvaluationService`, `domain/evaluation/` |
 | T10 — Benchmark `dev` | ✅ | `benchmark/dev-cases.yaml` |
-| T11 — So sánh cách dựng context (Nếu kịp) | ⬜ | Chưa làm — khái niệm "semi-structured context" chưa chốt |
+| T11 — So sánh cách dựng context (Nếu kịp) | ✅ | Làm trong Sprint 3 theo ví dụ mentor gửi 2026-10-15: `ai.context-format=text` (`AiContextText`) — kết quả ở mục Sprint 3 bên dưới |
 
 Đối chiếu từng task với code, test và số đo: [`docs/minh-chung-sprint-2.md`](docs/minh-chung-sprint-2.md). Test cuối
 Sprint 2: 390.
@@ -438,9 +438,9 @@ Benchmark `dev` (`benchmark/dev-cases.yaml` lúc đó: 18 case, 63 câu hỏi), 
 
 ## Trạng thái — Sprint 3: 6/7 task Core, 3/4 task Nếu kịp
 
-Cập nhật 2026-10-15. Đối chiếu từng task với code, test và số đo:
-[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (code ở commit `bf0114b`; `mvn test` 2026-10-15: 533
-test, 0 lỗi). Lý do từng thay đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–41.
+Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đo:
+[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (`mvn test` 2026-10-19: 565 test, 0 lỗi). Lý do từng thay
+đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–47.
 
 | Task | Trạng thái | Nằm ở |
 |---|---|---|
@@ -500,6 +500,10 @@ Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần 
 metric như cột "Cuối Sprint 3", Unsupported Claim 0/310 với G05 mới, 0 fallback, P50 / P95 3,1 s / 4,3 s. Chi tiết và so
 sánh T11: Final Evaluation Report mục 3b.
 
+**Chạy lại trước khi nộp** (MVP 7.1, 2026-10-19, bản code cuối): S01-S08, G01-G05, F01-F04 kèm enum lạ / thiếu trường /
+input quá lớn — 67/67 test qua; `dev` ×5 (345 lần chạy, ≈ 0,32 USD) — mọi metric như cột "Cuối Sprint 3", Unsupported
+Claim 0/310, 0 fallback, P50 / P95 2,95 s / 4,04 s. Bảng so với Sprint 2: Final Evaluation Report mục 9.
+
 ---
 
 ## Known Limitations
@@ -512,11 +516,13 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - Sprint 3 T7 (Peer Evaluation): cần repo và Runbook của bạn cùng nhóm.
 - Sprint 3 T10 (Batch Analysis): chờ mentor chốt đầu vào batch. Chỉ có signaling thì thử được 5/13 cuộc đúng, 8 cuộc ra
   `UNKNOWN`; có kèm log máy thì 13/13.
-- Sprint 2 T11 (so sánh cách dựng context): khái niệm "semi-structured context" chưa chốt.
 - Issue Category Accuracy chưa đo được: ground truth chỉ có fail / success. Runner và `--rescore` đã sẵn để chấm khi có
   nhãn.
 - Kết quả `held-out`: chờ mentor chạy Evaluation Runner và gửi lại.
-- Benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém": không có cuộc gọi chất lượng kém có nhãn.
+- Benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém": không có cuộc gọi chất lượng kém có nhãn. Hai ca khác của MVP
+  6.3 chỉ phủ một phần: FAIL thiết lập chỉ có kiểu server từ chối (mã 428, case-004 / 007), không có kiểu signaling
+  timeout / "không tìm thấy session"; "bình thường có WARN" không có case riêng mà dựa vào việc mọi cuộc SUCCESS đều có
+  5-13 event WARN.
 
 **Dữ liệu và chỉ số**
 
@@ -575,8 +581,8 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
   luận của rule; "AI trùng rule 100%" trên benchmark chưa chứng minh AI tự suy luận đúng.
 - Guardrails chỉ kiểm phần có cấu trúc (verdict, category, evidence ID, con số có nguồn), **không kiểm nghĩa câu chữ**.
   G05 chặn số không có trong input: lượt cuối 0/309 đầu ra thô vi phạm, nhưng hai lượt 2026-10-13 có 4 và 5 lần (AI tự
-  trừ hai mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded). G05 hiện **bỏ sót số
-  viết liền đơn vị** (`250ms`, `45s`) nên Unsupported Claim 0% là cận dưới — đang sửa theo góp ý mentor.
+  trừ hai mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded). Từ 2026-10-15 G05
+  bắt cả số viết liền đơn vị (`250ms`, `45s`); đo lại `dev` ×5: 0/310.
 - Từ Sprint 3 T1a, AI nhắc chỉ số bằng mã và code điền tên + giá trị, nên không còn kiểu gọi sai tên con số như
   *"mất gói của caller là 11.3208%"* (`271D1FAF`, Sprint 2: đó là mẫu stats cao nhất). Lỗi diễn giải còn gặp trên
   dataset mới: gắn mã chỉ số vào câu không đúng nghĩa ("không nhận được âm thanh: {PACKET_LOSS_CALLER}"), ghi nhầm bên
@@ -584,7 +590,8 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
   cả cuộc 0,36% (`06BCA48C`). Dòng Tóm tắt ca FAIL đã chuyển sang code viết (`docs/design-decisions.md` mục 40).
 - AI vẫn có lúc tự chép con số trùng giá trị một chỉ số thay vì dùng mã: 30 số ở 21/309 lần trả lời của lượt cuối (cận
   trên — số trùng ngẫu nhiên như "1" cũng tính). Hiện chỉ đo, không chặn.
-- Evidence AI trích: mới kiểm có chứa dòng căn cứ của rule (94/115 lần có căn cứ), chưa kiểm evidence trích có **đúng**
+- Evidence AI trích: mới kiểm có chứa dòng căn cứ của rule (94/115 lần có căn cứ ở lượt cuối 14/10, 96/115 ở lượt đo
+  lại 15/10), chưa kiểm evidence trích có **đúng**
   là căn cứ không. Ca SUCCESS không cờ không có dòng căn cứ của rule nên AI tự chọn.
 - Câu hỏi giả định sai (ví dụ hỏi vì sao lỗi khi cuộc gọi không lỗi): AI không còn bịa nguyên nhân nhưng chưa luôn phủ
   nhận thẳng giả định (`case-020`, kiểm bằng đọc tay).
@@ -597,11 +604,10 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - Câu hỏi rất cụt, không dấu, chỉ gồm giá trị đã che vẫn có thể bị xếp ngoài phạm vi: *"sdt … email … goi loi"* ra
   `OUT_OF_SCOPE` (1/23 câu của `benchmark/intent-check.yaml`, 2026-10-07). Một lần sai chưa đủ căn cứ để sửa prompt.
   Câu liệt kê có số điện thoại / token / IP viết đủ ý thì phân loại đúng.
-- Câu hỏi rất dài không bị chặn: không có giới hạn độ dài câu hỏi. Thử 2026-10-12 (không khoá AI): câu 2 KB / 100 KB /
-  1 MB đều ra report (0,9 s / 0,6 s / 3,9 s). Câu cỡ 100 KB (~25 nghìn token) vẫn tới AI, tốn thêm ~0,008 USD mỗi lần.
-  Câu vượt cửa sổ ngữ cảnh của model (~128 nghìn token, cỡ 1 MB): OpenAI từ chối, report lùi về rule với lý do
-  `INPUT_TOO_LARGE`. Chưa chặn sớm vì người dùng thật hầu như không gõ câu dài cỡ đó; MVP 7.1 nhắc "oversized input"
-  nhưng không nói rõ là đầu vào nào.
+- Câu hỏi dài quá 4 000 ký tự (`call-analysis.request.max-question-chars`) bị Chat API từ chối với `QUESTION_TOO_LONG`
+  trước lời gọi AI (2026-10-19; câu dài nhất trong benchmark là 139 ký tự). Giới hạn chỉ ở Chat API: Evaluation Runner
+  và CLI không chặn, câu cực dài ở đó vẫn tới AI và lùi về rule với `INPUT_TOO_LARGE` khi vượt cửa sổ ngữ cảnh. Phản hồi
+  AI bị giới hạn 2 000 token (dài nhất từng đo: 224); vượt thì lùi về rule.
 - Câu hỏi bị hỏng mã hoá trước khi tới server (gửi bằng công cụ không dùng UTF-8, ví dụ curl trong Git Bash trên
   Windows) không khôi phục được. Hệ thống phát hiện và báo (ký tự U+FFFD, `?` giữa chữ cái, UTF-8 đọc như Windows-1252):
   report thêm một dòng ở "Giới hạn dữ liệu"; nếu câu bị xếp ngoài phạm vi thì câu từ chối kèm lời nhắc gửi lại. Câu rất
@@ -616,8 +622,9 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 
 - Chat API không có đăng nhập. Server chỉ nghe ở `127.0.0.1`, nên chỉ người dùng trên máy chạy server gọi được; mở ra
   mạng LAN (`--server.address=0.0.0.0`) thì ai trong mạng cũng gọi được và tiêu tiền OpenAI.
-- Chưa có cổng fail-closed: context gửi AI chỉ qua Sanitizer, chưa có bước quét lại độc lập ngay trước khi gửi (đang làm,
-  góp ý mentor). Benchmark đo 0 rò rỉ, nhưng đó là đo sau, không phải chặn trước.
+- Cổng fail-closed (`OutboundGate`, 2026-10-15) quét lại đúng chuỗi sắp gửi AI bằng bộ nhận diện độc lập với Sanitizer,
+  nhưng chỉ nhận ra IP, bí mật (JWT, Bearer, API key, `token=…`), SĐT di động Việt Nam và email. Định danh gốc
+  (User-ID, Device-ID, session), mật khẩu ICE, fingerprint DTLS, hostname nội bộ mà Sanitizer bỏ sót thì cổng không chặn.
 - IP công cộng thật đã được thay khỏi các file hiện tại (2026-10-15), nhưng vẫn còn trong lịch sử git của các commit cũ.
 - Signaling nạp vào Elasticsearch local ở dạng gốc, chưa qua Sanitizer (trường nhạy cảm: `appUserId`; thêm `isp`, `asn`;
   không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào
@@ -641,8 +648,6 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - File Validator loại file quá lớn (mặc định 20 MB, cấu hình `call-analysis.files.max-size-per-file`), rỗng, hỏng, không
   nhận diện được, hoặc end call log mang Call-ID khác. WebRTC log không mang Call-ID nên không kiểm được file WebRTC của
   cuộc gọi khác.
-- Lệnh dòng lệnh với thư mục tên viết thường (như `ai20k_new_dataset`): Call-ID so phân biệt hoa thường nên file log bị
-  loại. Web UI không bị (Call-ID lấy từ log).
 - Độ trễ phụ thuộc OpenAI: lượt cuối P95 14,9 s, chậm nhất 47,7 s. Mỗi lời gọi AI quá giờ sau 30 s, thử lại trong ngân
   sách 45 s; trình duyệt chờ 150 s. Số đo độ trễ trên máy cá nhân chỉ dùng để so xu hướng.
 - `--ai-context` in context với trọng tâm câu hỏi để trống, nên với câu có trọng tâm thì thiếu dòng "Trọng tâm câu hỏi"

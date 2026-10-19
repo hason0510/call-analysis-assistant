@@ -912,7 +912,7 @@ NETWORK_DELAY_JITTER (RTT trung bình 538 / 547 ms cả cuộc).
 - **Web UI không ghi đè file trùng tên.** Trước đây `Map` theo tên file nên kéo `callee_endcall.log` của máy thứ hai vào
   là mất file của máy thứ nhất, không báo gì. Nay: cùng tên + cùng cỡ + cùng thời điểm sửa là cùng một file (bỏ qua);
   cùng tên mà khác file thì giữ cả hai và cảnh báo. Server không phải đổi: loại file và Call-ID nhận theo nội dung,
-  dedupe ở mức file (CLAUDE.md bẫy #15).
+  dedupe ở mức file (`docs/bay-du-lieu.md` bẫy #15).
 - **IP ví dụ theo RFC 5737 / RFC 3849.** IP công cộng thật (lấy từ data mẫu, gồm địa chỉ TURN server) nằm trong tài
   liệu, `sensitive-data-inventory.yaml` và test; nay là `192.0.2.x`, `198.51.100.x`, `203.0.113.x`, `2001:db8::`.
   Sanitizer và bộ đo leakage coi mọi IPv4 (trừ 0.0.0.0, 255.255.255.255, 127.x) là địa chỉ thật, nên test giữ nguyên ý
@@ -996,6 +996,30 @@ Dataset mới: `06BCA48C`, `4FD495C1`, `FE4E4BDC` thành `SUCCESS` không cờ. 
 (`FE4E4BDC`: MOS 1,00) không bị gắn cờ.
 
 ---
+
+## 47. Rà soát theo MVP: năm chỗ hở (2026-10-19)
+
+Rà soát từng mục MVP với code (không với README) tìm ra năm chỗ mà test vẫn xanh:
+
+1. **Call-ID phân biệt hoa thường.** ES (`keyword`) và end call log viết hoa; tên thư mục `ai20k_new_dataset` viết
+   thường. Runner dùng nguyên văn `call_id` của file case, nên file `held-out` ghi chữ thường sẽ cho 0 event signaling
+   và loại mọi end call log vì "lệch Call-ID" — mọi case `UNKNOWN`. Chuẩn hoá một lần ở `FileValidator` (mọi luồng phân
+   tích đều qua) và ở `BenchmarkCaseLoader` (runner còn truy vấn ES trước khi phân tích). Không đổi chỗ so tên thư mục:
+   vốn đã không phân biệt hoa thường.
+2. **Trích dẫn evidence chưa làm sạch.** Report giữ nguyên `sourceRef` vì coi nó là "vị trí"; nhưng tên file do người
+   dùng đặt. Viết test cho chỗ này mới lộ chỗ thứ hai: mẫu SĐT dùng ranh giới `\w`, mà `\w` gồm `_`, nên
+   `0912345678_caller.log` không bị nhận ở cả context AI. Đổi ranh giới thành chữ / số; quét lại data mẫu cho cùng số khớp.
+3. **"No sessions found" luôn N/A với lý do sai.** Bản export thô có chữ này trong `message`, nhưng `message` cố ý không
+   nạp (mang User-ID gốc). Đọc thành cờ có kiểu lúc import (`SignalingMessages`, tầng domain quyết định nghĩa) — đúng quy
+   ước "dữ kiện ở metadata truyền xuống dạng có kiểu, không dò chuỗi". Cờ là `Boolean`: null (bản gọn) khác false. Đếm
+   theo lần gửi như INVITE. Không phải tín hiệu lỗi: 3/3 cuộc có dòng này, callee vẫn trả `TRYING` — nên không vào rule.
+   Mapping `strict` từ chối trường lạ, nên index có sẵn được bổ sung mapping mỗi lần nạp thay vì bắt `--recreate-index`.
+4. **S06 kiểm code chết.** `JsonSanitizer` làm sạch theo cấu trúc nhưng pipeline không gọi; pipeline làm sạch chuỗi.
+   Xoá class, viết S06 trên đường thật — thử trước cho thấy đường thật xử lý được đúng ca cũ.
+5. **"Missing fields" / "oversized input" (MVP 7.1).** Jackson điền mặc định cho trường thiếu (`{"verdict":"FAIL"}` thành
+   `qualityFlag=false`, `analysis=null`). Kiểm theo chính `required` của schema gửi đi, nên không có danh sách thứ hai
+   để lệch. Trần 2 000 token ra (dài nhất từng đo 224). Câu hỏi quá 4 000 ký tự bị Chat API từ chối trước lời gọi AI
+   (dài nhất trong benchmark 139) — chặn ở controller như giới hạn số file, runner và CLI không chặn.
 
 ## Còn để mở
 

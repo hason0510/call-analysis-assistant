@@ -5,7 +5,7 @@ Tài liệu này dùng để dựng, chạy, kiểm thử và xử lý lỗi th�
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-12 (sau Sprint 3 T8) |
+| Cập nhật lần cuối | 2026-10-19 (sau rà soát theo MVP) |
 | Đã chạy thử trên | Windows 11, PowerShell 7, JDK 21, Docker Desktop |
 | Chưa chạy thử | macOS, Linux — lệnh tương đương ghi ở cuối mỗi mục |
 
@@ -103,6 +103,10 @@ Vấn đề       : không có
 
 Chạy lại không sinh bản trùng. Muốn xoá index rồi nạp lại từ đầu, thêm `--recreate-index` vào sau đường dẫn.
 
+Index tạo bằng bản code cũ vẫn dùng được: mỗi lần nạp, trường mới (nếu có) được thêm vào mapping. Từ 2026-10-19 có
+trường `noSessionsFound` (cờ "No sessions found" đọc từ bản export thô) — đã nạp `ai20k_new_dataset` trước ngày đó thì
+nạp lại thư mục ấy (không cần `--recreate-index`), không thì chỉ số "Số lần No sessions found" của nó là `N/A`.
+
 ### 2.6. Kiểm nhanh
 
 ```powershell
@@ -170,7 +174,7 @@ Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `-
 .\build.ps1 test
 ```
 
-Kết quả đúng: 534 test, 0 lỗi. 3 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 3 test
+Kết quả đúng: 565 test, 0 lỗi. 4 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 4 test
 này tự bỏ qua. Unit test không cần Elasticsearch hay key AI.
 
 ### 4.2. Benchmark `dev`
@@ -187,8 +191,8 @@ Chạy không tốn tiền (không gọi AI, report dựng từ rule):
 .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample --repeat=1 --ai.openai.api-key="
 ```
 
-Chạy có AI: bỏ `--ai.openai.api-key=`. Chi phí đo được khoảng 0,05 USD cho `--repeat=1` (66 câu hỏi), 0,20 USD cho
-`--repeat=5`. Thời gian khoảng 3 phút cho `--repeat=1`.
+Chạy có AI: bỏ `--ai.openai.api-key=`. Chi phí đo được (lượt 2026-10-14, 69 câu hỏi) khoảng 0,32 USD cho `--repeat=5`,
+tức khoảng 0,065 USD cho `--repeat=1`. Thời gian khoảng 3 phút cho `--repeat=1`.
 
 Kết quả ghi vào `target/evaluation/evaluation-<thời điểm>.md` (bảng metric) và `.json` (từng lần chạy). Đầu file `.md`
 có dòng `Prompt AI`: hai lượt khác dòng này thì AI nhận chỉ dẫn khác nhau, số liệu không so trực tiếp được.
@@ -256,8 +260,9 @@ Kibana dừng cùng Elasticsearch khi `docker compose down`.
 | Web không mở được | Cổng 8081 bận | Thêm `"-Dspring-boot.run.arguments=--server.port=8089"` |
 | Mở được trên máy chạy server, máy khác thì không | Server chỉ nghe ở `127.0.0.1` | Thêm `"-Dspring-boot.run.arguments=--server.address=0.0.0.0"` (mục 3.1) |
 | Banner *"Quá nhiều file đính kèm"* | Quá 10 file một lần | Bỏ bớt file; giới hạn đặt ở `call-analysis.files.max-files-per-request` |
+| Banner *"Câu hỏi quá dài"* | Câu hỏi quá 4 000 ký tự | Rút gọn câu hỏi; log cần phân tích thì đính kèm thành file. Giới hạn đặt ở `call-analysis.request.max-question-chars` |
 | Cổng 9200 bận khi bật Elasticsearch | Có Elasticsearch khác đang chạy | Dừng bản kia, hoặc đổi cổng trong `docker-compose.yml` và `spring.elasticsearch.uris` |
-| Banner vàng *"Report dựng từ rule vì AI không dùng được"* | AI không dùng được; banner ghi lý do | Chưa có key: điền `.env`. *"Khoá AI không hợp lệ"*: kiểm tra `OPENAI_API_KEY`. *"Giới hạn tốc độ gọi"*: thử lại sau ít phút. *"Hết hạn mức"*: nạp thêm tiền cho tài khoản OpenAI. *"Vượt giới hạn độ dài của model"*: hỏi câu ngắn hơn. Quá giờ / mất mạng: hệ thống đã tự thử lại một lần |
+| Banner vàng *"Report dựng từ rule vì AI không dùng được"* | AI không dùng được; banner ghi lý do | Chưa có key: điền `.env`. *"Khoá AI không hợp lệ"*: kiểm tra `OPENAI_API_KEY`. *"Giới hạn tốc độ gọi"*: thử lại sau ít phút. *"Hết hạn mức"*: nạp thêm tiền cho tài khoản OpenAI. *"Vượt giới hạn độ dài của model"*: hỏi câu ngắn hơn. *"Còn thông tin nhạy cảm nên hệ thống không gửi"*: cổng fail-closed đã chặn vì Sanitizer bỏ sót một giá trị — báo lại kèm `request_id` để bổ sung mẫu vào `sensitive-data-inventory.yaml`. Quá giờ / mất mạng: hệ thống đã tự thử lại một lần |
 | Report hoặc câu từ chối có dòng *"Câu hỏi có ký tự bị hỏng mã hoá"* | Câu hỏi có dấu bị hỏng trước khi tới server (curl, dòng lệnh Windows) | Gõ trên Web UI, gõ không dấu, hoặc gửi từ file UTF-8 |
 | Log server khó đọc (toàn JSON) | Profile `web` in log JSON | Thêm profile `plain-log` |
 | Trình duyệt báo *"Quá thời gian chờ"* sau 150 giây | Server treo hoặc Elasticsearch không phản hồi | Kiểm tra server còn chạy, Elasticsearch còn sống; thử lại |
@@ -280,7 +285,7 @@ request), rồi mục Known Limitations trong README.
 | Index Elasticsearch | `signaling-events` (signaling nạp vào), `analysis-requests` (bản ghi request, profile `web`) |
 | Kết quả benchmark | `target/evaluation/` (tạm), `benchmark/results/` (lưu lại) |
 | Cấu hình | `src/main/resources/application.yml`, `application-web.yml` |
-| Chi phí AI | khoảng 0,0007 USD và 2-4 giây cho mỗi câu hỏi |
+| Chi phí AI | khoảng 0,001 USD mỗi câu hỏi (2 lời gọi: phân loại + phân tích); độ trễ P50 khoảng 3-4 s, P95 dao động 4-15 s theo tốc độ OpenAI (lượt 14-15/10) |
 | Thời gian chờ | AI 30 s mỗi lần thử, tối đa 45 s cả lời gọi (kể cả thử lại); Elasticsearch 5 s kết nối, 30 s đọc; trình duyệt 150 s |
 
 Lệnh tương đương trên macOS / Linux (chưa chạy thử):

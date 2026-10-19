@@ -6,6 +6,9 @@
 >
 > Số đo: lượt benchmark cuối `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` (không commit thư mục
 > `benchmark/results/`; số được chép vào đây). Ô ⏳ là việc còn chờ.
+>
+> Code đã đổi sau lượt đo này (2026-10-19, mục 8). Số đo của bản code cuối, so với Sprint 2: mục 9 (lượt chạy lại trước
+> khi nộp — mọi metric như lượt này).
 
 ## 1. Cấu hình đo
 
@@ -154,7 +157,7 @@ Markdown của từng cuộc: `../image-report-final/<CALL-ID>/` (trước khi s
 `06BCA48C`, `4FD495C1`, `FE4E4BDC` thành `SUCCESS` không cờ (mất gói cả cuộc 0,36 %, 1,39 %, 4,65 %); `B5F19381` là cuộc
 duy nhất còn `NETWORK_PACKET_LOSS`; `FC3187B4` (độ trễ), `70C388AD`, `FE4EF5E7` (FAIL) không đổi.
 
-Lỗi tool tìm ra nhờ dataset này và đã sửa (chi tiết: CLAUDE.md bẫy #20–#22, design-decisions mục 40–41):
+Lỗi tool tìm ra nhờ dataset này và đã sửa (chi tiết: [`bay-du-lieu.md`](bay-du-lieu.md) bẫy #20–#22, design-decisions mục 40–41):
 
 1. `signaling.json` có hai định dạng export — bản thô bị từ chối 3/7 file. Nay đọc cả hai.
 2. Callee nhiều thiết bị — chỉ số lấy nhầm máy không bắt máy, report nói "callee không nhận được âm thanh". Nay lấy máy
@@ -193,7 +196,7 @@ Kết luận trên data mẫu không đổi sau các sửa trên: 13/13 cuộc c
 - **Cuộc rớt giữa chừng** xếp `ICE_FAILURE` vì taxonomy MVP 4.2 không có loại riêng.
 - Tín hiệu `network_lost` (end call log, `originator=remote`) chỉ dùng để giải thích; nó không chứng minh bên kia mất
   mạng — app báo nó ~7 s sau khi hết dữ liệu từ bên kia.
-- **Gọi nhóm** (3 người trở lên) không hỗ trợ; nhiều thiết bị của **một** người nhận thì có (bẫy #21).
+- **Gọi nhóm** (3 người trở lên) không hỗ trợ; nhiều thiết bị của **một** người nhận thì có ([`bay-du-lieu.md`](bay-du-lieu.md) bẫy #21).
 - Các mục còn mở từ Sprint 2 vẫn giữ: `UNKNOWN` chưa có ca có nhãn; "evidence mâu thuẫn" chưa cài; mã 428 xếp tạm
   `SIGNALING_FAILURE`; thiếu log một bên ra SUCCESS / FAIL (theo nhãn `5E0800AE`) chứ không `UNKNOWN` như scenario 5.
 
@@ -208,11 +211,89 @@ Các lỗi diễn giải còn gặp trên dataset mới:
 - Câu hỏi giả định sai: AI không còn bịa nguyên nhân nhưng chưa luôn phủ nhận thẳng giả định (`case-020`).
 - Gọi RTT lúc kết thúc là "RTT trung bình" (`FC3187B4`).
 
+### Bộ benchmark `dev`
+
+- Thiếu loại ca "SUCCESS chất lượng kém" của MVP 6.3: data mẫu không có cuộc gọi chất lượng kém có nhãn.
+- "FAIL thiết lập" chỉ có kiểu server từ chối (mã 428, case-004 / 007); không có ca signaling timeout hay "không tìm
+  thấy session".
+- "Bình thường có WARN" không có case riêng: dựa vào việc mọi cuộc SUCCESS đều có 5-13 event WARN.
+- `expected_quality_flag`, `expected_issue_category`, `expected_evidence` để trống ở mọi case (ground truth chưa có), nên
+  Issue Category Accuracy là N/A.
+
 ### Dữ liệu và vận hành
 
 - Chỉ số chất lượng chỉ có ở leg có end call log; MOS / RTT / jitter trong bảng là giá trị lúc kết thúc cuộc gọi.
+- "Số lần No sessions found" chỉ đếm được với bản export signaling thô (có trường `message`); toàn bộ `ai20k_sample` là
+  bản gọn nên chỉ số này là `N/A`.
+- Giới hạn độ dài câu hỏi (4 000 ký tự) chỉ áp ở Chat API; Evaluation Runner và CLI không chặn.
 - WebRTC log chỉ có mốc tương đối, chưa đồng bộ với timeline signaling.
-- Lệnh dòng lệnh với thư mục tên viết thường (như `ai20k_new_dataset`): Call-ID so phân biệt hoa thường nên file log bị
-  loại; Web UI không bị (Call-ID lấy từ log).
 - Signaling nạp vào ES ở dạng gốc (`appUserId`), chưa qua Sanitizer — chờ mentor xác nhận cách hiểu MVP 6.2.
 
+## 8. Thay đổi sau lượt đo cuối (2026-10-19)
+
+Rà soát code theo MVP tìm ra năm chỗ; đã sửa kèm test (`mvn test`: 565 test, 0 lỗi). Lý do: design-decisions mục 47.
+
+| Sửa | Ảnh hưởng tới số đo |
+|---|---|
+| Call-ID chuẩn hoá viết hoa ở File Validator và bộ đọc file case | Không đổi `dev` (Call-ID đã viết hoa). Bỏ rủi ro file case `held-out` ghi Call-ID chữ thường làm mọi case ra `UNKNOWN` |
+| Trích dẫn `tên file:dòng` trong report qua Sanitizer; mẫu SĐT nhận cả số dính `_` | Không đổi data mẫu (quét lại: số khớp như cũ) |
+| "Số lần No sessions found" đếm được với bản export thô | `ai20k_sample` không đổi (bản gọn, vẫn `N/A`); 3 cuộc thô của `ai20k_new_dataset` có số (3 / 4 / 3 lần), nên context AI của các cuộc đó đổi |
+| S06 kiểm đúng đường làm sạch của pipeline; xoá `JsonSanitizer` không dùng | Không |
+| Câu trả lời AI thiếu trường bắt buộc → `INVALID_RESPONSE`; `analysis` rỗng → G02; trần 2 000 token ra; câu hỏi quá 4 000 ký tự bị Chat API từ chối | Request gửi OpenAI có thêm `max_completion_tokens` (chạy thử AI thật: 2/2 lời gọi `OK`, Guardrails qua) |
+
+Prompt và schema AI không đổi (dấu vân tay như mục 1), nhưng request gửi AI đã khác, nên số ở mục 2-3 là của bản code
+`bf0114b`. Số của bản code cuối: mục 9.
+
+## 9. Chạy lại trước khi nộp (MVP 7.1, 2026-10-19)
+
+> MVP 7.1: *"Trước khi nộp, chạy lại toàn bộ: S01-S08, G01-G05 (kèm unexpected enum, missing fields, oversized input),
+> F01-F04 và toàn bộ benchmark `dev` để so với kết quả Sprint 2."* Code: bản cuối sau mục 8 (`mvn test` 565 test, 0 lỗi).
+
+### S01-S08, G01-G05, F01-F04
+
+Bảng sinh tự động từ báo cáo Surefire (`scripts/error-analysis/sgf_report.py`): mỗi test mang mã ca ở `@DisplayName`,
+ba nhóm của MVP 7.1 liệt kê tên test tường minh trong script.
+
+| Ca | Test | Kết quả | | Ca | Test | Kết quả |
+|---|---|---|---|---|---|---|
+| S01 JWT | 1 | qua | | G01 Evidence ID không tồn tại | 1 | qua |
+| S02 Authorization | 1 | qua | | G02 Sai format | 5 | qua |
+| S03 API key trong exception | 2 | qua | | G03 Ngoài taxonomy | 2 | qua |
+| S04 Phone / email | 4 | qua | | G04 AI mâu thuẫn rule | 2 | qua |
+| S05 IP / device ID | 5 | qua | | G05 Số ngoài bộ chỉ số | 6 | qua |
+| S06 Nested JSON | 2 | qua | | F01 Thiếu file một bên | 1 | qua |
+| S07 AI trả lại giá trị nhạy cảm | 2 | qua | | F02 Tên file sai nội dung | 2 | qua |
+| S08 Error message / log | 3 | qua | | F03 Khác Call-ID | 6 | qua |
+| 7.1 enum lạ | 4 | qua | | F04 Hỏng / quá lớn | 8 | qua |
+| 7.1 thiếu trường | 5 | qua | | 7.1 input quá lớn | 5 | qua |
+
+**67/67 test qua.** Sprint 2 (2026-10-07): đủ 17 ca có test, `mvn test` 390 test qua; chưa có test cho thiếu trường
+bắt buộc, câu hỏi quá dài, trần token ra, SĐT dính `_`, Call-ID khác hoa thường; S06 khi đó kiểm một class pipeline
+không gọi (mục 8).
+
+### Benchmark `dev` ×5
+
+Lượt `evaluation-20261019-162735` (16:10 → 16:27, 17 phút): 20 case, 69 câu × 5 = 345 lần chạy, `gpt-4o-mini`, cùng
+dấu vân tay prompt với mục 1, context JSON. ~1,91 triệu token vào + ~50 nghìn ra trên 655 lời gọi ≈ **0,32 USD**.
+
+| Metric (MVP 6.5) | Sprint 2 (2026-10-06) | Cuối Sprint 3 (2026-10-14, mục 2) | Trước nộp (2026-10-19) | Target |
+|---|---|---|---|---|
+| Quy mô | 18 case, 315 lần chạy | 20 case, 345 lần chạy | 20 case, 345 lần chạy | |
+| Verdict Accuracy | 100% (280/280) | 100% (310/310) | **100% (310/310)** | ≥ 85% (`held-out`) |
+| Metric Correctness | 100% | 100% | **100% (310/310)** | 100% |
+| Security Leakage input | 0 / 7 005 | 0 / 8 255 | **0 / 8 255** | 0% |
+| Security Leakage output (report · log) | 0 · chưa đo | 0 · 0 | **0 · 0** (345/345 lần có log) | 0 |
+| Issue Category Accuracy | N/A | N/A | N/A — chưa có nhãn | ≥ 70% |
+| Consistency | 100% (17/17 case) | 100% (19/19) | **100% (19/19)** | ≥ 95% |
+| Template Compliance | 100% | 100% | **100%** | 100% |
+| Intent Accuracy | 100% (290/290) | 100% (320/320) | **100% (320/320)** | ≥ 90% |
+| Unsupported Claim — AI thô / report cuối | 2,9% / 0% | 0% (0/309) / 0% | **0% (0/310) / 0%** — G05 bắt cả số liền đơn vị | 0% |
+| Pipeline Success Rate | 100% | 100% (310/310) | **100% (310/310)** | ≥ 95% |
+| Latency P50 / P95 | 3,8 s / 8,4 s | 3,6 s / 14,9 s | **2,95 s / 4,04 s** (chậm nhất 11,3 s) | — |
+| Fallback | — | 1/310 (OpenAI quá giờ) | **0/310** | — |
+| Evidence AI trích đủ căn cứ của rule | — | 94/115 | **98/115** | — |
+
+AI vs Rule: 19/19 case Rule = AI = Final = Ground Truth (bảng giống mục 3); 0 vi phạm Guardrails, 0 lần AI lệch rule.
+Kết luận: các sửa ở mục 8 không làm đổi kết luận nào trên `dev`; mọi metric `Bắt buộc` và `Báo cáo` có đo được đều đạt
+target. Latency gần lượt đo lại 15/10 (3,1 s / 4,3 s, cùng prompt); P95 14,9 s của lượt 14/10 là do OpenAI chậm lúc đo
+(mục 2).

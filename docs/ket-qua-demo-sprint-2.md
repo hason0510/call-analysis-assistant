@@ -140,7 +140,7 @@ Giả thuyết đầu tiên — AI hiểu nhầm nhãn che `[IP_REDACTED]` / `[R
 
 **Kết luận:** không phải lỗi prompt hay Sanitizer; **không sửa prompt**. Trình duyệt luôn gửi UTF-8, nên người dùng web
 không gặp. Thử Chat API bằng curl trên Windows thì gửi câu có dấu từ file UTF-8, hoặc gõ không dấu — cùng bẫy với tham số
-`--question` của CLI (`CLAUDE.md`).
+`--question` của CLI (README, bảng "Lỗi thường gặp").
 
 **Ca hồi quy thêm vào `benchmark/intent-check.yaml`:** 5 câu liệt kê có giá trị nhạy cảm (mong trong phạm vi), 3 câu chỉ nhờ
 tra cứu giá trị (mong `OUT_OF_SCOPE`), và 3 câu gốc của lần chạy hỏng. Mốc: 22/23 trên bộ kiểm, 9/9 trên 3 câu gốc. Câu sai

@@ -3,9 +3,10 @@
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-12 (cuối Sprint 3) |
+| Cập nhật lần cuối | 2026-10-19 (cuối Sprint 3, sau góp ý mentor và rà soát theo MVP) |
 | Thay cho | `docs/architecture-v1.md` (kiến trúc Sprint 1, chưa có AI và Web UI) |
-| Chi tiết từng quyết định | `docs/design-decisions.md` (37 mục) — tài liệu này trỏ tới số mục, không chép lại |
+| Chi tiết từng quyết định | `docs/design-decisions.md` (47 mục) — tài liệu này trỏ tới số mục, không chép lại |
+| Bẫy dữ liệu | `docs/bay-du-lieu.md` — các tài liệu trích theo số hiệu ("bẫy #13") |
 
 Tài liệu mô tả hệ thống ở trạng thái hiện tại: kiến trúc, luồng dữ liệu, phần nào code làm và phần nào AI làm, cách
 xử lý dữ liệu nhạy cảm, taxonomy, danh mục chỉ số, cách dùng prompt, API và schema của report. Cách dựng và chạy:
@@ -51,7 +52,7 @@ io.hason.callanalysis
 **Luật bắt buộc:** `domain` không import `infrastructure`, không có annotation Spring, không đọc file, không gọi mạng.
 
 Luật này cho ba thứ đo được: pipeline tất định (cùng input ra cùng output — điều kiện của Consistency ≥ 95%); toàn
-bộ logic test được không cần Elasticsearch hay AI (479 unit test); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
+bộ logic test được không cần Elasticsearch hay AI (561 unit test, 2026-10-19); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
 hai cổng `AiAnalyzer` và `IntentClassifier` (MVP 6.6).
 
 **Adapter chỉ làm việc cơ học.** `ElasticsearchSignalingSource` map document thành `RawSignalingRecord` rồi dừng; parse
@@ -159,18 +160,26 @@ Một Sanitizer duy nhất cho cả ứng dụng (mục 28), đặt ở mọi ch
 | 1 | Câu hỏi, trước khi gửi AI phân loại | Chế độ câu hỏi: bí mật `tên=giá trị` chỉ che đúng giá trị, giữ phần yêu cầu viết sau (mục 34 và `bao-cao-bao-mat.md` mục 4.1) |
 | 2 | Context gửi AI phân tích | Nhớ mọi định danh có cấu trúc của cuộc gọi (thuộc tính event) trước, rồi thay ở mọi chuỗi — định danh lọt vào mô tả evidence vẫn bị thay |
 | 3 | Câu trả lời của AI | Làm sạch trước Guardrails và trước report: model có thể bịa hoặc lặp lại một chuỗi nhạy cảm (ca S07) |
-| 4 | Report trả người dùng | Mọi chữ tự do của report (tóm tắt, evidence, lý do, đề xuất) đi qua Sanitizer một lần nữa |
+| 4 | Report trả người dùng | Mọi chữ tự do của report (tóm tắt, evidence, lý do, đề xuất) đi qua Sanitizer một lần nữa — kể cả trích dẫn `tên file:dòng`, vì tên file do người dùng đặt (2026-10-19) |
 | 5 | Application log | Log chữ qua converter `%smsg` / `%sex` / `%skvp`; log JSON (profile web) qua `SanitizedJsonLogFormatter` |
+
+**Cổng fail-closed** (`OutboundGate`, mục 44): ngay trước mỗi lời gọi AI, quét lại đúng chuỗi sắp gửi bằng bộ nhận diện
+độc lập với Sanitizer (bộ của phép đo Security Leakage). Còn IP, bí mật (JWT, Bearer, API key, `token=…`), SĐT di động
+Việt Nam hay email thì không gửi, report lùi về rule với `SENSITIVE_DATA_BLOCKED`. Cổng chỉ nhận ra các loại đó: định
+danh gốc, mật khẩu ICE, hostname nội bộ mà Sanitizer bỏ sót thì không chặn.
+
+Signaling nạp vào Elasticsearch không lấy trường `message` (chữ tự do mang User-ID, Call-ID gốc) và `clientIp` của bản
+export thô; từ `message` chỉ giữ cờ có kiểu `noSessionsFound` (2026-10-19).
 
 Dòng log của mỗi lời gọi AI chỉ gồm 7 trường MVP 6.2 cho phép (`request_id`, `call_id` đã mã giả, `model`,
 `latency_ms`, `result_status`, `token_usage`, `fallback_reason`); không ghi nội dung request / response (mục 36).
 
 ### 5.3. Đã kiểm thế nào
 
-Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt mới nhất 2026-10-12):
+Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt cuối 2026-10-14 và lượt đo lại 2026-10-15, mỗi lượt `dev` ×5):
 
-- S01-S08: 17 test tự động, đều qua.
-- Leakage đầu vào AI: 0 / 1 555 giá trị gốc qua 66 lần chạy với AI thật. Giá trị gốc lấy bằng bộ đọc riêng, không dùng
+- S01-S08: 17 test tự động mang tên ca, đều qua (`mvn test` 2026-10-19).
+- Leakage đầu vào AI: 0 / 8 255 giá trị gốc qua 345 lần chạy với AI thật. Giá trị gốc lấy bằng bộ đọc riêng, không dùng
   regex của Sanitizer, nên Sanitizer bỏ sót dạng nào thì phép đo vẫn bắt được.
 - Leakage đầu ra: 0 trong report và phản hồi; 0 trong application log của từng lần chạy.
 - Kiểm độc lập bằng script Python (`scripts/verify-sanitizer`): 0 giá trị sót trên 42 file đã làm sạch.
@@ -214,11 +223,12 @@ banner nêu lý do bằng lời.
 | `AUTH_FAILED` | HTTP 401 / 403: khoá sai | Không |
 | `INPUT_TOO_LARGE` | HTTP 400 `context_length_exceeded`: vượt cửa sổ ngữ cảnh | Không |
 | `REQUEST_REJECTED` | HTTP 4xx khác | Không |
-| `INVALID_RESPONSE`, `REFUSED` | AI trả sai định dạng, bị cắt, hoặc từ chối | Không |
+| `INVALID_RESPONSE`, `REFUSED` | AI trả sai định dạng, thiếu trường bắt buộc của schema, bị cắt (trần 2 000 token ra), hoặc từ chối | Không |
+| `SENSITIVE_DATA_BLOCKED` | Cổng fail-closed thấy chuỗi sắp gửi còn dữ liệu nhạy cảm | Không |
 | `NOT_CONFIGURED` | Chưa có khoá | Không |
 | `GUARDRAIL_REJECTED`, `REPORT_SCHEMA_INVALID`, `UNEXPECTED_ERROR` | Câu trả lời bị Guardrails loại, report sai schema, lỗi không lường trước | Không |
 
-**Thử lại có kiểm soát** (`RetryPolicy`, mục 38): chỉ hai mã đầu, tối đa 2 lần, chờ 500 ms, ngân sách 45 s cho cả lời
+**Thử lại có kiểm soát** (`RetryPolicy`, mục 38): chỉ hai mã đầu, tối đa 2 lần gọi (thử lại một lần), chờ 500 ms, ngân sách 45 s cho cả lời
 gọi — lần sau chỉ dùng phần còn lại. Mỗi lần thử hỏng ghi thêm một dòng log `result_status=RETRY`.
 
 ### 6.3. Độ tin cậy
@@ -246,8 +256,8 @@ và trạng thái kiểm chứng trên data có nhãn:
 | `SIGNALING_FAILURE` | VALIDATED | `SignalingCause`: bị server từ chối, hết giờ chờ candidate, không có INVITE, `FAIL_HARD`, `CANCEL`, không đạt `OK_ACK_OK` |
 | `ICE_FAILURE` | VALIDATED | Mạnh khi ICE chuyển sang failed; chưa trọn khi chỉ có 0 byte audio hoặc cờ `hasMediaFail` |
 | `TURN_FAILURE` | VALIDATED | `TurnFailure`: không tạo được socket, lỗi gửi ngay trên máy, gửi mà không ai trả lời, có phản hồi mà không cấp phát |
-| `NETWORK_PACKET_LOSS` | UNVALIDATED | Ngưỡng là phỏng đoán: không có cuộc chất lượng kém nào có nhãn |
-| `NETWORK_DELAY_JITTER` | UNVALIDATED | Rule chưa cài, cùng lý do |
+| `NETWORK_PACKET_LOSS` | UNVALIDATED | Mất gói CẢ CUỘC từ 5 % theo ngưỡng mentor (mục 46); không có cuộc chất lượng kém nào có nhãn để kiểm |
+| `NETWORK_DELAY_JITTER` | UNVALIDATED | RTT hoặc jitter trung bình > 500 ms / 30 ms trên luồng > 500 gói, ngưỡng Microsoft Teams CQD (mục 41); xét sau mất gói |
 | `UNKNOWN` | UNVALIDATED | Thiếu signaling, thiếu log client, không thấy `BYE` |
 
 Category `UNVALIDATED` luôn kèm một dòng ở "Giới hạn dữ liệu" của report. Taxonomy do `ReportBuilder` đọc và được gửi
@@ -269,7 +279,7 @@ Do `MetricsCalculator` tính. Thiếu dữ liệu → `N/A` kèm lý do cụ th�
 | Thời gian đổ chuông | Signaling | `RINGING` → `OK` |
 | Thời lượng kết nối | Signaling | `OK_ACK` → `BYE` |
 | Bên kết thúc | Signaling | Bên gửi `BYE` đầu tiên |
-| Số lần "No sessions found" | — | Luôn `N/A`: signaling không có trường chữ để đếm |
+| Số lần "No sessions found" | Signaling | Bản export THÔ: lúc import, `message` chứa "No sessions found" thành cờ `noSessionsFound` (chữ bị bỏ, không vào ES); đếm theo lần gửi như INVITE. Bản export gọn không có `message` → `N/A`. Không phải tín hiệu lỗi: 3/3 cuộc có dòng này, callee vẫn trả `TRYING` (đánh thức qua push) |
 | MOS (mỗi bên) | End call | Bản ghi summary `endcall`, không có thì mẫu stats cuối |
 | Packet loss (mỗi bên) | End call | `packetsLost ÷ (packetsLost + packetsReceived)` của bộ đếm cộng dồn — **không** dùng `packetLostPercent` (là tỉ lệ trong khoảng giữa hai lần đo) |
 | RTT (mỗi bên) | End call | `transport.currentRttMs` — **không** dùng `transport.rttMs` (là giá trị tích luỹ) |
@@ -281,7 +291,7 @@ Do `MetricsCalculator` tính. Thiếu dữ liệu → `N/A` kèm lý do cụ th�
 | ISP / ASN / quốc gia (mỗi bên) | Signaling | |
 
 MOS, packet loss, RTT, jitter ghi `N/A` khi leg chưa từng nhận gói audio: app ghi 0 vào các trường này dù chưa đo.
-Bẫy dữ liệu đã gặp khi tính chỉ số: `CLAUDE.md`, mục "Bẫy data".
+Bẫy dữ liệu đã gặp khi tính chỉ số: [`bay-du-lieu.md`](bay-du-lieu.md).
 
 ---
 
@@ -307,13 +317,16 @@ Các quyết định chính của prompt phân tích:
 - **Số ngoài bảng chỉ số chép nguyên văn**, không đổi đơn vị, không tự tính khoảng thời gian từ hai mốc.
 - **Đề xuất chỉ là phần bổ sung** cho bộ chuẩn, 0-3 câu, không khuyên hướng mà evidence không ủng hộ (mục 37).
 - Câu hỏi có trọng tâm thì `analysis` trả lời trọng tâm trước; hỏi nhiều ý thì trả lời từng ý.
+- **Context dạng JSON.** `ai.context-format=text` cho bản văn bản bán cấu trúc (T11 Sprint 2, mục 45): ít hơn 7,5 %
+  token, accuracy / consistency như nhau, nhưng AI trích đủ căn cứ ít hơn (77 so với 96/115) — giữ JSON làm mặc định.
 
 Prompt phân loại xử lý câu không dấu, câu cụt, câu đời thường; câu dán bí mật rồi viết tiếp vẫn giữ phần yêu cầu.
 
 **Dấu vân tay prompt.** Evaluation Runner in 12 ký tự đầu SHA-256 của hai prompt và hai schema (dòng `Prompt AI`).
 Hai lượt đo khác dấu vân tay thì không so số liệu trực tiếp.
 
-Chi phí đo được: khoảng 4 300 token vào và 140 token ra cho lời gọi phân tích, tổng khoảng 0,0007 USD mỗi câu hỏi.
+Chi phí đo được (lượt 2026-10-14): khoảng 5 100 token vào và 190 token ra cho lời gọi phân tích, cộng khoảng 900 token
+vào cho lời gọi phân loại — tổng khoảng 0,001 USD mỗi câu hỏi.
 
 ---
 
@@ -331,13 +344,13 @@ Chi phí đo được: khoảng 4 300 token vào và 140 token ra cho lời gọ
 | Trường | Nghĩa |
 |---|---|
 | `requestId` | UUID của request; cùng mã với `request_id` trong log |
-| `type` | `REPORT`, `OUT_OF_SCOPE` (câu từ chối cố định), `INVALID_REQUEST` (không file, không Call-ID) |
+| `type` | `REPORT`, `OUT_OF_SCOPE` (câu từ chối cố định), `INVALID_REQUEST` (không file, không Call-ID); hai loại bị controller từ chối trước khi phân tích chỉ có `type` + `message`: `TOO_MANY_FILES` (quá 10 file), `QUESTION_TOO_LONG` (câu hỏi quá 4 000 ký tự) |
 | `intent`, `focus` | Kết quả phân loại câu hỏi |
 | `message` | Câu từ chối hoặc câu báo lỗi; null khi có report |
 | `report` | Report JSON theo schema dưới đây |
 | `rendered` | Report dạng Markdown theo mẫu MVP 4.5 |
 
-Mã HTTP: `200` (kể cả `OUT_OF_SCOPE`); `400` với `INVALID_REQUEST`; `413` khi vượt giới hạn multipart (100 MB mỗi file,
+Mã HTTP: `200` (kể cả `OUT_OF_SCOPE`); `400` với `INVALID_REQUEST`, `TOO_MANY_FILES`, `QUESTION_TOO_LONG`; `413` khi vượt giới hạn multipart (100 MB mỗi file,
 300 MB cả request);
 `500` với câu báo lỗi chung. File quá 20 MB **không** làm request lỗi: file đó bị loại và nêu ở "Giới hạn dữ liệu".
 

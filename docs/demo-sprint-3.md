@@ -185,12 +185,15 @@ Tính cả 4a là bốn cách hỏi, cùng kết luận, cùng mức tin cậy, 
 
    Câu hỏi in ra đã thành `Cuoc goi tu may [CONTACT_REDACTED] (IP [IP_REDACTED]) bi loi`.
 3. Log server: dòng `AI call` chỉ có `request_id`, `call_id` (mã giả `CALL_…`), `model`, `latency_ms`,
-   `result_status`, `token_usage` — không nội dung. Chạy không có `plain-log` để thấy log JSON, mỗi dòng một sự kiện,
+   `result_status`, `token_usage` (thêm `fallback_reason` khi AI lỗi) — không nội dung. Chạy không có `plain-log` để thấy log JSON, mỗi dòng một sự kiện,
    lọc được theo `request_id`. Kiểm 2026-10-12: 0 dòng log chứa số điện thoại hay IP của câu 3.
-4. Số đo cả tập (`dev`, AI thật): 0 / 1 555 giá trị nhạy cảm gốc lọt vào dữ liệu gửi AI, 0 trong phản hồi, 0 trong log.
+4. Số đo cả tập (`dev` ×5, AI thật, lượt 14/10 và 15/10): 0 / 8 255 giá trị nhạy cảm gốc lọt vào dữ liệu gửi AI, 0
+   trong phản hồi, 0 trong log.
 
 Log mẫu không có JWT hay số điện thoại; các ca đó nằm trong test S01-S08:
-`.\build.ps1 -q test "-Dtest=SensitiveDataSanitizerTest"`.
+`.\build.ps1 -q test "-Dtest=SensitiveDataSanitizerTest"`. Muốn demo JWT trên web (MVP scenario 6 ghi "log chứa JWT,
+phone, IP"): kéo thả hai file của `../ai20k_sample/_variants/S06-nhay-cam/` (log `2D9057AA` có chèn SĐT, email, Bearer
+JWT, API key giả; tạo bằng `make_variants.py`, xem README) — chưa chạy thật trên web.
 
 ---
 

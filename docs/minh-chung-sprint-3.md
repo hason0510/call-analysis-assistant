@@ -8,9 +8,9 @@ test tham số hoá tính từng bộ tham số).
 | | |
 |---|---|
 | Code | `main` @ `bf0114b` — *feat: Sprint 3 — hardening, đo lường và xử lý dataset mới*, tác giả `hason123`, 2026-10-14: 125 file, +7 174 / −368 dòng, trong đó 35 file test (+2 062 dòng) |
-| Test | `mvn test` chạy lại 2026-10-15: **533 test, 0 lỗi**, 3 test Testcontainers bỏ qua (máy tắt Docker). Cuối Sprint 2: 390 |
+| Test | `mvn test` 2026-10-19: **565 test, 0 lỗi** (Docker bật, 4 test Testcontainers cũng chạy). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
 | Benchmark | `dev` 20 case, 69 câu × 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14 — `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` |
-| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–41 |
+| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–47 |
 
 ## Tự kiểm lại
 
@@ -18,7 +18,7 @@ test tham số hoá tính từng bộ tham số).
 git show --stat bf0114b                                   # danh sách file Sprint 3
 git show bf0114b -- src/main/java/io/hason/callanalysis/domain/confidence/   # xem code một task (ví dụ T3)
 export JAVA_HOME="/c/Users/Admin/.jdks/jbr-21.0.10"
-mvn test                                                  # 533 test
+mvn test                                                  # 565 test
 mvn test -Dtest=ConfidencePolicyTest                      # chạy riêng test của một task
 # Chấm lại lượt benchmark cuối theo đáp án hiện tại — không gọi AI, không cần ES, không tốn tiền
 mvn spring-boot:run -Dspring-boot.run.arguments="--rescore=benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.json"
@@ -117,6 +117,19 @@ bắt buộc trong `report-v1.schema.json`): *"Độ tin cậy: MEDIUM — thi�
 | Retry có kiểm soát | `domain/ai/RetryPolicy` (Sprint 3 T8, đã có ở `bf0114b`) | `RetryPolicyTest`, `OpenAiChatClientTest` | Mục 7.1, T8 |
 
 Chưa làm: quay video demo 6 kịch bản trên trình duyệt, Peer Evaluation (T7).
+
+## Sửa sau rà soát theo MVP (2026-10-19)
+
+Rà soát từng mục MVP với code tìm ra năm chỗ test vẫn xanh mà sai. `mvn test` sau các sửa: **565 test, 0 lỗi**. Lý do:
+`docs/design-decisions.md` mục 47.
+
+| Chỗ hở | Code | Test | Bằng chứng chạy thật |
+|---|---|---|---|
+| Call-ID chữ thường (file case `held-out`, thư mục `ai20k_new_dataset`) làm mọi case `UNKNOWN` | `domain/request/CallIdExtractor.normalize`, `domain/validation/FileValidator`, `infrastructure/evaluation/BenchmarkCaseLoader`, `cli/FetchCallCommand` | `RequestModelTest::normalizesCallId`, `FileValidatorTest::f03CallIdComparisonIgnoresCase`, `::f03ResolvedCallIdIgnoresCase`, `BenchmarkCaseLoaderTest::callIdIsNormalized`, `ChatAnalysisServiceTest::lowercaseKnownCallIdIsNormalized` | `--analyze` thư mục tên viết thường `06bca48c-…`: 255 event signaling, không file nào bị loại |
+| Trích dẫn `tên file:dòng` trong report chưa làm sạch; SĐT dính `_` không bị nhận | `service/AnalyzeCallService.sanitize`, `resources/sensitive-data-inventory.yaml` (`phone-and-email`) | `ChatAnalysisServiceTest::fileNameInCitationIsSanitized`, `SensitiveDataSanitizerTest::s04PhoneJoinedByUnderscoreIsMasked` | Quét lại data mẫu: số khớp SĐT trước / sau như nhau |
+| "Số lần No sessions found" luôn `N/A` dù bản export thô có | `domain/signaling/SignalingMessages`, `RawSignalingRecord`, `SignalingNormalizer`, `domain/metrics/MetricsCalculator`; `infrastructure/es/SignalingJsonReader`, `SignalingDocument`, `SignalingIndex` (bổ sung mapping), `resources/es/signaling-mapping.json` | `SignalingMessagesTest`, `SignalingJsonReaderTest::noSessionsFoundBecomesTypedFlag`, `SignalingNormalizerTest::noSessionsFoundFlagBecomesAttribute`, `MetricsCalculatorTest::noSessionsFoundCountedPerTransmission`, `::noSessionsFoundZeroIsCounted`, `SignalingImporterIntegrationTest::existingIndexGetsNewFieldsInMapping` | Nạp lại `ai20k_new_dataset`: `06BCA48C` 3 lần, `4FD495C1` 4 lần (khớp đếm tay), bản gọn `N/A` |
+| S06 kiểm `JsonSanitizer`, class pipeline không gọi | Xoá `infrastructure/security/JsonSanitizer` | `SensitiveDataSanitizerTest::s06NestedJsonIsSanitized`, `ChatAnalysisServiceTest::s06NestedJsonInLogNeverLeaks` | — |
+| Thiếu trường / đầu vào quá lớn (MVP 7.1) | `infrastructure/ai/OpenAiAnalyzer.read` (theo `required` của schema), `domain/guardrail/Guardrails` (G02 `analysis`), `infrastructure/ai/OpenAiChatClient` (`max_completion_tokens`), `controller/AnalyzeController` (`QUESTION_TOO_LONG`), `static/app.js` | `OpenAiAnalyzerTest::missingFieldsAreInvalid`, `::wrongShapeIsInvalid`, `GuardrailsTest::g02BlankAnalysisIsRejected`, `AnalyzeControllerTest::tooLongQuestionIsRejectedBeforeAnalysis` | `--ai-analyze` `2D9057AA` với AI thật: 2/2 lời gọi `OK`, Guardrails qua |
 
 ## Kết quả đo
 

@@ -3,15 +3,18 @@
 > Ngày 2026-10-10, nhánh `sprint-3/p0-baseline`. Yêu cầu: MVP mục 7.1 T6 (*"Chạy lại toàn bộ S01-S08, báo cáo leakage
 > input / output"*), mục 6.2 (Sanitizer đầu vào và đầu ra), mục 6.5 (Security Leakage input = 0%, output = 0 — điều kiện
 > **bắt buộc** của mục 8.1).
+>
+> Cập nhật 2026-10-19: số đo của hai lượt `dev` ×5 sau đó (mục 3, "Các lượt sau"), cổng fail-closed (mục 4.4) và các
+> sửa đổi sau rà soát theo MVP (mục 4.5). Mục 1-4.3 giữ nguyên như lúc viết.
 
 ## Kết luận
 
 | Phép đo | Kết quả | Target |
 |---|---|---|
-| S01-S08 (test tự động) | **17/17 test qua** | Tất cả qua |
-| Leakage input — giá trị gốc tới AI | **0 / 1 555** giá trị gốc, cộng qua 66 lần chạy (AI thật) | 0% |
-| Leakage output — report và câu trả lời | **0** | 0 |
-| Leakage output — application log | **0** (66/66 lần chạy thu được log) | 0 |
+| S01-S08 (test tự động) | **17/17 test qua** (`mvn test` 2026-10-19) | Tất cả qua |
+| Leakage input — giá trị gốc tới AI | **0 / 1 555** giá trị gốc qua 66 lần chạy (10/10); **0 / 8 255** qua 345 lần chạy ở cả lượt 14/10 và 15/10 (AI thật) | 0% |
+| Leakage output — report và câu trả lời | **0** ở cả ba lượt | 0 |
+| Leakage output — application log | **0** (66/66 lần chạy 10/10; 345/345 lần chạy 14/10 và 15/10) | 0 |
 | Kiểm độc lập toàn bộ data mẫu (`scripts/verify-sanitizer`) | **0 giá trị sót** trên 42 file đã làm sạch | 0 |
 
 Không thấy giá trị nhạy cảm gốc nào lọt ra ở cả ba kênh mà MVP 6.2 nêu (AI, report / response, log). Phép đo tìm ra
@@ -28,16 +31,16 @@ nhận câu từ chối. **Đã sửa** theo phương án C (2026-10-10); chạy
 
 ## 2. S01-S08
 
-`mvn test` 2026-10-10: **413 test, 0 lỗi**, trong đó các test mang tên ca:
+`mvn test` 2026-10-10: **413 test, 0 lỗi**; chạy lại 2026-10-19: **565 test, 0 lỗi**. Các test mang tên ca:
 
 | Ca | Test | Kiểm |
 |---|---|---|
 | S01 JWT trong log | `SensitiveDataSanitizerTest` | JWT bị xoá, chữ xung quanh giữ nguyên |
 | S02 Authorization header | `SensitiveDataSanitizerTest` | `Bearer` và `Basic` đều xoá trọn giá trị |
 | S03 API key trong exception | `SensitiveDataSanitizerTest` ×2 | Dạng `tên=giá trị`, key đứng một mình, password trong JSON escape |
-| S04 Phone / email | `SensitiveDataSanitizerTest` ×2, `RequestParserServiceTest` | Bị che; không che nhầm đuôi UUID / timestamp; câu hỏi chứa SĐT tới AI đã che |
+| S04 Phone / email | `SensitiveDataSanitizerTest` ×3, `RequestParserServiceTest`, `ChatAnalysisServiceTest` | Bị che; không che nhầm đuôi UUID / timestamp; câu hỏi chứa SĐT tới AI đã che; SĐT dính `_` trong tên file bị che ở trích dẫn evidence (2026-10-19) |
 | S05 Client IP / device ID | `SensitiveDataSanitizerTest` ×5 | IPv4, IPv6, IP che dở, candidate, `Cand[]`, mật khẩu ICE, fingerprint, device ID |
-| S06 Nested JSON | `SensitiveDataSanitizerTest` | Bí mật bỏ cả trường, định danh pseudonymize |
+| S06 Nested JSON | `SensitiveDataSanitizerTest`, `ChatAnalysisServiceTest` | Chuỗi JSON lồng nhau qua đúng bộ làm sạch của pipeline: không còn bí mật, SĐT, IP, định danh gốc; chỉ số ALLOW giữ nguyên. Trọn pipeline: end call log có cột cấu hình chứa JSON lồng nhau → context gửi AI và report không còn giá trị gốc. (Trước 2026-10-19 test S06 kiểm `JsonSanitizer`, một class pipeline không gọi — đã xoá.) |
 | S07 AI trả lại giá trị nhạy cảm | `AiVerdictServiceTest`, `RequestParserServiceTest` | Làm sạch trước Guardrails và trước report; trọng tâm AI trả về cũng được che |
 | S08 Error message / application log | `SanitizingConvertersTest` ×2 | Nội dung log và message trong stack trace được làm sạch, stack trace còn |
 
@@ -70,6 +73,16 @@ Bộ đọc thêm cũng tự kiểm trên data thật: các mẫu bí mật / li
 case-019 câu 1 gửi AI: `Máy [CONTACT_REDACTED] gọi bị lỗi, token [REDACTED], IP [IP_REDACTED] — cuộc gọi này lỗi gì
 vậy?`; câu 2: `Khách [CONTACT_REDACTED] (IPv6 [IP_REDACTED]) báo bên nhận không nghe được gì, vì sao?`. Cả hai ra
 FAIL · ICE_FAILURE như case-001 — dữ liệu nhạy cảm không làm đổi kết luận.
+
+### Các lượt sau
+
+| Lượt | Quy mô | Leakage input | Leakage output (report / log) |
+|---|---|---|---|
+| `ban-cuoi-2026-10-14` (số chính thức Sprint 3) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
+| `gop-y-mentor-json` (2026-10-15, có cổng fail-closed và G05 mới) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
+
+Lượt 15/10 chạy cùng cổng fail-closed: 0 fallback trên 345 lần chạy, tức cổng không chặn lần nào. Kiểm riêng chạy
+không key trên `dev`, `for_test/` và `ai20k_new_dataset` cũng 0 lần chặn (design-decisions mục 44).
 
 ## 4. Phát hiện
 
@@ -116,8 +129,26 @@ Temp của Windows — quét **0 file** mà vẫn in "còn sót=0" ở mọi dò
 ### 4.3 Còn chờ mentor
 
 Signaling nạp vào Elasticsearch local ở dạng gốc (`appUserId`, `isp`, `asn`). MVP 6.2 đặt "dữ liệu ghi vào ES local"
-dưới mục Output; dự án hiểu là kết quả phân tích ghi vào ES (hiện chưa có). Nếu mentor tính cả dữ liệu nạp: mã giả
-`appUserId` lúc import và sửa cách suy ra leg.
+dưới mục Output; dự án hiểu là kết quả phân tích ghi vào ES — từ Sprint 3 T9 là index `analysis-requests`, chỉ gồm mã,
+số và cờ, `call_id` đã mã giả. Nếu mentor tính cả dữ liệu nạp: mã giả `appUserId` lúc import và sửa cách suy ra leg.
+Bản export thô có thêm `message` (chữ tự do mang User-ID, Call-ID gốc) và `clientIp`: cả hai KHÔNG được nạp; từ
+`message` chỉ giữ cờ có kiểu `noSessionsFound` (2026-10-19).
+
+### 4.4 Cổng fail-closed trước khi gửi AI (góp ý mentor, 2026-10-15)
+
+`OutboundGate` quét lại đúng chuỗi sắp gửi AI (cả lời gọi phân loại và phân tích) bằng bộ nhận diện của phép đo
+Leakage, độc lập với regex của Sanitizer. Còn IP, bí mật, SĐT, email thì không gửi, report lùi về rule
+(`SENSITIVE_DATA_BLOCKED`), log chỉ ghi tên loại. Test: `OutboundGateTest`, `OpenAiChatClientTest.sensitiveMessageIsNeverSent`
+(0 request HTTP, không thử lại). Giới hạn: cổng không nhận ra định danh gốc (User-ID, Device-ID), mật khẩu ICE,
+fingerprint, hostname nội bộ — các loại này chỉ có Sanitizer chặn.
+
+### 4.5 Sửa sau rà soát theo MVP (2026-10-19)
+
+| Phát hiện | Rủi ro | Đã sửa |
+|---|---|---|
+| Trích dẫn evidence (`tên file:dòng`) trong report không qua Sanitizer | Tên file do người dùng đặt (`0912345678_caller_endcall.log`) hiện nguyên văn trên Web UI | Report làm sạch cả trích dẫn, như context AI vốn làm |
+| Mẫu SĐT dùng ranh giới `\w`, nên SĐT dính `_` không bị nhận | Lọt ở cả report lẫn context AI | Ranh giới là chữ / số. Quét lại toàn bộ data mẫu: số khớp trước / sau như nhau (1, đúng SĐT cài sẵn của biến thể S06) |
+| Test S06 kiểm `JsonSanitizer`, class mà pipeline không gọi | S06 "qua" mà không kiểm đường thật | Xoá class; S06 kiểm chuỗi JSON lồng nhau qua đúng bộ làm sạch của pipeline, và một test đi trọn pipeline |
 
 ## 5. Giới hạn của phép đo
 
@@ -126,6 +157,8 @@ dưới mục Output; dự án hiểu là kết quả phân tích ghi vào ES (h
 - Application log: đo trong lượt chạy runner (CLI). Web profile dùng cùng `logback-spring.xml` và cùng converter, nhưng
   log của tầng HTTP (Tomcat, Spring MVC) không đi qua runner.
 - Giá trị ngắn hơn 6 ký tự không gom (dễ trùng ngẫu nhiên với chữ thường).
+- Tên file người dùng đặt không nằm trong data mẫu, nên phép đo trên benchmark không phủ kênh này; nó chỉ được kiểm bằng
+  test (`ChatAnalysisServiceTest.fileNameInCitationIsSanitized`).
 
 ## Chạy lại
 

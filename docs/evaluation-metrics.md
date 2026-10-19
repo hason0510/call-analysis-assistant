@@ -38,7 +38,7 @@ nên không tính accuracy.
 **Quy tắc chung (MVP 4.3):** chỉ số không có dữ liệu → `N/A (lý do cụ thể)`, **không bao giờ về 0**
 (`MetricValue = Present | NotAvailable(reason)`).
 
-| Chỉ số (Core) | Cách tính | Bẫy đã gặp (CLAUDE.md) |
+| Chỉ số (Core) | Cách tính | Bẫy đã gặp ([`bay-du-lieu.md`](bay-du-lieu.md)) |
 |---|---|---|
 | Thời gian thiết lập | `INIT_CALL` đầu → `OK_ACK` đầu (MVP định nghĩa) | Trừ ở độ chính xác nano rồi mới cắt về mili (bẫy #14) |
 | Thời gian với tới callee | `INVITE` đầu → `TRYING` (MVP) | |

@@ -162,7 +162,7 @@ expected_evidence: null
 split: dev
 
 ---
-# FAIL thiết lập. callee_webrtc.log của thư mục này thật ra do máy caller ghi (CLAUDE.md bẫy #18).
+# FAIL thiết lập. callee_webrtc.log của thư mục này thật ra do máy caller ghi (docs/bay-du-lieu.md bẫy #18).
 case_id: case-007
 call_id: D114749E-BF76-4D25-9B22-B1F2B7DAD170
 files: [caller_endcall.log, callee_webrtc.log]
@@ -235,7 +235,7 @@ expected_evidence: null
 split: dev
 
 ---
-# SUCCESS. Có `Failed to send TURN message` lúc đổi Wi-Fi sang 4G — nhiễu, không phải lỗi (CLAUDE.md bẫy #7).
+# SUCCESS. Có `Failed to send TURN message` lúc đổi Wi-Fi sang 4G — nhiễu, không phải lỗi (docs/bay-du-lieu.md bẫy #7).
 case_id: case-011
 call_id: 70A1F889-9371-4179-8C27-125ED39BA415
 files: [caller_webrtc.log, callee_endcall.log, callee_webrtc.log]
@@ -276,7 +276,7 @@ split: dev
 
 ---
 # SUCCESS. Có sẵn file gõ sai tên `calleer_webrtc.log` (tên sai, nội dung đúng). Loss cuối 0 nhưng từng
-# lên 3,7 %; INVITE gửi lại theo backoff (CLAUDE.md bẫy #3, #13).
+# lên 3,7 %; INVITE gửi lại theo backoff (docs/bay-du-lieu.md bẫy #3, #13).
 case_id: case-013
 call_id: EE129C8F-EAD0-4302-AB68-920D32F8B8B7
 files: [caller_endcall.log, calleer_webrtc.log, callee_endcall.log, callee_webrtc.log]
