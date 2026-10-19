@@ -247,6 +247,66 @@ class ChatAnalysisServiceTest {
     }
 
     @Test
+    @DisplayName("S06 — end call log có cột cấu hình chứa JSON lồng nhau: context gửi AI và report không còn giá trị gốc")
+    void s06NestedJsonInLogNeverLeaks() throws Exception {
+        String json = "{\"iceServers\":[{\"urls\":\"turn:198.51.100.10:3478\",\"username\":\"u1\",\"credential\":\"s3cr3t\"}],"
+                + "\"profile\":{\"phone\":\"0987654321\",\"password\":123456,\"note\":\"goi tu 203.0.113.7\"}}";
+        List<String> callerLog = List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "#H7\t#ts\t#tag\tinitCallConfig\twebrtcConfig",
+                "1\t1789700842905\tinfo\t" + ChatPipelineFixture.CALL_ID + "\tcaller\tios",
+                "7\t1789700842910\tconfig\t" + json + "\t" + json);
+        Response r = ask("Phân tích cuộc gọi này giúp mình", List.of(
+                AttachedFile.of("caller_endcall.log", callerLog),
+                AttachedFile.of("callee_endcall.log", ChatPipelineFixture.endCallLog("callee"))), agreeingAi);
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        // Đúng phần dữ liệu rời khỏi máy (OpenAiAnalyzer.userMessage): câu hỏi + payload JSON.
+        AiContext ctx = sentToAi.getFirst();
+        String toAi = ctx.question() + mapper.writeValueAsString(ctx.payload());
+        String shown = mapper.writeValueAsString(r) + r.rendered();
+        assertThat(r.type()).isEqualTo(Type.REPORT);
+        for (String raw : List.of("s3cr3t", "0987654321", "123456", "203.0.113.7", "198.51.100.10")) {
+            assertThat(toAi).doesNotContain(raw);
+            assertThat(shown).doesNotContain(raw);
+        }
+    }
+
+    @Test
+    @DisplayName("Evaluation Runner truyền Call-ID viết thường -> truy vấn ES bằng dạng viết hoa, end call log không bị loại")
+    void lowercaseKnownCallIdIsNormalized() {
+        ChatAnalysisService.Trace trace = ChatPipelineFixture.chat(signaling, agreeingAi)
+                .handleTraced("Phân tích cuộc gọi này giúp mình", bothEndCallLogs(),
+                        ChatPipelineFixture.CALL_ID.toLowerCase(java.util.Locale.ROOT));
+
+        assertThat(signaling.queried).containsExactly(ChatPipelineFixture.CALL_ID);
+        CallReport report = trace.response().report();
+        assertThat(report.callId()).isEqualTo(ChatPipelineFixture.CALL_ID);
+        assertThat(report.dataLimitations()).noneMatch(l -> l.contains("Call-ID trong file"));
+    }
+
+    @Test
+    @DisplayName("tên file chứa số điện thoại -> trích dẫn evidence trong report đã che, số dòng giữ nguyên")
+    void fileNameInCitationIsSanitized() {
+        String phone = "0912345678";
+        // Call summary 0 byte audio: tín hiệu lỗi media, nên dòng này của file chắc chắn thành evidence.
+        List<String> callerLog = List.of(
+                "#H1\t#ts\t#tag\tcallId\trole\tplatform",
+                "#H7\t#ts\t#tag\taudio.packetsReceived\taudio.bytesReceived\ttransport.hasMediaFail",
+                "1\t1789700842905\tinfo\t" + ChatPipelineFixture.CALL_ID + "\tcaller\tios",
+                "7\t1789700900000\tendcall\t0\t0\t1");
+        Response r = ask("Phân tích cuộc gọi này giúp mình", List.of(
+                AttachedFile.of(phone + "_caller_endcall.log", callerLog),
+                AttachedFile.of("callee_endcall.log", ChatPipelineFixture.endCallLog("callee"))), agreeingAi);
+
+        assertThat(r.type()).isEqualTo(Type.REPORT);
+        assertThat(r.report().evidence()).extracting(CallReport.EvidenceEntry::sourceRef)
+                .allSatisfy(ref -> assertThat(ref).doesNotContain(phone))
+                .anySatisfy(ref -> assertThat(ref).matches(".+_caller_endcall\\.log:4"));
+        assertThat(r.rendered()).doesNotContain(phone);
+    }
+
+    @Test
     @DisplayName("file hỏng / rỗng bị loại riêng, nêu tên ở giới hạn dữ liệu; phân tích vẫn chạy")
     void badFileIsNamedNotFatal() {
         List<AttachedFile> files = new ArrayList<>(bothEndCallLogs());

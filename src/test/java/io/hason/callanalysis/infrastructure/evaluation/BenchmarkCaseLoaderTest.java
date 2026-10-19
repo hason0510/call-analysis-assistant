@@ -166,6 +166,20 @@ class BenchmarkCaseLoaderTest {
     }
 
     @Test
+    @DisplayName("call_id viết thường (chép theo tên thư mục) -> chuẩn hoá viết hoa như signaling trong ES")
+    void callIdIsNormalized() {
+        BenchmarkCaseLoader.Loaded loaded = loader.parse("""
+                case_id: chu-thuong
+                call_id: 06bca48c-6861-8a9f-19e3-0923ead71440
+                files: [caller_endcall.log]
+                questions: ["q"]
+                """);
+
+        assertThat(loaded.errors()).isEmpty();
+        assertThat(loaded.cases().getFirst().callId()).isEqualTo("06BCA48C-6861-8A9F-19E3-0923EAD71440");
+    }
+
+    @Test
     @DisplayName("files: [] hợp lệ (ca chỉ có Call-ID, không đính kèm file)")
     void emptyFileListAllowed() {
         BenchmarkCaseLoader.Loaded loaded = loader.parse("""

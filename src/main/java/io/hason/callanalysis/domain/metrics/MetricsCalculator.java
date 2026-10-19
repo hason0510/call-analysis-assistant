@@ -6,6 +6,7 @@ import io.hason.callanalysis.domain.event.EventType;
 import io.hason.callanalysis.domain.event.Leg;
 import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.event.Severity;
+import io.hason.callanalysis.domain.signaling.SignalingNormalizer;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 
 import java.math.BigDecimal;
@@ -23,10 +24,11 @@ import java.util.function.Supplier;
  * Toàn bộ chỉ số do CODE tính, không giao cho AI (MVP mục 3.2) — số liệu phải đúng
  * 100% và giống nhau mỗi lần chạy.
  *
- * Ba chỉ số MVP yêu cầu nhưng data KHÔNG có, đều trả N/A kèm lý do:
- *   - "Số lần No sessions found": signaling không có trường text nào.
- *   - Lệnh mẫu 4.3 ghi OK_ACK, cmd thật trong data là OK_ACK_OK.
+ * Chỉ số MVP yêu cầu mà data không phải lúc nào cũng có, đều trả N/A kèm lý do:
+ *   - "Số lần No sessions found": chỉ bản export signaling THÔ có trường message (ai20k_sample toàn
+ *     bản gọn). Lúc import, message được đọc thành cờ có kiểu (SignalingMessages), chữ bị bỏ.
  *   - Chỉ số chất lượng: chỉ có khi cuộc gọi từng có media và leg đó có end call log.
+ * Lệnh mẫu 4.3 ghi OK_ACK, cmd thật trong data là OK_ACK_OK.
  */
 public class MetricsCalculator {
 
@@ -58,8 +60,7 @@ public class MetricsCalculator {
                 durationBetween(timeline, INVITE, TRYING)));
         metrics.add(CallMetric.of(MetricKey.INVITE_RETRANSMISSIONS,
                 retransmissions(timeline, INVITE)));
-        metrics.add(CallMetric.of(MetricKey.NO_SESSIONS_FOUND, MetricValue.unavailable(
-                "signaling không có trường text để đếm thông báo này")));
+        metrics.add(CallMetric.of(MetricKey.NO_SESSIONS_FOUND, noSessionsFound(timeline)));
         metrics.add(CallMetric.of(MetricKey.RINGING_TIME,
                 durationBetween(timeline, RINGING, OK)));
         metrics.add(CallMetric.of(MetricKey.CONNECTED_DURATION,
@@ -312,13 +313,48 @@ public class MetricsCalculator {
             return MetricValue.unavailable("cuộc gọi không đạt tới " + command);
         }
 
+        return MetricValue.count(transmissions(times) - 1);
+    }
+
+    /** Số cụm thời gian cách nhau quá {@link #SAME_TRANSMISSION_WINDOW_MS} — mỗi cụm là một lần gửi. */
+    private static long transmissions(List<Instant> sortedTimes) {
+        if (sortedTimes.isEmpty()) {
+            return 0;
+        }
         long transmissions = 1;
-        for (int i = 1; i < times.size(); i++) {
-            if (times.get(i).toEpochMilli() - times.get(i - 1).toEpochMilli() > SAME_TRANSMISSION_WINDOW_MS) {
+        for (int i = 1; i < sortedTimes.size(); i++) {
+            if (sortedTimes.get(i).toEpochMilli() - sortedTimes.get(i - 1).toEpochMilli()
+                    > SAME_TRANSMISSION_WINDOW_MS) {
                 transmissions++;
             }
         }
-        return MetricValue.count(transmissions - 1);
+        return transmissions;
+    }
+
+    /**
+     * Số lần server không tìm thấy session của callee khi đẩy INVITE — đếm theo LẦN GỬI như
+     * {@link #retransmissions}: data thật có đúng một dòng mỗi lần gửi, nhưng gom cụm thì không
+     * phụ thuộc điều đó (bẫy #13). Đếm được và bằng 0 khác "không đếm được": cờ chỉ có khi bản
+     * export có trường message.
+     */
+    private MetricValue noSessionsFound(CallTimeline timeline) {
+        if (!timeline.hasSource(LogSource.SIGNALING)) {
+            return MetricValue.unavailable("không có dữ liệu signaling");
+        }
+        List<CanonicalEvent> flagged = timeline.mainTrack().stream()
+                .filter(e -> e.source() == LogSource.SIGNALING)
+                .filter(e -> e.attributes().containsKey(SignalingNormalizer.NO_SESSIONS_FOUND))
+                .toList();
+        if (flagged.isEmpty()) {
+            // Cũng gặp khi signaling bản thô được nạp vào ES trước 2026-10-19 (chưa có cờ): nạp lại là đếm được.
+            return MetricValue.unavailable("bản export signaling dạng gọn không kèm nội dung thông báo, nên không đếm được");
+        }
+        List<Instant> times = flagged.stream()
+                .filter(e -> Boolean.parseBoolean(e.attributes().get(SignalingNormalizer.NO_SESSIONS_FOUND)))
+                .flatMap(e -> instantOf(e).stream())
+                .sorted()
+                .toList();
+        return MetricValue.count(transmissions(times));
     }
 
     private MetricValue terminatedBy(CallTimeline timeline) {

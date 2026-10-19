@@ -29,11 +29,16 @@ class AnalyzeControllerTest {
     }
 
     private MockMvc mvc(DataSize maxFileSize, int maxFiles, ChatPipelineFixture.RecordingSource source) {
+        return mvc(maxFileSize, maxFiles, 4000, source);
+    }
+
+    private MockMvc mvc(DataSize maxFileSize, int maxFiles, int maxQuestionChars,
+                        ChatPipelineFixture.RecordingSource source) {
         ChatAnalysisService chat = ChatPipelineFixture.chat(source, ctx -> {
             throw new AiUnavailableException(AiUnavailableException.Reason.NOT_CONFIGURED, "test");
         }, maxFileSize);
         return MockMvcBuilders.standaloneSetup(
-                new AnalyzeController(chat, new CallFolderReader(maxFileSize), maxFiles)).build();
+                new AnalyzeController(chat, new CallFolderReader(maxFileSize), maxFiles, maxQuestionChars)).build();
     }
 
     private static MockMultipartFile endCallLog(String name, String role) {
@@ -109,6 +114,29 @@ class AnalyzeControllerTest {
                         .file(endCallLog("caller_endcall.log", "caller"))
                         .file(endCallLog("callee_endcall.log", "callee"))
                         .param("message", "Phân tích cuộc gọi này giúp mình"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("REPORT"));
+    }
+
+    @Test
+    @DisplayName("câu hỏi quá dài -> 400 QUESTION_TOO_LONG, không chạy pipeline; đúng giới hạn thì vẫn phân tích")
+    void tooLongQuestionIsRejectedBeforeAnalysis() throws Exception {
+        ChatPipelineFixture.RecordingSource source = new ChatPipelineFixture.RecordingSource();
+        String base = "Phân tích cuộc gọi này giúp mình ";
+        String atLimit = base + "x".repeat(40 - base.length());
+
+        mvc(DataSize.ofMegabytes(20), MAX_FILES, 40, source).perform(multipart("/api/analyze")
+                        .file(endCallLog("caller_endcall.log", "caller"))
+                        .param("message", atLimit + "y"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value(AnalyzeController.QUESTION_TOO_LONG))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("41 ký tự")))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("giới hạn 40")));
+        assertThat(source.queried).isEmpty();
+
+        mvc(DataSize.ofMegabytes(20), MAX_FILES, 40, source).perform(multipart("/api/analyze")
+                        .file(endCallLog("caller_endcall.log", "caller"))
+                        .param("message", atLimit))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("REPORT"));
     }

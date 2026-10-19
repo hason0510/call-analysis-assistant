@@ -1,7 +1,5 @@
 package io.hason.callanalysis.infrastructure.security;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hason.callanalysis.domain.security.Pseudonymizer;
 import io.hason.callanalysis.domain.security.SensitiveDataSanitizer;
 import io.hason.callanalysis.domain.security.SensitiveField;
@@ -126,6 +124,13 @@ class SensitiveDataSanitizerTest {
     }
 
     @Test
+    @DisplayName("S04 — số điện thoại dính dấu '_' trong tên file vẫn bị che")
+    void s04PhoneJoinedByUnderscoreIsMasked() {
+        assertThat(clean("0912345678_caller_endcall.log:4")).isEqualTo("[CONTACT_REDACTED]_caller_endcall.log:4");
+        assertThat(clean("log_0912345678.txt")).isEqualTo("log_[CONTACT_REDACTED].txt");
+    }
+
+    @Test
     @DisplayName("S04 — KHÔNG che nhầm đuôi UUID hay timestamp mili giây (lỗi của pattern Sprint 1)")
     void s04NoFalsePositiveOnUuidOrTimestamp() {
         // Đây đúng là "số điện thoại" duy nhất pattern cũ tìm được trong success/ + fail/.
@@ -228,29 +233,21 @@ class SensitiveDataSanitizerTest {
     // ---------------- S06: JSON lồng nhau ----------------
 
     @Test
-    @DisplayName("S06 — JSON lồng nhau: bí mật bị BỎ cả trường, định danh pseudonymize, chuỗi tự do được dò, số giữ kiểu")
-    void s06NestedJsonIsSanitizedStructurally() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode in = mapper.readTree("""
+    @DisplayName("S06 — JSON lồng nhau dạng chuỗi (đường làm sạch thật của report và context AI): không còn giá trị gốc")
+    void s06NestedJsonIsSanitized() {
+        // Pipeline không dựng lại JSON: cột log chứa JSON là chuỗi, đi qua Session.sanitize như mọi chữ tự do.
+        String json = """
                 {"call":{"appUserId":"UKVIYF7A4DW",
                          "profile":{"phone":"0987654321","password":123456,
                                     "note":"goi tu 203.0.113.7, user UKVIYF7A4DW"},
                          "iceServers":[{"urls":"turn:198.51.100.10:3478","credential":"s3cr3t"}]},
-                 "metrics":{"audio.audioMos":4.3,"isp":"VNPT"}}""");
+                 "metrics":{"audio.audioMos":4.3,"isp":"VNPT"}}""";
 
-        JsonNode out = new JsonSanitizer(sanitizer).sanitize(in, sanitizer.newSession());
-        String json = mapper.writeValueAsString(out);
+        String out = clean(json);
 
-        assertThat(out.at("/call/profile").has("password")).isFalse();             // DROP: bỏ cả trường
-        assertThat(out.at("/call/iceServers/0").has("credential")).isFalse();
-        assertThat(out.at("/call/appUserId").asText()).matches("USER_[0-9a-f]{6}");
-        assertThat(out.at("/call/profile/phone").asText()).isEqualTo("[CONTACT_REDACTED]");
-        // định danh gặp ở nhánh khác vẫn bị thay trong chuỗi tự do
-        assertThat(out.at("/call/profile/note").asText()).isEqualTo(
-                "goi tu [IP_REDACTED], user " + out.at("/call/appUserId").asText());
-        assertThat(out.at("/metrics/audio.audioMos").isNumber()).isTrue();         // ALLOW: giữ kiểu số
-        assertThat(json).doesNotContain("UKVIYF7A4DW").doesNotContain("198.51.100.10")
-                .doesNotContain("s3cr3t").doesNotContain("123456").doesNotContain("0987654321");
-        assertThat(in.at("/call/appUserId").asText()).isEqualTo("UKVIYF7A4DW");     // không sửa bản gốc
+        assertThat(out).doesNotContain("UKVIYF7A4DW").doesNotContain("0987654321").doesNotContain("123456")
+                .doesNotContain("s3cr3t").doesNotContain("203.0.113.7").doesNotContain("198.51.100.10");
+        // Dữ liệu phân tích (ALLOW) giữ nguyên
+        assertThat(out).contains("\"audio.audioMos\":4.3").contains("\"isp\":\"VNPT\"");
     }
 }

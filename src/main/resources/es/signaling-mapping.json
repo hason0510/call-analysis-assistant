@@ -19,6 +19,7 @@
       "asn":           { "type": "keyword" },
       "countryCode":   { "type": "keyword" },
       "latencyMs":     { "type": "long" },
+      "noSessionsFound": { "type": "boolean" },
 
       "sourceTruncated":     { "type": "boolean" },
       "sourceReturned":      { "type": "integer" },

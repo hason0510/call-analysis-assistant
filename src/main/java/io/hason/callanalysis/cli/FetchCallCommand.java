@@ -1,5 +1,6 @@
 package io.hason.callanalysis.cli;
 
+import io.hason.callanalysis.domain.request.CallIdExtractor;
 import io.hason.callanalysis.domain.signaling.SignalingFetch;
 import io.hason.callanalysis.service.port.SignalingSource;
 import org.slf4j.Logger;
@@ -34,7 +35,7 @@ public class FetchCallCommand implements ApplicationRunner {
         if (!args.containsOption(OPTION)) {
             return;
         }
-        String callId = args.getOptionValues(OPTION).getFirst();
+        String callId = CallIdExtractor.normalize(args.getOptionValues(OPTION).getFirst());
         SignalingFetch fetch = signalingSource.fetchByCallId(callId);
 
         log.info("Call-ID   : {}", fetch.callId());

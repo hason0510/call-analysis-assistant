@@ -37,16 +37,20 @@ public class AnalyzeController {
     private static final Logger log = LoggerFactory.getLogger(AnalyzeController.class);
 
     static final String TOO_MANY_FILES = "TOO_MANY_FILES";
+    static final String QUESTION_TOO_LONG = "QUESTION_TOO_LONG";
 
     private final ChatAnalysisService chat;
     private final long maxBytesPerFile;
     private final int maxFilesPerRequest;
+    private final int maxQuestionChars;
 
     public AnalyzeController(ChatAnalysisService chat, CallFolderReader reader,
-                             @Value("${call-analysis.files.max-files-per-request:10}") int maxFilesPerRequest) {
+                             @Value("${call-analysis.files.max-files-per-request:10}") int maxFilesPerRequest,
+                             @Value("${call-analysis.request.max-question-chars:4000}") int maxQuestionChars) {
         this.chat = chat;
         this.maxBytesPerFile = reader.maxBytesPerFile();
         this.maxFilesPerRequest = maxFilesPerRequest;
+        this.maxQuestionChars = maxQuestionChars;
     }
 
     @PostMapping(path = "/api/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
@@ -58,6 +62,9 @@ public class AnalyzeController {
                 : files.stream().filter(AnalyzeController::isRealFile).toList();
         if (real.size() > maxFilesPerRequest) {
             return tooManyFiles(real.size());
+        }
+        if (message != null && message.length() > maxQuestionChars) {
+            return questionTooLong(message.length());
         }
         List<AttachedFile> attached = real.stream().map(this::toAttached).toList();
         ChatAnalysisService.Response response = chat.handle(message, attached);
@@ -79,6 +86,20 @@ public class AnalyzeController {
                 "Mỗi lần phân tích nhận tối đa " + maxFilesPerRequest + " file, yêu cầu này có " + count
                         + " file. Một cuộc gọi thường có 4 file (end call log và WebRTC log của caller và callee):"
                         + " bỏ bớt file rồi gửi lại."));
+    }
+
+    /**
+     * Câu hỏi quá dài (MVP 7.1: "oversized input"): từ chối TRƯỚC lời gọi AI phân loại. Không chặn thì câu cỡ 100 KB
+     * (~25 nghìn token) vẫn tới AI hai lần và tốn tiền, câu cỡ 1 MB thì OpenAI từ chối rồi report mới lùi về rule
+     * (thử 2026-10-12). Câu dài nhất trong các bộ benchmark là 139 ký tự; mặc định 4 000 đủ chỗ cho câu hỏi kèm vài
+     * dòng log dán vào. Không log nội dung câu, chỉ độ dài.
+     */
+    private ResponseEntity<Map<String, String>> questionTooLong(int length) {
+        log.atWarn().addKeyValue("result_status", QUESTION_TOO_LONG).addKeyValue("question_chars", length)
+                .addKeyValue("max_question_chars", maxQuestionChars).log("Request rejected");
+        return ResponseEntity.badRequest().body(Map.of("type", QUESTION_TOO_LONG, "message",
+                "Câu hỏi dài " + length + " ký tự, vượt giới hạn " + maxQuestionChars + " ký tự. Hãy rút gọn câu hỏi;"
+                        + " log cần phân tích thì đính kèm thành file thay vì dán vào câu hỏi."));
     }
 
     /**

@@ -2,6 +2,7 @@ package io.hason.callanalysis.infrastructure.es;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.hason.callanalysis.domain.signaling.SignalingMessages;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import java.util.List;
  * Các trường chỉ bản thô mới có ({@code message}, {@code clientIp}, {@code callerUserId},
  * {@code kubernetes}...) bị BỎ có chủ đích: rule không dùng, và {@code message} là chữ tự do
  * còn {@code clientIp} là IP thật — đưa vào index thì phải qua Sanitizer (MVP mục 6.2).
+ * Từ {@code message} chỉ giữ CỜ có kiểu ({@code noSessionsFound}, xem {@link SignalingMessages}), không giữ chữ.
  *
  * Lớp này KHÔNG chạm đĩa và KHÔNG chạm Elasticsearch — nhờ vậy test được bằng
  * chuỗi JSON viết thẳng trong test, chạy trong mili giây.
@@ -75,6 +77,7 @@ public class SignalingJsonReader {
                     text(e, "asn"),
                     text(e, "countryCode"),
                     e.hasNonNull("latencyMs") ? e.get("latencyMs").asInt() : null,
+                    SignalingMessages.noSessionsFound(text(e, "message")),
                     truncated,
                     returned,
                     totalMatching));

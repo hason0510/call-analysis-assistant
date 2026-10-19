@@ -19,8 +19,9 @@ import java.util.Set;
 /**
  * Kiểm tra report có đúng schema v1 không.
  *
- * Sprint 1 dùng để bảo đảm report do rule sinh ra luôn hợp lệ. Sprint 2 sẽ dùng chính
- * validator này làm lớp Guardrails cho đầu ra của AI (MVP mục 6.1 T6, ca kiểm thử G02).
+ * Mọi report qua đây trước khi render: report có phần AI mà sai schema thì ChatAnalysisService dựng lại từ rule
+ * ({@code REPORT_SCHEMA_INVALID}). Đầu ra thô của AI được kiểm ở chỗ khác — trường bắt buộc ở OpenAiAnalyzer, nội
+ * dung ở Guardrails (MVP mục 6.1 T6).
  */
 @Component
 public class ReportSchemaValidator {

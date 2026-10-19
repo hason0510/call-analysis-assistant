@@ -104,6 +104,29 @@ class FileValidatorTest {
     }
 
     @Test
+    @DisplayName("F03 — Call-ID truyền vào viết thường (tên thư mục ai20k_new_dataset) -> KHÔNG loại file, Call-ID ra dạng viết hoa")
+    void f03CallIdComparisonIgnoresCase() {
+        FileValidation v = validator.validate("06bca48c-6861-8a9f-19e3-0923ead71440", List.of(
+                file("caller_endcall.log", endCallLog("06BCA48C-6861-8A9F-19E3-0923EAD71440")),
+                file("callee_endcall.log", endCallLog("06bca48c-6861-8a9f-19e3-0923ead71440"))));
+
+        assertThat(v.rejected()).isEmpty();
+        assertThat(v.accepted()).hasSize(2);
+        assertThat(v.callId()).isEqualTo("06BCA48C-6861-8A9F-19E3-0923EAD71440");
+    }
+
+    @Test
+    @DisplayName("F03 — không ai nói Call-ID, các file khai báo cùng Call-ID khác hoa thường -> một phiếu, không loại file nào")
+    void f03ResolvedCallIdIgnoresCase() {
+        FileValidation v = validator.validate(null, List.of(
+                file("a_endcall.log", endCallLog("call-1")),
+                file("b_endcall.log", endCallLog("CALL-1"))));
+
+        assertThat(v.callId()).isEqualTo("CALL-1");
+        assertThat(v.rejected()).isEmpty();
+    }
+
+    @Test
     @DisplayName("F03 — chỉ có WebRTC log (không mang Call-ID) và không ai nói Call-ID -> callId null")
     void callIdUnknownWithoutEndCallLog() {
         FileValidation v = validator.validate(null, List.of(file("caller_webrtc.log", webRtcLog())));

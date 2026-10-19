@@ -20,6 +20,7 @@ public record SignalingDocument(
         @JsonProperty("asn") String asn,
         @JsonProperty("countryCode") String countryCode,
         @JsonProperty("latencyMs") Integer latencyMs,
+        @JsonProperty("noSessionsFound") Boolean noSessionsFound,
         @JsonProperty("sourceTruncated") boolean sourceTruncated,
         @JsonProperty("sourceReturned") int sourceReturned,
         @JsonProperty("sourceTotalMatching") int sourceTotalMatching

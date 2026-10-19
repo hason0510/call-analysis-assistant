@@ -68,6 +68,7 @@ class OpenAiAnalyzerTest {
         assertThat(format.path("type").asText()).isEqualTo("json_schema");
         assertThat(format.path("json_schema").path("strict").asBoolean()).isTrue();
         assertThat(format.path("json_schema").path("schema").path("additionalProperties").asBoolean(true)).isFalse();
+        assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(OpenAiChatClient.MAX_OUTPUT_TOKENS);
         String user = body.path("messages").path(1).path("content").asText();
         assertThat(user).contains("Phân tích giúp mình").contains("\"ruleVerdict\":{\"verdict\":\"FAIL\"")
                 .contains("\"id\":\"EV01\"");
@@ -127,6 +128,37 @@ class OpenAiAnalyzerTest {
     @DisplayName("bị cắt vì hết token -> INVALID_RESPONSE, không cố parse nửa JSON")
     void truncatedAnswerIsInvalid() {
         assertThatThrownBy(() -> analyzer("sk-test").parseResponse(response("{\"verdict\":\"FA", "length", null)))
+                .isInstanceOfSatisfying(AiUnavailableException.class,
+                        e -> assertThat(e.reason()).isEqualTo(Reason.INVALID_RESPONSE));
+    }
+
+    @Test
+    @DisplayName("G02 thiếu trường — thiếu hẳn hoặc null -> INVALID_RESPONSE nêu tên trường, KHÔNG để Jackson điền mặc định")
+    void missingFieldsAreInvalid() {
+        // Jackson đọc {"verdict":"FAIL"} thành qualityFlag=false, analysis=null mà không báo gì.
+        assertThatThrownBy(() -> analyzer("sk-test").parseResponse(response("{\"verdict\":\"FAIL\"}", "stop", null)))
+                .isInstanceOfSatisfying(AiUnavailableException.class, e -> {
+                    assertThat(e.reason()).isEqualTo(Reason.INVALID_RESPONSE);
+                    assertThat(e.getMessage()).contains("qualityFlag").contains("analysis").doesNotContain("verdict,");
+                });
+        String nullAnalysis = """
+                {"verdict":"FAIL","qualityFlag":false,"issueCategory":"ICE_FAILURE","confidenceLevel":"HIGH",
+                 "summary":"ICE thất bại.","evidenceIds":["EV01"],"analysis":null,"suggestions":[]}""";
+        assertThatThrownBy(() -> analyzer("sk-test").parseResponse(response(nullAnalysis, "stop", null)))
+                .isInstanceOfSatisfying(AiUnavailableException.class,
+                        e -> assertThat(e.getMessage()).contains("[analysis]"));
+    }
+
+    @Test
+    @DisplayName("G02 sai kiểu — JSON hợp lệ nhưng không phải đối tượng, hoặc trường sai kiểu -> INVALID_RESPONSE")
+    void wrongShapeIsInvalid() {
+        assertThatThrownBy(() -> analyzer("sk-test").parseResponse(response("[1, 2]", "stop", null)))
+                .isInstanceOfSatisfying(AiUnavailableException.class,
+                        e -> assertThat(e.reason()).isEqualTo(Reason.INVALID_RESPONSE));
+        String wrongType = """
+                {"verdict":"FAIL","qualityFlag":false,"issueCategory":"ICE_FAILURE","confidenceLevel":"HIGH",
+                 "summary":"ICE thất bại.","evidenceIds":{"a":1},"analysis":"...","suggestions":[]}""";
+        assertThatThrownBy(() -> analyzer("sk-test").parseResponse(response(wrongType, "stop", null)))
                 .isInstanceOfSatisfying(AiUnavailableException.class,
                         e -> assertThat(e.reason()).isEqualTo(Reason.INVALID_RESPONSE));
     }

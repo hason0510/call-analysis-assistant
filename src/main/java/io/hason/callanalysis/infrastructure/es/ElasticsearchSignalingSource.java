@@ -92,6 +92,6 @@ public class ElasticsearchSignalingSource implements SignalingSource {
         return new RawSignalingRecord(
                 d.callId(), d.ordinal(), d.timestamp(), d.service(), d.level(), d.cmd(),
                 d.csid(), d.requestId(), d.appUserId(), d.callSessionId(),
-                d.isp(), d.asn(), d.countryCode(), d.latencyMs());
+                d.isp(), d.asn(), d.countryCode(), d.latencyMs(), d.noSessionsFound());
     }
 }

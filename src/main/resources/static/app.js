@@ -267,6 +267,9 @@
       case "TOO_MANY_FILES":
         show(banner("critical", "Quá nhiều file đính kèm", data.message));
         break;
+      case "QUESTION_TOO_LONG":
+        show(banner("critical", "Câu hỏi quá dài", data.message));
+        break;
       default:
         show(banner("critical", status === 413 ? "File đính kèm quá lớn" : "Phân tích không thành công",
             data.message || `Máy chủ trả mã ${status}. Thử lại sau ít phút.`));

@@ -33,6 +33,9 @@ public class SignalingNormalizer {
      */
     private static final String SOURCE = SourceRef.SIGNALING;
 
+    /** Thuộc tính "true" / "false"; vắng mặt khi bản export không có message (xem RawSignalingRecord). */
+    public static final String NO_SESSIONS_FOUND = "noSessionsFound";
+
     public ParseResult normalize(SignalingFetch fetch) {
         if (fetch == null) {
             return ParseResult.empty();
@@ -80,6 +83,9 @@ public class SignalingNormalizer {
         put(attributes, "countryCode", r.countryCode());
         if (r.latencyMs() != null) {
             attributes.put("latencyMs", String.valueOf(r.latencyMs()));
+        }
+        if (r.noSessionsFound() != null) {
+            attributes.put(NO_SESSIONS_FOUND, String.valueOf(r.noSessionsFound()));
         }
 
         return new CanonicalEvent(

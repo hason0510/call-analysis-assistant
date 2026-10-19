@@ -223,7 +223,6 @@ public class ReportBuilder {
         return new CallReport.PossibleCauses(primary, alternatives, verdict.reasoning(), basis);
     }
 
-    /** Bộ đề xuất chuẩn theo từng issue category. */
     /**
      * Bộ đề xuất chuẩn theo issue category (MVP 7.1 T2) — luôn có trong report, có AI hay không. TURN_FAILURE và
      * SIGNALING_FAILURE chọn theo nguyên nhân con: cùng một category mà nguyên nhân khác thì việc cần điều tra khác.

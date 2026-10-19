@@ -75,6 +75,9 @@ public class Guardrails {
         if (ai.summary() == null || ai.summary().isBlank()) {
             formal.add(new Violation("G02", "thiếu summary"));
         }
+        if (ai.analysis() == null || ai.analysis().isBlank()) {
+            formal.add(new Violation("G02", "thiếu analysis"));
+        }
         if (verdict.isPresent()) {
             boolean needsCategory = verdict.get() == Verdict.FAIL || ai.qualityFlag();
             if (needsCategory && noIssue) {

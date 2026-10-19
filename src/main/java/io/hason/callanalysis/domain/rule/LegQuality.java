@@ -22,7 +22,7 @@ import java.math.BigDecimal;
  * @param avgRttMs          trung bình transport.currentRttMs trên các mẫu ĐÃ có âm thanh; null nếu không có
  * @param avgJitterMs       trung bình audio.jitter (đổi giây → mili) trên các mẫu đã có âm thanh; null nếu không có
  * @param wholeCallLoss     mất gói CẢ CUỘC (%) = packetsLost ÷ (packetsLost + packetsReceived) ở mẫu có bộ đếm
- *                          packetsReceived lớn nhất (hai bộ đếm cộng dồn, CLAUDE.md bẫy #3); null nếu leg chưa có âm thanh
+ *                          packetsReceived lớn nhất (hai bộ đếm cộng dồn, docs/bay-du-lieu.md bẫy #3); null nếu leg chưa có âm thanh
  */
 public record LegQuality(
         Leg leg,

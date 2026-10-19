@@ -419,7 +419,7 @@ class CallLogNormalizationServiceTest {
     }
 
     @Test
-    @DisplayName("thiếu log của một bên phải được nêu tên trong Giới hạn dữ liệu")
+    @DisplayName("F01 — thiếu log của một bên phải được nêu tên trong Giới hạn dữ liệu")
     void missingLogOfOneLegIsReported() {
         // Mẫu report MVP mục 4.5 có sẵn ví dụ "- Thiếu callee_webrtc.log."
         // Không có mục này thì cuộc gọi đính kèm 1/4 file trông đầy đủ như đính kèm cả 4.

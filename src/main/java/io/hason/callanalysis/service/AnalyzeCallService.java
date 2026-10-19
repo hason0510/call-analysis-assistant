@@ -29,8 +29,9 @@ import java.util.Map;
  * Chạy toàn bộ pipeline phân tích của Sprint 1: chuẩn hoá -> timeline -> chỉ số
  * -> tín hiệu -> verdict theo rule -> evidence -> report.
  *
- * Sprint 2 sẽ chèn thêm Sanitizer, AI Analysis và Guardrails vào giữa bước evidence
- * và bước dựng report; bố cục report giữ nguyên.
+ * Sanitizer, AI Analysis và Guardrails chen vào giữa bước evidence và bước dựng report (Sprint 2): lớp này dựng
+ * context AI đã làm sạch ({@link #aiContext}) và report cuối đã làm sạch; lời gọi AI và Guardrails nằm ở
+ * AiVerdictService, ChatAnalysisService điều phối. Bố cục report không đổi.
  */
 @Service
 public class AnalyzeCallService {
@@ -116,7 +117,8 @@ public class AnalyzeCallService {
      *
      * Trước tiên nhớ mọi định danh có cấu trúc của cuộc gọi (appUserId, csid, service… trong
      * thuộc tính event), để chúng bị thay cả khi xuất hiện trong mô tả evidence hay giới hạn dữ liệu.
-     * Verdict, category, Call-ID và trích dẫn dòng log không đổi — chỉ chữ tự do bị làm sạch.
+     * Verdict, category, Call-ID không đổi — chỉ chữ tự do bị làm sạch. Trích dẫn dòng log cũng là chữ tự do:
+     * tên file do người dùng đặt (`0912345678_caller.log`), nên đi qua sanitizer như ở context gửi AI.
      */
     private CallReport sanitize(CallReport r, CallTimeline timeline) {
         SensitiveDataSanitizer.Session session = sanitizer.newSession();
@@ -126,7 +128,7 @@ public class AnalyzeCallService {
                 r.confidenceReasons().stream().map(clean).toList(),
                 clean.apply(r.summary()),
                 r.evidence().stream().map(e -> new CallReport.EvidenceEntry(e.id(), e.source(), e.timestamp(),
-                        clean.apply(e.description()), e.sourceRef())).toList(),
+                        clean.apply(e.description()), clean.apply(e.sourceRef()))).toList(),
                 r.metrics().stream().map(m -> new CallReport.MetricEntry(m.name(), clean.apply(m.value()), m.unit(),
                         clean.apply(m.naReason()), m.source())).toList(),
                 r.possibleCauses() == null ? null : new CallReport.PossibleCauses(

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.hason.callanalysis.domain.evaluation.BenchmarkCase;
+import io.hason.callanalysis.domain.request.CallIdExtractor;
 import io.hason.callanalysis.domain.request.Intent;
 import io.hason.callanalysis.domain.taxonomy.IssueCategory;
 import io.hason.callanalysis.domain.taxonomy.Verdict;
@@ -99,7 +100,8 @@ public class BenchmarkCaseLoader {
             throw new IllegalArgumentException("không phải một case (cần các trường case_id, call_id, files, questions…)");
         }
         String caseId = requiredText(n, "case_id");
-        String callId = requiredText(n, "call_id");
+        // Viết hoa như signaling trong ES: file case `held-out` có thể chép Call-ID theo tên thư mục viết thường.
+        String callId = CallIdExtractor.normalize(requiredText(n, "call_id"));
         // files: [] hợp lệ — ca "UNKNOWN do thiếu file" (MVP mục 6.3): chỉ có Call-ID, không đính kèm gì.
         // Thiếu hẳn trường files vẫn là lỗi: không phân biệt được với case viết sót.
         List<String> files = texts(n.path("files"), "files");

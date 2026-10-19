@@ -3,7 +3,7 @@ spring:
     name: call-analysis-assistant
   main:
     banner-mode: "off"
-    web-application-type: none          # Sprint 1 chưa có web UI (MVP mục 1.5)
+    web-application-type: none          # mặc định chạy CLI; Web UI + Chat API bật bằng profile "web" (application-web.yml)
   elasticsearch:
     uris: http://localhost:9200
     connection-timeout: 5s
@@ -31,6 +31,9 @@ call-analysis:
     # Số file tối đa mỗi request của Chat API (góp ý mentor Sprint 2). Một cuộc gọi thường có 4 file; leg nhiều thiết
     # bị thêm 2 file mỗi máy (dataset mới: 6). Quá giới hạn thì từ chối trước khi đọc file và trước lời gọi AI.
     max-files-per-request: 10
+  request:
+    # Độ dài câu hỏi tối đa (ký tự) của Chat API (MVP 7.1 "oversized input"). Quá thì từ chối trước lời gọi AI.
+    max-question-chars: 4000
 
 # File .env (springboot3-dotenv). Chép giá trị sang System properties vì SanitizerHolder đọc
 # CALL_ANALYSIS_PSEUDONYM_KEY bằng System.getProperty, không qua Spring: Logback dùng sanitizer

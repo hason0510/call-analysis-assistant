@@ -199,11 +199,14 @@ categories:
       - "Bằng chứng từ các nguồn mâu thuẫn nhau"
       - "Bản export signaling bị cắt bớt"
     requiredEvidence: []
-    # Rule HIỆN CHỈ trả UNKNOWN ở điều kiện đầu. Hai điều kiện sau là thiết kế dự kiến
-    # (MVP mục 4.1: thiếu file, thiếu dữ liệu, evidence mâu thuẫn), chưa cài.
+    # Ba điều kiện đầu là các nhánh UNKNOWN của RuleVerdictEngine (cập nhật 2026-10-19). Thiếu log của MỘT bên không
+    # ra UNKNOWN mà hạ độ tin cậy (ConfidencePolicy) — theo nhãn SUCCESS của 5E0800AE, chờ mentor chốt. Điều kiện cuối
+    # (MVP 4.1 "evidence mâu thuẫn") chưa cài: rule giải quyết mâu thuẫn theo thứ tự ưu tiên (media trước signaling).
+    # Mục này chỉ là tài liệu: code không đọc detectionConditions để quyết định, và không gửi nó cho AI.
     detectionConditions:
       - "không có dữ liệu signaling"
-      - "(chưa cài) thiếu nguồn log thiết yếu để kiểm chứng kết luận"
+      - "signaling đạt OK_ACK_OK nhưng không có log client nào để kiểm chứng media"
+      - "đạt OK_ACK_OK nhưng không thấy BYE"
       - "(chưa cài) bằng chứng từ các nguồn mâu thuẫn nhau"
     knownAmbiguity: >-
       Trả UNKNOWN khi thiếu dữ liệu là đúng; đoán bừa khi không có căn cứ mới là lỗi nặng.

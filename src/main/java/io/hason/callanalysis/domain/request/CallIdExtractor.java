@@ -25,6 +25,21 @@ public final class CallIdExtractor {
      */
     public record Result(String callId, String note) {}
 
+    /**
+     * Dạng chuẩn của Call-ID: bỏ khoảng trắng hai đầu, viết HOA — như signaling trong Elasticsearch
+     * (trường keyword, so đúng từng ký tự) và end call log. Tên thư mục của `ai20k_new_dataset` viết
+     * thường, nên Call-ID lấy từ tên thư mục hay file case `held-out` không chuẩn hoá thì truy vấn ES
+     * ra 0 event và mọi end call log bị loại vì "lệch Call-ID".
+     *
+     * @return null khi callId null hoặc rỗng
+     */
+    public static String normalize(String callId) {
+        if (callId == null || callId.isBlank()) {
+            return null;
+        }
+        return callId.trim().toUpperCase(Locale.ROOT);
+    }
+
     public static Result extract(String question) {
         if (question == null) {
             return new Result(null, null);
@@ -32,7 +47,7 @@ public final class CallIdExtractor {
         Set<String> found = new LinkedHashSet<>();
         Matcher m = UUID.matcher(question);
         while (m.find()) {
-            found.add(m.group().toUpperCase(Locale.ROOT));
+            found.add(normalize(m.group()));
         }
         if (found.size() > 1) {
             // Đoán một trong hai là chọn bừa cuộc gọi để phân tích; để File Validator lấy Call-ID theo file.

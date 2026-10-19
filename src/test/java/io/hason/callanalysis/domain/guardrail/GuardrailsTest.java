@@ -83,6 +83,19 @@ class GuardrailsTest {
     }
 
     @Test
+    @DisplayName("G02 — analysis rỗng / null -> REJECTED (adapter khác OpenAI cũng bị chặn ở đây)")
+    void g02BlankAnalysisIsRejected() {
+        GuardrailResult blank = check(new AiAnalysis("FAIL", false, "ICE_FAILURE", "HIGH", "ICE thất bại.",
+                List.of("EV01"), "  ", List.of()));
+        GuardrailResult none = check(new AiAnalysis("FAIL", false, "ICE_FAILURE", "HIGH", "ICE thất bại.",
+                List.of("EV01"), null, List.of()));
+
+        assertThat(blank.status()).isEqualTo(Status.REJECTED);
+        assertThat(blank.violations()).extracting(GuardrailResult.Violation::detail).contains("thiếu analysis");
+        assertThat(none.status()).isEqualTo(Status.REJECTED);
+    }
+
+    @Test
     @DisplayName("G02 — AI không trả gì -> REJECTED")
     void g02NullAnswerIsRejected() {
         assertThat(check(null).status()).isEqualTo(Status.REJECTED);

@@ -41,7 +41,7 @@ public class EndCallLogParser {
      * 1. Dòng đặc tả `#Hn` chỉ dùng để biết VỊ TRÍ CỘT (`#tag`, `callId` nằm ở cột mấy) của
      *    dòng dữ liệu mở đầu bằng `n` — bộ cột khác nhau theo loại bản ghi và theo file.
      * 2. LOẠI bản ghi nhận bằng giá trị cột `#tag` (== "info"), không bằng số `n`: cùng là
-     *    `stats` mà file này đánh H5, file kia H7 (bẫy #2 trong CLAUDE.md).
+     *    `stats` mà file này đánh H5, file kia H7 (docs/bay-du-lieu.md bẫy #2).
      */
     public static java.util.Optional<String> declaredCallId(List<String> lines) {
         if (lines == null) {

@@ -175,7 +175,10 @@ fields:
     # Có ranh giới hai đầu: bản cũ (\+?84|0)\d{9,10} không ranh giới, khớp nhầm đuôi UUID của
     # requestId ("…-845071325831") — "số điện thoại" duy nhất nó tìm được trong success/ + fail/ —
     # và khớp cả timestamp mili giây ("1789700842905" chứa "0700842905").
-    pattern: "(?<![\\w.-])(\\+84|84|0)([35789]\\d{8}|2\\d{9})(?![\\w])|[\\w.+-]+@[\\w-]+\\.[\\w.]+"
+    # Ranh giới là chữ / số, KHÔNG phải \w: "_" là dấu nối tên file ("0912345678_caller_endcall.log"),
+    # \w coi nó là chữ nên số dính "_" lọt qua cả report lẫn context AI. Quét lại data mẫu (2026-10-19):
+    # số khớp trước / sau như nhau (1, đúng số cài sẵn trong biến thể S06).
+    pattern: "(?<![0-9A-Za-z.-])(\\+84|84|0)([35789]\\d{8}|2\\d{9})(?![0-9A-Za-z])|[\\w.+-]+@[\\w-]+\\.[\\w.]+"
     label: CONTACT
     classification: SENSITIVE
     policy: MASK

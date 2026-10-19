@@ -116,6 +116,39 @@ class SignalingImporterIntegrationTest {
         assertThat(report.problems()).singleElement().asString().contains("broken");
     }
 
+    @Test
+    @DisplayName("index tạo trước khi có trường noSessionsFound -> lần nạp sau bổ sung mapping, cờ đọc lại được")
+    void existingIndexGetsNewFieldsInMapping() throws IOException {
+        // Mapping strict của bản trước 2026-10-19: chưa có noSessionsFound. Không bổ sung thì mọi document bị từ chối.
+        SignalingIndex index = new SignalingIndex(client);
+        index.delete();
+        client.indices().create(c -> c.index(SignalingIndex.NAME).withJson(new java.io.StringReader("""
+                {"mappings": {"dynamic": "strict", "properties": {
+                  "callId": {"type": "keyword"}, "ordinal": {"type": "integer"},
+                  "@timestamp": {"type": "date", "format": "strict_date_optional_time_nanos"},
+                  "service": {"type": "keyword"}, "level": {"type": "keyword"}, "cmd": {"type": "keyword"},
+                  "csid": {"type": "keyword"}, "requestId": {"type": "keyword"}, "appUserId": {"type": "keyword"},
+                  "callSessionId": {"type": "keyword"}, "isp": {"type": "keyword"}, "asn": {"type": "keyword"},
+                  "countryCode": {"type": "keyword"}, "latencyMs": {"type": "long"},
+                  "sourceTruncated": {"type": "boolean"}, "sourceReturned": {"type": "integer"},
+                  "sourceTotalMatching": {"type": "integer"}}}}""")));
+        write("new/CCCCCCCC/signaling.json", """
+                {"call_id": "CCCCCCCC-0000-0000-0000-000000000003", "total_matching": 2, "returned": 2,
+                 "logs": [
+                   {"@timestamp": "2026-10-13T07:50:18.216Z", "grpcMethod": "INVITE", "log": {"level": "WARN"},
+                    "message": "[OUT][NATs][INVITE][CALLEE] No sessions found for Call-ID: x, User-ID CABC"},
+                   {"@timestamp": "2026-10-13T07:50:21.448Z", "grpcMethod": "TRYING", "log": {"level": "INFO"},
+                    "message": "[IN][NATs][Partition 6][TRYING][CALLEE] Current dialog state"}]}""");
+
+        index.createIfAbsent();
+        SignalingImporter.ImportReport report = new SignalingImporter(client, new ObjectMapper(), 2).importFrom(dataRoot);
+        SignalingFetch fetch = new ElasticsearchSignalingSource(client)
+                .fetchByCallId("CCCCCCCC-0000-0000-0000-000000000003");
+
+        assertThat(report.problems()).isEmpty();
+        assertThat(fetch.records()).extracting(RawSignalingRecord::noSessionsFound).containsExactly(true, false);
+    }
+
     private long countDocuments() throws IOException {
         return client.count(c -> c.index(SignalingIndex.NAME)).count();
     }

@@ -220,11 +220,20 @@ public class OpenAiChatClient {
                 : new AiUnavailableException(Reason.RATE_LIMITED, "OpenAI trả HTTP 429 (vượt tốc độ gọi)");
     }
 
+    /**
+     * Trần token đầu ra mỗi lời gọi (MVP 7.1: "oversized input" — phía phản hồi). Câu trả lời dài nhất trên mọi lượt
+     * benchmark đã lưu là 224 token (2026-10-19), nên 2 000 dư ~9 lần. Vượt trần thì OpenAI cắt với
+     * finish_reason=length → INVALID_RESPONSE → report lùi về rule; không có trần thì một câu trả lời chạy lan man
+     * tốn tiền tới hết cửa sổ ngữ cảnh.
+     */
+    static final int MAX_OUTPUT_TOKENS = 2000;
+
     String requestBody(Prompt prompt) {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", model);
         // Mục tiêu Consistency ≥ 95% (MVP 6.5): giảm ngẫu nhiên tối đa phía model.
         body.put("temperature", 0);
+        body.put("max_completion_tokens", MAX_OUTPUT_TOKENS);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", prompt.systemPrompt());
         messages.addObject().put("role", "user").put("content", prompt.userMessage());

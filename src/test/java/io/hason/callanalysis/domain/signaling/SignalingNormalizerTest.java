@@ -29,6 +29,23 @@ class SignalingNormalizerTest {
     }
 
     @Test
+    @DisplayName("cờ No sessions found thành thuộc tính 'true'/'false'; bản gọn (null) thì không có thuộc tính")
+    void noSessionsFoundFlagBecomesAttribute() {
+        RawSignalingRecord base = record(0, "2026-09-21T08:44:28.000000000Z", "INVITE", "U-CALLER", "WARN");
+        ParseResult result = normalizer.normalize(fetch(List.of(
+                withFlag(base, 0, true), withFlag(base, 1, false), withFlag(base, 2, null))));
+
+        assertThat(result.events()).extracting(e -> e.attributes().get(SignalingNormalizer.NO_SESSIONS_FOUND))
+                .containsExactly("true", "false", null);
+    }
+
+    private static RawSignalingRecord withFlag(RawSignalingRecord r, int ordinal, Boolean noSessionsFound) {
+        return new RawSignalingRecord(r.callId(), ordinal, r.timestamp(), r.service(), r.level(), r.cmd(), r.csid(),
+                r.requestId(), r.appUserId(), r.callSessionId(), r.isp(), r.asn(), r.countryCode(), r.latencyMs(),
+                noSessionsFound);
+    }
+
+    @Test
     @DisplayName("timestamp giữ nguyên 9 chữ số nano, không làm tròn")
     void nanosecondPrecisionSurvives() {
         ParseResult result = normalizer.normalize(fetch(List.of(

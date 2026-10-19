@@ -36,6 +36,16 @@ class RequestModelTest {
     }
 
     @Test
+    @DisplayName("chuẩn hoá Call-ID: bỏ khoảng trắng, viết hoa; rỗng -> null")
+    void normalizesCallId() {
+        assertThat(CallIdExtractor.normalize(" 06bca48c-6861-8a9f-19e3-0923ead71440 "))
+                .isEqualTo("06BCA48C-6861-8A9F-19E3-0923EAD71440");
+        assertThat(CallIdExtractor.normalize("")).isNull();
+        assertThat(CallIdExtractor.normalize("  ")).isNull();
+        assertThat(CallIdExtractor.normalize(null)).isNull();
+    }
+
+    @Test
     @DisplayName("AI: intent ngoài danh sách (kể cả viết thường) -> loại")
     void unknownIntentIsRejected() {
         assertThat(IntentClassification.fromAi(new AiIntent("WRITE_EMAIL", ""))).isEmpty();

@@ -3,6 +3,7 @@ package io.hason.callanalysis.domain.validation;
 import io.hason.callanalysis.domain.parse.DetectedLogType;
 import io.hason.callanalysis.domain.parse.EndCallLogParser;
 import io.hason.callanalysis.domain.parse.FileTypeDetector;
+import io.hason.callanalysis.domain.request.CallIdExtractor;
 import io.hason.callanalysis.domain.validation.FileValidation.Reason;
 import io.hason.callanalysis.domain.validation.FileValidation.RejectedFile;
 import io.hason.callanalysis.domain.validation.FileValidation.ValidFile;
@@ -79,13 +80,13 @@ public class FileValidator {
             recognized.add(new ValidFile(file.name(), type, file.lines()));
         }
 
-        String resolved = callId == null || callId.isBlank() ? resolveCallId(recognized) : callId;
+        // Chuẩn hoá ở đây vì mọi luồng phân tích (Web UI, CLI theo tên thư mục, Evaluation Runner) đều qua bước này.
+        String given = CallIdExtractor.normalize(callId);
+        String resolved = given == null ? resolveCallId(recognized) : given;
 
         List<ValidFile> accepted = new ArrayList<>();
         for (ValidFile file : recognized) {
-            Optional<String> declared = file.type() == DetectedLogType.ENDCALL_LOG
-                    ? EndCallLogParser.declaredCallId(file.lines())
-                    : Optional.empty();
+            Optional<String> declared = declaredCallId(file);
             if (resolved != null && declared.isPresent() && !declared.get().equals(resolved)) {
                 rejected.add(new RejectedFile(file.name(), Reason.CALL_ID_MISMATCH,
                         "Call-ID trong file (" + declared.get() + ") khác Call-ID đang phân tích ("
@@ -147,9 +148,7 @@ public class FileValidator {
     private static String resolveCallId(List<ValidFile> recognized) {
         Map<String, Integer> votes = new LinkedHashMap<>();
         for (ValidFile file : recognized) {
-            if (file.type() == DetectedLogType.ENDCALL_LOG) {
-                EndCallLogParser.declaredCallId(file.lines()).ifPresent(id -> votes.merge(id, 1, Integer::sum));
-            }
+            declaredCallId(file).ifPresent(id -> votes.merge(id, 1, Integer::sum));
         }
         String best = null;
         int bestVotes = 0;
@@ -160,6 +159,14 @@ public class FileValidator {
             }
         }
         return best;
+    }
+
+    /** Call-ID mà end call log khai báo, đã chuẩn hoá; WebRTC log không mang Call-ID. */
+    private static Optional<String> declaredCallId(ValidFile file) {
+        if (file.type() != DetectedLogType.ENDCALL_LOG) {
+            return Optional.empty();
+        }
+        return EndCallLogParser.declaredCallId(file.lines()).map(CallIdExtractor::normalize);
     }
 
     /**

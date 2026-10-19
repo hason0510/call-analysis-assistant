@@ -9,6 +9,7 @@ import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.event.Severity;
 import io.hason.callanalysis.domain.event.SourceRef;
 import io.hason.callanalysis.domain.signaling.LegAssignment;
+import io.hason.callanalysis.domain.signaling.SignalingNormalizer;
 import io.hason.callanalysis.domain.timeline.CallTimeline;
 import io.hason.callanalysis.domain.timeline.TimelineBuilder;
 import org.junit.jupiter.api.DisplayName;
@@ -128,6 +129,42 @@ class MetricsCalculatorTest {
 
         assertThat(calculator.calculate(timelineOf(events))
                 .valueOf(MetricKey.INVITE_RETRANSMISSIONS).display())
+                .isEqualTo("0 lần");
+    }
+
+    private CanonicalEvent sigNoSessions(long millis, String cmd, boolean noSessionsFound) {
+        int n = ordinal++;
+        return new CanonicalEvent("signaling#" + n, "CALL-1", Leg.CALLER, LogSource.SIGNALING,
+                EventTime.absolute(T0.plusMillis(millis), ClockDomain.SERVER),
+                EventType.SIGNALING_COMMAND, cmd,
+                Map.of(SignalingNormalizer.NO_SESSIONS_FOUND, String.valueOf(noSessionsFound)), Severity.INFO,
+                new SourceRef(SourceRef.SIGNALING, n + 1, cmd));
+    }
+
+    @Test
+    @DisplayName("No sessions found: đếm theo lần gửi INVITE (06BCA48C: 3 dòng cách 0,5 s / 1,0 s -> 3 lần)")
+    void noSessionsFoundCountedPerTransmission() {
+        CallTimeline timeline = timelineOf(List.of(
+                sigNoSessions(0, "INVITE", false),
+                sigNoSessions(26, "INVITE", true),
+                sigNoSessions(530, "INVITE", false),
+                sigNoSessions(553, "INVITE", true),
+                sigNoSessions(1581, "INVITE", true),
+                sigNoSessions(1590, "INVITE", true),     // dòng thứ hai của cùng lần gửi: không đếm thêm
+                sigNoSessions(3200, "TRYING", false)));
+
+        assertThat(calculator.calculate(timeline).valueOf(MetricKey.NO_SESSIONS_FOUND).display())
+                .isEqualTo("3 lần");
+    }
+
+    @Test
+    @DisplayName("No sessions found: bản thô không có dòng nào -> 0 lần (đếm được), KHÔNG phải N/A")
+    void noSessionsFoundZeroIsCounted() {
+        CallTimeline timeline = timelineOf(List.of(
+                sigNoSessions(0, "INVITE", false),
+                sigNoSessions(400, "TRYING", false)));
+
+        assertThat(calculator.calculate(timeline).valueOf(MetricKey.NO_SESSIONS_FOUND).display())
                 .isEqualTo("0 lần");
     }
 
@@ -269,14 +306,14 @@ class MetricsCalculatorTest {
         assertThat(metrics.valueOf(MetricKey.SETUP_TIME).display())
                 .contains("không đạt tới OK_ACK_OK");
 
-        // Chỉ số MVP yêu cầu nhưng data không hỗ trợ
+        // Bản export signaling dạng gọn: không có message nên không đếm được
         assertThat(metrics.valueOf(MetricKey.NO_SESSIONS_FOUND).display())
-                .contains("không có trường text");
+                .contains("không kèm nội dung thông báo");
 
         // Chỉ số ĐẾM được phép bằng 0 — "đếm được và bằng 0" khác "không đo được".
         // Các chỉ số ĐO LƯỜNG thì không bao giờ được mặc định về 0.
         List<MetricKey> countingKeys = List.of(
-                MetricKey.INVITE_RETRANSMISSIONS, MetricKey.BYE_RETRANSMISSIONS,
+                MetricKey.INVITE_RETRANSMISSIONS, MetricKey.BYE_RETRANSMISSIONS, MetricKey.NO_SESSIONS_FOUND,
                 MetricKey.WARN_COUNT_BY_SERVICE, MetricKey.ERROR_COUNT_BY_SERVICE);
 
         assertThat(metrics.metrics()).noneMatch(m ->

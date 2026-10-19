@@ -175,7 +175,28 @@ class SignalingJsonReaderTest {
     void rawExportYieldsSameDocumentsAsCompactFormat() throws Exception {
         // So cả record: grpcMethod -> cmd, service.name -> service, log.level -> level,
         // call_id -> callId, returned < total_matching -> truncated. Lệch một trường là đỏ.
-        assertThat(reader.read(RAW_EXPORT)).isEqualTo(reader.read(SAMPLE));
+        // Trừ cờ noSessionsFound: bản thô có message nên cờ là false, bản gọn không có nên null.
+        assertThat(reader.read(RAW_EXPORT))
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("noSessionsFound")
+                .isEqualTo(reader.read(SAMPLE));
+        assertThat(reader.read(RAW_EXPORT)).extracting(SignalingDocument::noSessionsFound).containsOnly(false);
+        assertThat(reader.read(SAMPLE)).extracting(SignalingDocument::noSessionsFound).containsOnly((Boolean) null);
+    }
+
+    @Test
+    @DisplayName("bản thô: message 'No sessions found' -> cờ true; chữ của message KHÔNG vào document")
+    void noSessionsFoundBecomesTypedFlag() throws Exception {
+        String raw = """
+                {"call_id":"CALL-1","logs":[
+                  {"grpcMethod":"INVITE","log":{"level":"WARN"},
+                   "message":"[OUT][NATs][INVITE][CALLEE] No sessions found for Call-ID: CALL-1, User-ID CABCDEF"},
+                  {"grpcMethod":"INVITE","log":{"level":"INFO"},"message":"[getScam] res: ok"},
+                  {"grpcMethod":"TRYING","log":{"level":"INFO"}}]}""";
+
+        List<SignalingDocument> docs = reader.read(raw);
+
+        assertThat(docs).extracting(SignalingDocument::noSessionsFound).containsExactly(true, false, null);
+        assertThat(new ObjectMapper().writeValueAsString(docs)).doesNotContain("CABCDEF").doesNotContain("NATs");
     }
 
     @Test

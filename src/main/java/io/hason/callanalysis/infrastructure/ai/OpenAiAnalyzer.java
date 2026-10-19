@@ -17,6 +17,8 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Adapter AI phân tích cuộc gọi (T5) trên {@link OpenAiChatClient}.
@@ -106,11 +108,34 @@ public class OpenAiAnalyzer implements AiAnalyzer {
         return new OpenAiChatClient.Prompt(systemPrompt, userMessage(context), "call_analysis", schema, onRetry);
     }
 
+    /**
+     * Kiểm trường bắt buộc NGAY TẠI ĐÂY theo chính danh sách {@code required} của schema gửi đi, không chỉ trông
+     * vào strict schema phía OpenAI: Jackson điền mặc định cho trường thiếu, nên {@code {"verdict":"FAIL"}} sẽ
+     * thành qualityFlag=false, analysis=null mà không ai biết (MVP 7.1: G01-G05 kèm "missing fields").
+     */
     private AiAnalysis read(String content) {
+        JsonNode root;
         try {
-            return mapper.readValue(content, AiAnalysis.class);
+            root = mapper.readTree(content);
         } catch (IOException e) {
             throw new AiUnavailableException(Reason.INVALID_RESPONSE, "Câu trả lời không phải JSON hợp lệ", e);
+        }
+        if (root == null || !root.isObject()) {
+            throw new AiUnavailableException(Reason.INVALID_RESPONSE, "Câu trả lời không phải đối tượng JSON");
+        }
+        List<String> missing = new ArrayList<>();
+        schema.path("required").forEach(f -> {
+            if (!root.hasNonNull(f.asText())) {
+                missing.add(f.asText());
+            }
+        });
+        if (!missing.isEmpty()) {
+            throw new AiUnavailableException(Reason.INVALID_RESPONSE, "Câu trả lời thiếu trường: " + missing);
+        }
+        try {
+            return mapper.treeToValue(root, AiAnalysis.class);
+        } catch (IOException e) {
+            throw new AiUnavailableException(Reason.INVALID_RESPONSE, "Câu trả lời sai kiểu dữ liệu", e);
         }
     }
 
