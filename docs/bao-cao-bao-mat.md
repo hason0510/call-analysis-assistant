@@ -4,17 +4,18 @@
 > input / output"*), mục 6.2 (Sanitizer đầu vào và đầu ra), mục 6.5 (Security Leakage input = 0%, output = 0 — điều kiện
 > **bắt buộc** của mục 8.1).
 >
-> Cập nhật 2026-10-19: số đo của hai lượt `dev` ×5 sau đó (mục 3, "Các lượt sau"), cổng fail-closed (mục 4.4) và các
-> sửa đổi sau rà soát theo MVP (mục 4.5). Mục 1-4.3 giữ nguyên như lúc viết.
+> Cập nhật 2026-10-20: số đo của ba lượt `dev` ×5 sau đó (mục 3, "Các lượt sau"), trong đó lượt chạy lại trước khi nộp
+> 2026-10-19 là số chính thức của bản nộp; cổng fail-closed (mục 4.4) và các sửa đổi sau rà soát theo MVP (mục 4.5).
+> Mục 1-4.3 giữ nguyên như lúc viết.
 
 ## Kết luận
 
 | Phép đo | Kết quả | Target |
 |---|---|---|
-| S01-S08 (test tự động) | **17/17 test qua** (`mvn test` 2026-10-19) | Tất cả qua |
-| Leakage input — giá trị gốc tới AI | **0 / 1 555** giá trị gốc qua 66 lần chạy (10/10); **0 / 8 255** qua 345 lần chạy ở cả lượt 14/10 và 15/10 (AI thật) | 0% |
+| S01-S08 (test tự động) | **20/20 test qua** (`mvn test` 2026-10-20: 600 test) | Tất cả qua |
+| Leakage input — giá trị gốc tới AI | **0 / 1 555** giá trị gốc qua 66 lần chạy (10/10); **0 / 8 255** qua 345 lần chạy ở cả ba lượt 14/10, 15/10 và 19/10 (AI thật) | 0% |
 | Leakage output — report và câu trả lời | **0** ở cả ba lượt | 0 |
-| Leakage output — application log | **0** (66/66 lần chạy 10/10; 345/345 lần chạy 14/10 và 15/10) | 0 |
+| Leakage output — application log | **0** (66/66 lần chạy 10/10; 345/345 lần chạy 14/10, 15/10 và 19/10) | 0 |
 | Kiểm độc lập toàn bộ data mẫu (`scripts/verify-sanitizer`) | **0 giá trị sót** trên 42 file đã làm sạch | 0 |
 
 Không thấy giá trị nhạy cảm gốc nào lọt ra ở cả ba kênh mà MVP 6.2 nêu (AI, report / response, log). Phép đo tìm ra
@@ -78,8 +79,9 @@ FAIL · ICE_FAILURE như case-001 — dữ liệu nhạy cảm không làm đổ
 
 | Lượt | Quy mô | Leakage input | Leakage output (report / log) |
 |---|---|---|---|
-| `ban-cuoi-2026-10-14` (số chính thức Sprint 3) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
+| `ban-cuoi-2026-10-14` (cuối Sprint 3) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
 | `gop-y-mentor-json` (2026-10-15, có cổng fail-closed và G05 mới) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
+| `truoc-nop-2026-10-19` (chạy lại trước khi nộp — số chính thức của bản nộp) | 20 case, 345 lần chạy | **0 / 8 255** | 0 / 0 trên 345/345 |
 
 Lượt 15/10 chạy cùng cổng fail-closed: 0 fallback trên 345 lần chạy, tức cổng không chặn lần nào. Kiểm riêng chạy
 không key trên `dev`, `for_test/` và `ai20k_new_dataset` cũng 0 lần chặn (design-decisions mục 44).

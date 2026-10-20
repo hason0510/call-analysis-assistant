@@ -1098,8 +1098,9 @@ Từ Sprint 1, vẫn còn mở:
 - **Neo WebRTC log vào giờ tuyệt đối.** End call log có các dòng `onIceConnectionChange`,
   `onIceCandidate` lặp lại cùng nội dung với WebRTC log nhưng kèm timestamp tuyệt đối — ghép
   chuỗi candidate là ra offset. Chưa làm vì Sprint 1 không cần.
-- **Ngưỡng chất lượng thật.** Đang là phỏng đoán; chỉ biết chắc phải cao hơn đường nền đo
-  được (844 mẫu): loss 3,7% · MOS 4,335 · RTT 266 ms · jitter 28 ms.
+- **Ngưỡng chất lượng thật.** Nay: mất gói cả cuộc ≥ 5 % theo mentor (mục 46), độ trễ / jitter theo Teams CQD
+  (mục 41); vẫn `UNVALIDATED` vì không có cuộc chất lượng kém có nhãn. Đường nền đo được (844 mẫu): loss 3,7% ·
+  MOS 4,335 · RTT 266 ms · jitter 28 ms.
 - **Ngữ nghĩa của `CANCEL`.** Đã rõ ở mọi cuộc có end call log để kiểm: app tự huỷ khi hết 6
   giây chờ candidate (`_waitingCandidateTimer with error`, rồi `_emitFailed … code: 421`). Các
   cuộc CANCEL không có end call log chỉ có cùng dấu vân tay trong WebRTC log. Cuộc nào WebRTC log cho thấy TURN không
@@ -1109,6 +1110,6 @@ Mở thêm ở Sprint 2 (chi tiết: README, mục Known Limitations):
 
 - **AI lệch rule nên `UNKNOWN` hay giữ kết luận AI kèm cờ** (mục 23).
 - **Đề xuất: rule giữ, AI bổ sung** — trên `for_test/`, đề xuất của rule tốt hơn ở 4/7 cuộc.
-- **"Semi-structured context" của T11** — mentor gửi ví dụ ngày 2026-10-15 (cùng dữ kiện với JSON, viết thành văn bản); đang làm.
+- **"Semi-structured context" của T11** — mentor gửi ví dụ ngày 2026-10-15 (cùng dữ kiện với JSON, viết thành văn bản); đã làm (mục 45), giữ JSON làm mặc định.
 - **Rule `NETWORK_DELAY_JITTER`** đã cài theo ngưỡng Teams CQD (mục 41) nhưng vẫn `UNVALIDATED`; cần cuộc gọi có nhãn
   chất lượng kém để kiểm.

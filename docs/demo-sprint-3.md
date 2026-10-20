@@ -73,8 +73,8 @@ Ba chỗ Sprint 3 thêm vào report, sẽ thấy ở mọi scenario:
 
 > **Đổi 2026-10-15.** Ngưỡng mất gói nay là mất gói CẢ CUỘC từ 5 % (mentor: "packet loss < 5 %, jitter < 30 ms là ổn
 > định"). Ca cũ `271D1FAF` cả cuộc chỉ 1,83 % nên không còn bị gắn cờ. `B5F19381` (dataset mới của mentor) là cuộc duy nhất
-> vượt ngưỡng: caller mất gói cả cuộc 8,48 %. Kết quả dưới đây là của rule (`--analyze`, 2026-10-15); **chưa bấm lại trên
-> web với AI sau khi đổi ngưỡng** — chạy thử một lần trước buổi demo.
+> vượt ngưỡng: caller mất gói cả cuộc 8,48 %. Kết quả dưới đây là của rule (`--analyze`, 2026-10-15); trên web với AI chưa chạy
+> lại sau khi đổi ngưỡng — kết luận và cờ do rule quyết nên không đổi, phần chữ AI viết có thể khác.
 
 **MVP mong:** `SUCCESS` + cờ chất lượng, `NETWORK_PACKET_LOSS`.
 
@@ -187,7 +187,7 @@ Tính cả 4a là bốn cách hỏi, cùng kết luận, cùng mức tin cậy, 
 3. Log server: dòng `AI call` chỉ có `request_id`, `call_id` (mã giả `CALL_…`), `model`, `latency_ms`,
    `result_status`, `token_usage` (thêm `fallback_reason` khi AI lỗi) — không nội dung. Chạy không có `plain-log` để thấy log JSON, mỗi dòng một sự kiện,
    lọc được theo `request_id`. Kiểm 2026-10-12: 0 dòng log chứa số điện thoại hay IP của câu 3.
-4. Số đo cả tập (`dev` ×5, AI thật, lượt 14/10 và 15/10): 0 / 8 255 giá trị nhạy cảm gốc lọt vào dữ liệu gửi AI, 0
+4. Số đo cả tập (`dev` ×5, AI thật, lượt chạy lại trước khi nộp 19/10; cùng kết quả ở 14/10 và 15/10): 0 / 8 255 giá trị nhạy cảm gốc lọt vào dữ liệu gửi AI, 0
    trong phản hồi, 0 trong log.
 
 Log mẫu không có JWT hay số điện thoại; các ca đó nằm trong test S01-S08:

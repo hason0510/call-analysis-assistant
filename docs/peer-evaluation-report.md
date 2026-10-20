@@ -12,6 +12,7 @@
 | Môi trường | Windows 11, Git Bash; JDK mặc định 26.0.2 và JBR 21.0.10; Maven 3.9.11; Node 22.19 / npm 10.9; Docker 29.1.3 |
 | Dữ liệu | `ai20k_sample` (`success/`, `fail/`, `for_test/`, 20 cuộc) + `ai20k_new_dataset` (7 cuộc), đặt vào `sample-data/` đúng mục 1 Runbook |
 | AI | OpenAI `gpt-4o-mini`, key của người đánh giá |
+| Chiều ngược lại | Trần Anh Tú đánh giá repo này (commit `a905256`): 2 issue, đã sửa 2026-10-20 (`8a3c278`) — Final Evaluation Report mục 7, design-decisions mục 49 |
 
 Cách làm: làm theo Runbook từng bước, đúng chữ; chỗ nào phải làm khác Runbook thì ghi lại. Mọi con số trong báo cáo
 được đối chiếu lại với log gốc trước khi ghi thành issue — vài chỗ trông giống lỗi nhưng kiểm lại thì đúng (mục 2.6).

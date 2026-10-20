@@ -464,7 +464,9 @@ Cập nhật 2026-10-20. Đối chiếu từng task với code, test và số đ
 Design](docs/architecture-security-design.md) ✅ · [Final Evaluation Report & Known
 Limitations](docs/final-evaluation-report.md) ✅ (mục 6 dành cho kết quả `held-out` do mentor chạy) · [Kịch bản Final
 Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12) · [Peer Evaluation
-Report](docs/peer-evaluation-report.md) ✅.
+Report](docs/peer-evaluation-report.md) ✅ · [Security Evaluation Report](docs/bao-cao-bao-mat.md) ✅ · Automated
+Tests + Evaluation Suite: 600 test, `--evaluate` / `--rescore` ✅. Đối chiếu đủ mục 7.4:
+[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md).
 
 **Dataset mới của mentor** (`ai20k_new_dataset`, 7 cuộc, chưa có nhãn): chạy được cả 7 cuộc sau khi sửa 5 lỗi tool —
 signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số media không ghi chiều, cuộc rớt giữa chừng, thêm rule
@@ -483,13 +485,14 @@ signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số m
 | Ngưỡng packet loss / jitter, bảng độ nhạy | ✅ mất gói CẢ CUỘC từ 5 % mới gắn cờ (trước: một mẫu > 5 % / MOS < 3,5 / hasMediaPoor); jitter trung bình 30 ms đã khớp sẵn. Bảng độ nhạy: `scripts/quality-thresholds/sensitivity.py`. `dev` không đổi; `271D1FAF` và 3 cuộc dataset mới hết cờ, kịch bản demo scenario 2 chuyển sang `B5F19381` |
 | T11 Sprint 2 (structured vs semi-structured) | ✅ `ai.context-format=text` (`AiContextText`), hai lượt `dev` ×5: accuracy / consistency như nhau (100%), văn bản ít hơn 7,5 % token, JSON cho evidence tốt hơn (trích đủ căn cứ 96 so với 77/115) → giữ JSON. Final Evaluation Report mục 3b |
 | Quay demo đủ 6 kịch bản trên trình duyệt | ⬜ |
-| Peer Evaluation | ✅ [`docs/peer-evaluation-report.md`](docs/peer-evaluation-report.md) (2026-10-19) |
+| Peer Evaluation | ✅ [`docs/peer-evaluation-report.md`](docs/peer-evaluation-report.md) (2026-10-19; chiều ngược lại sửa xong 2026-10-20, `8a3c278`) |
 
 ### Kết quả đo được — Sprint 3
 
-Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14, ≈ 0,32 USD.
+Benchmark `dev` (20 case trên 13 cuộc gọi, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần chạy, `gpt-4o-mini`, **lượt chạy
+lại trước khi nộp 2026-10-19 — số chính thức của bản nộp** (Final Evaluation Report mục 9), ≈ 0,32 USD.
 
-| Metric (MVP mục 6.5) | Sprint 2 | Cuối Sprint 3 | Target |
+| Metric (MVP mục 6.5) | Sprint 2 | Bản nộp (19/10) | Target |
 |---|---|---|---|
 | Verdict Accuracy | 100% (280/280) | **100%** (310/310) | ≥ 85% — đo chính thức trên `held-out` do Mentor chạy, chưa có kết quả |
 | Metric Correctness | 100% | **100%** (310/310) | 100% |
@@ -498,17 +501,16 @@ Benchmark `dev` (20 case, 69 câu hỏi), mỗi câu chạy 5 lần = 345 lần 
 | Consistency | 100% | **100%**, 19/19 case giống hệt qua 5 lần | ≥ 95% |
 | Template Compliance | 100% | **100%** | 100% |
 | Intent Accuracy | 100% (290/290) | **100%** (320/320) | ≥ 90% |
-| Unsupported Claim — AI trước Guardrails / report cuối | 2,9% / 0% | **0% (0/309) / 0%** | 0% |
-| Pipeline Success Rate | 100% | **100%** (310/310; 1 lần OpenAI quá giờ, lùi về rule) | ≥ 95% |
-| Latency P50 / P95 | 3,8 s / 8,4 s | 3,6 s / 14,9 s — P95 do OpenAI chậm lúc đo, phần không phải AI dưới 1 s. Lượt chạy lại cùng prompt sau đó một giờ: 3,0 s / 4,5 s, 0 fallback (Final Evaluation Report mục 2) | — |
+| Unsupported Claim — AI trước Guardrails / report cuối | 2,9% / 0% | **0% (0/310) / 0%** | 0% |
+| Pipeline Success Rate | 100% | **100%** (310/310), 0 lần lùi về rule | ≥ 95% |
+| Latency P50 / P95 | 3,8 s / 8,4 s | **2,95 s / 4,04 s** (chậm nhất 11,3 s) | — |
 
-**Đo lại sau góp ý của mentor** (2026-10-15, cùng prompt, có G05 mới, cổng fail-closed, ngưỡng mất gói cả cuộc): mọi
-metric như cột "Cuối Sprint 3", Unsupported Claim 0/310 với G05 mới, 0 fallback, P50 / P95 3,1 s / 4,3 s. Chi tiết và so
-sánh T11: Final Evaluation Report mục 3b.
+Cùng lượt 19/10: S01-S08, G01-G05, F01-F04 kèm enum lạ / thiếu trường / input quá lớn — 67/67 test qua (MVP 7.1).
 
-**Chạy lại trước khi nộp** (MVP 7.1, 2026-10-19, bản code cuối): S01-S08, G01-G05, F01-F04 kèm enum lạ / thiếu trường /
-input quá lớn — 67/67 test qua; `dev` ×5 (345 lần chạy, ≈ 0,32 USD) — mọi metric như cột "Cuối Sprint 3", Unsupported
-Claim 0/310, 0 fallback, P50 / P95 2,95 s / 4,04 s. Bảng so với Sprint 2: Final Evaluation Report mục 9.
+**Các lượt trước** (cùng kết quả, trừ các số dưới đây): lượt 14/10 (cuối Sprint 3, trước góp ý mentor) — Unsupported
+Claim 0/309, 1 lần OpenAI quá giờ lùi về rule, P50 / P95 3,6 s / 14,9 s do OpenAI chậm lúc đo (chạy lại một giờ sau:
+3,0 s / 4,5 s), Final Evaluation Report mục 2; lượt 15/10 (sau góp ý mentor: G05 mới, cổng fail-closed, ngưỡng mất gói
+cả cuộc) — 0/310, 0 fallback, 3,1 s / 4,3 s, mục 3b kèm so sánh T11.
 
 **Phân tích hàng loạt** (T10, 2026-10-19, 27 Call-ID trong ES, chỉ rule, 0 USD). T10 làm sau lượt chạy lại trên và không
 sửa dòng nào của luồng phân tích, nên số đo trên vẫn là của bản nộp. Final Evaluation Report mục 10.
@@ -598,7 +600,7 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - AI thấy kết luận của rule trong context, và AI lệch rule thì kết luận cuối là `UNKNOWN`. Vì vậy AI không đổi được kết
   luận của rule; "AI trùng rule 100%" trên benchmark chưa chứng minh AI tự suy luận đúng.
 - Guardrails chỉ kiểm phần có cấu trúc (verdict, category, evidence ID, con số có nguồn), **không kiểm nghĩa câu chữ**.
-  G05 chặn số không có trong input: lượt cuối 0/309 đầu ra thô vi phạm, nhưng hai lượt 2026-10-13 có 4 và 5 lần (AI tự
+  G05 chặn số không có trong input: lượt 14/10 0/309 đầu ra thô vi phạm (lượt trước nộp 19/10: 0/310), nhưng hai lượt 2026-10-13 có 4 và 5 lần (AI tự
   trừ hai mốc giờ, đã sửa bằng prompt quy tắc 4b). Gặp vi phạm thì report lùi về rule (degraded). Từ 2026-10-15 G05
   bắt cả số viết liền đơn vị (`250ms`, `45s`); đo lại `dev` ×5: 0/310.
 - Từ Sprint 3 T1a, AI nhắc chỉ số bằng mã và code điền tên + giá trị, nên không còn kiểu gọi sai tên con số như
@@ -606,7 +608,7 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
   dataset mới: gắn mã chỉ số vào câu không đúng nghĩa ("không nhận được âm thanh: {PACKET_LOSS_CALLER}"), ghi nhầm bên
   của `network_lost` (`FE4EF5E7`), gọi RTT lúc kết thúc là "RTT trung bình" (`FC3187B4`), phóng đại "mất gói đáng kể" khi
   cả cuộc 0,36% (`06BCA48C`). Dòng Tóm tắt ca FAIL đã chuyển sang code viết (`docs/design-decisions.md` mục 40).
-- AI vẫn có lúc tự chép con số trùng giá trị một chỉ số thay vì dùng mã: 30 số ở 21/309 lần trả lời của lượt cuối (cận
+- AI vẫn có lúc tự chép con số trùng giá trị một chỉ số thay vì dùng mã: 30 số ở 21/309 lần trả lời của lượt 14/10 (cận
   trên — số trùng ngẫu nhiên như "1" cũng tính). Hiện chỉ đo, không chặn.
 - Evidence AI trích: mới kiểm có chứa dòng căn cứ của rule (94/115 lần có căn cứ ở lượt cuối 14/10, 96/115 ở lượt đo
   lại 15/10, 98/115 ở lượt chạy lại trước khi nộp 19/10), chưa kiểm evidence trích có **đúng** là căn cứ không. Ca

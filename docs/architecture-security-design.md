@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-19 (cuối Sprint 3, sau góp ý mentor, rà soát theo MVP và T10) |
+| Cập nhật lần cuối | 2026-10-20 (cuối Sprint 3, sau góp ý mentor, rà soát theo MVP, T10 và sửa theo Peer Evaluation) |
 | Thay cho | `docs/architecture-v1.md` (kiến trúc Sprint 1, chưa có AI và Web UI) |
 | Chi tiết từng quyết định | `docs/design-decisions.md` (49 mục) — tài liệu này trỏ tới số mục, không chép lại |
 | Bẫy dữ liệu | `docs/bay-du-lieu.md` — các tài liệu trích theo số hiệu ("bẫy #13") |
@@ -179,9 +179,9 @@ Dòng log của mỗi lời gọi AI chỉ gồm 7 trường MVP 6.2 cho phép (
 
 ### 5.3. Đã kiểm thế nào
 
-Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt cuối 2026-10-14 và lượt đo lại 2026-10-15, mỗi lượt `dev` ×5):
+Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt chạy lại trước khi nộp 2026-10-19, `dev` ×5 — số chính thức; lượt 14/10 và 15/10 cho cùng kết quả):
 
-- S01-S08: 17 test tự động mang tên ca, đều qua (`mvn test` 2026-10-19).
+- S01-S08: 20 test tự động mang mã ca, đều qua (Final Evaluation Report mục 9; `mvn test` 2026-10-20: 600 test).
 - Leakage đầu vào AI: 0 / 8 255 giá trị gốc qua 345 lần chạy với AI thật. Giá trị gốc lấy bằng bộ đọc riêng, không dùng
   regex của Sanitizer, nên Sanitizer bỏ sót dạng nào thì phép đo vẫn bắt được.
 - Leakage đầu ra: 0 trong report và phản hồi; 0 trong application log của từng lần chạy.
@@ -190,6 +190,8 @@ Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt cuối 2026-10-14 và
 ### 5.4. Bề mặt hệ thống
 
 - Elasticsearch và Kibana chỉ lắng nghe trên `127.0.0.1`, không bật xác thực: chỉ dùng trên máy cá nhân.
+- Web UI / Chat API (profile `web`, cổng 8081) chỉ nghe `127.0.0.1` vì không có đăng nhập mà mỗi request tốn tiền AI;
+  tối đa 10 file và câu hỏi 4 000 ký tự mỗi request, quá thì từ chối trước khi đọc file và gọi AI.
 - File quá 20 MB không được đọc nội dung; file hỏng hoặc sai loại bị loại riêng và nêu tên, không làm hỏng cả request.
 - Lỗi không lường trước trả câu thông báo chung, không trả stack trace hay nội dung file.
 - Chữ từ server (kể cả chữ AI viết) hiển thị trên Web UI bằng `textContent`, không bao giờ `innerHTML`.
@@ -406,5 +408,6 @@ Danh sách đầy đủ: README, mục Known Limitations.
 - WebRTC log chưa đồng bộ được với giờ tuyệt đối; evidence từ WebRTC ghi mốc tương đối.
 - Chỉ số MOS / RTT / jitter là giá trị lúc kết thúc cuộc gọi; log không có bộ đếm để tính cho cả cuộc.
 - Đề xuất AI diễn đạt lại bộ chuẩn có thể lọt vào phần "Bổ sung (AI)".
-- Không giới hạn độ dài câu hỏi; câu vượt cửa sổ ngữ cảnh của model thì report lùi về rule với lý do chung.
+- Giới hạn 4 000 ký tự chỉ áp ở Chat API; Evaluation Runner và CLI không chặn — ở đó câu vượt cửa sổ ngữ cảnh của
+  model thì report lùi về rule với lý do `INPUT_TOO_LARGE`.
 - Luồng CLI chỉ rule (`--analyze`) có thể ra HIGH, trong khi báo cáo có thử AI mà AI lỗi thì tối đa MEDIUM (mục 35).

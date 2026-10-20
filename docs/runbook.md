@@ -5,7 +5,7 @@ Tài liệu này dùng để dựng, chạy, kiểm thử và xử lý lỗi th�
 | | |
 |---|---|
 | Người phụ trách | Chủ repo (`hason0510`) |
-| Cập nhật lần cuối | 2026-10-19 (sau rà soát theo MVP và T10 phân tích hàng loạt) |
+| Cập nhật lần cuối | 2026-10-20 (sau rà soát theo MVP, T10 phân tích hàng loạt và sửa theo Peer Evaluation) |
 | Đã chạy thử trên | Windows 11, PowerShell 7, JDK 21, Docker Desktop |
 | Chưa chạy thử | macOS, Linux — lệnh tương đương ghi ở cuối mỗi mục |
 
@@ -213,7 +213,7 @@ Chạy không tốn tiền (không gọi AI, report dựng từ rule):
 .\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--evaluate=benchmark/dev-cases.yaml --logs=../ai20k_sample --repeat=1 --ai.openai.api-key="
 ```
 
-Chạy có AI: bỏ `--ai.openai.api-key=`. Chi phí đo được (lượt 2026-10-14, 69 câu hỏi) khoảng 0,32 USD cho `--repeat=5`,
+Chạy có AI: bỏ `--ai.openai.api-key=`. Chi phí đo được (lượt 2026-10-19, 69 câu hỏi) khoảng 0,32 USD cho `--repeat=5`,
 tức khoảng 0,065 USD cho `--repeat=1`. Thời gian khoảng 3 phút cho `--repeat=1`.
 
 Kết quả ghi vào `target/evaluation/evaluation-<thời điểm>.md` (bảng metric) và `.json` (từng lần chạy). Đầu file `.md`
@@ -318,7 +318,7 @@ request), rồi mục Known Limitations trong README.
 | Index Elasticsearch | `signaling-events` (signaling nạp vào), `analysis-requests` (bản ghi request, profile `web`), `call-analysis-results` (lượt `--batch-analyze` mới nhất) |
 | Kết quả benchmark | `target/evaluation/` (tạm), `benchmark/results/` (lưu lại) |
 | Cấu hình | `src/main/resources/application.yml`, `application-web.yml` |
-| Chi phí AI | khoảng 0,001 USD mỗi câu hỏi (2 lời gọi: phân loại + phân tích); độ trễ P50 khoảng 3-4 s, P95 dao động 4-15 s theo tốc độ OpenAI (lượt 14-15/10) |
+| Chi phí AI | khoảng 0,001 USD mỗi câu hỏi (2 lời gọi: phân loại + phân tích); độ trễ P50 / P95 khoảng 3 s / 4 s (lượt trước nộp 19/10: 2,95 / 4,04 s); khi OpenAI chậm, P95 từng lên 14,9 s (lượt 14/10) |
 | Thời gian chờ | AI 30 s mỗi lần thử, tối đa 45 s cả lời gọi (kể cả thử lại); Elasticsearch 5 s kết nối, 30 s đọc; trình duyệt 150 s |
 
 Lệnh tương đương trên macOS / Linux (chưa chạy thử):

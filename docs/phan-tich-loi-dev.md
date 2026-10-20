@@ -31,10 +31,14 @@
 | T2 | 12/10 | 66 + 3 | Đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung; 3 lần chạy lại `case-008` sau khi sửa G05 | `sau-t2/` |
 | Dataset mới | 13/10 | 345 (×5) | Sửa 5 lỗi tool tìm ra trên `ai20k_new_dataset`; prompt `bd3790c6e0b1` | `sau-dataset-moi/` |
 | Dataset mới, lần 2 | 13/10 | 345 (×5) | Cùng prompt `bd3790c6e0b1` | `sau-giai-thich/` |
-| **Bản cuối (chính thức Sprint 3)** | 14/10 | 345 (×5) | Prompt `e8941db2acc1`: quy tắc 4b chặt hơn sau lần tái phát `0.112`; Tóm tắt ca FAIL do code viết; rule `NETWORK_DELAY_JITTER` | `ban-cuoi-2026-10-14/` |
+| **Bản cuối Sprint 3** | 14/10 | 345 (×5) | Prompt `e8941db2acc1`: quy tắc 4b chặt hơn sau lần tái phát `0.112`; Tóm tắt ca FAIL do code viết; rule `NETWORK_DELAY_JITTER` | `ban-cuoi-2026-10-14/` |
 | Chạy lại | 14/10 | 345 (×5) | Cùng prompt `e8941db2acc1`, chạy sau commit `bf0114b` — kiểm độ trễ của bản cuối | `chay-lai-2026-10-14/` |
 | Sau góp ý mentor | 15/10 | 345 (×5) | Cùng prompt; G05 bắt số liền đơn vị, cổng fail-closed trước AI, ngưỡng mất gói cả cuộc | `gop-y-mentor-json/` |
 | T11 — context văn bản | 15/10 | 345 (×5) | Như lượt trên, context gửi AI dạng văn bản (`ai.context-format=text`) | `gop-y-mentor-text/` |
+
+Lượt chạy lại trước khi nộp (2026-10-19, `truoc-nop-2026-10-19/`, cùng prompt `e8941db2acc1`) là số chính thức của bản
+nộp (Final Evaluation Report mục 9); nó chạy sau khi viết phân tích này nên không nằm trong 3 933 lần chạy: 0 vi phạm
+Guardrails, 0 fallback, Unsupported Claim thô 0/310.
 
 Kết quả S2-x nằm ở `../eval-scratch/` (ngoài repo); Sprint 3 ở `benchmark/results/` (không commit — số được chép vào
 đây).

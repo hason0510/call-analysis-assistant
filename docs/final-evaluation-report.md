@@ -4,13 +4,33 @@
 > Mentor gửi lại. Cách tính từng metric: [`evaluation-metrics.md`](evaluation-metrics.md). Các quyết định thiết kế nhắc
 > tới ở đây: [`design-decisions.md`](design-decisions.md) (số mục trong ngoặc).
 >
-> Số đo: lượt benchmark cuối `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` (không commit thư mục
-> `benchmark/results/`; số được chép vào đây).
->
-> Code đã đổi sau lượt đo này (2026-10-19, mục 8). Số đo của bản code cuối, so với Sprint 2: mục 9 (lượt chạy lại trước
-> khi nộp — mọi metric như lượt này). Phân tích hàng loạt (T10, làm sau mục 9, không đổi luồng phân tích): mục 10.
-> Sửa theo Peer Evaluation của bạn cùng nhóm (2026-10-20; không đổi prompt hay rule kết luận, `dev` chỉ rule vẫn
-> 62/62): mục 7, "Peer Evaluation về repo này".
+> **Số đo chính thức của bản nộp: mục 9** (lượt chạy lại trước khi nộp, 2026-10-19), tóm tắt ngay dưới đây. Mục 1-3 là
+> lượt cuối Sprint 3 (2026-10-14, `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md`), giữ lại vì có
+> phân tích độ trễ và AI vs Rule chi tiết; code đổi sau lượt đó ở mục 8. Thư mục `benchmark/results/` không commit; số
+> được chép vào đây. Phân tích hàng loạt (T10, làm sau mục 9, không đổi luồng phân tích): mục 10. Sửa theo Peer
+> Evaluation của bạn cùng nhóm (2026-10-20; không đổi prompt hay rule kết luận, `dev` chỉ rule vẫn 62/62): mục 7,
+> "Peer Evaluation về repo này".
+
+## Tóm tắt kết quả của bản nộp
+
+Benchmark `dev` ×5 (20 case trên 13 cuộc gọi, 69 câu hỏi, 345 lần chạy; 2026-10-19, `gpt-4o-mini`), chi tiết ở mục 9:
+
+| Metric (MVP 6.5) | Kết quả | Target | Mức |
+|---|---|---|---|
+| Verdict Accuracy | **100%** (310/310 lần chạy, 19/19 case) trên `dev`; `held-out` do mentor đo (mục 6) | ≥ 85% (`held-out`) | Bắt buộc |
+| Metric Correctness | **100%** (310/310) | 100% | Bắt buộc |
+| Security Leakage input / output | **0 / 8 255 · 0** (report, câu trả lời và application log) | 0% · 0 | Bắt buộc |
+| Issue Category Accuracy | N/A — ground truth không có nhãn category (mục 7, "Bộ benchmark `dev`") | ≥ 70% | Báo cáo |
+| Consistency | **100%** (19/19 case giống hệt qua 5 lần) | ≥ 95% | Báo cáo |
+| Template Compliance | **100%** | 100% | Báo cáo |
+| Intent Accuracy | **100%** (320/320) | ≥ 90% | Báo cáo |
+| Unsupported Claim — AI thô / report cuối | **0%** (0/310) / **0%** | 0% | Báo cáo |
+| Pipeline Success Rate | **100%** (310/310), 0 lần lùi về rule | ≥ 95% | Báo cáo |
+| Latency P50 / P95 | **2,95 s / 4,04 s** (chậm nhất 11,3 s, máy cá nhân) | — | Báo cáo |
+
+AI vs Rule: 19/19 case Rule = AI = Final = Ground Truth, 0 vi phạm Guardrails (mục 3). Test bắt buộc S01-S08, G01-G05,
+F01-F04 kèm enum lạ / thiếu trường / input quá lớn: 67/67 qua (mục 9). Bảo mật: [`bao-cao-bao-mat.md`](bao-cao-bao-mat.md).
+Phân tích lỗi qua các lượt: [`phan-tich-loi-dev.md`](phan-tich-loi-dev.md).
 
 ## 1. Cấu hình đo
 
@@ -25,7 +45,23 @@
 
 So với mốc P0.3 (`moc-sprint-3.md`), bộ case thêm `case-020` (câu hỏi giả định sai) và `case-019` đã có từ đợt 1.
 
-## 2. Kết quả trên `dev` (MVP mục 6.5)
+**Độ phủ của bộ `dev` so với MVP 6.3.** 13 cuộc gọi có nhãn, mỗi cuộc 3-5 cách hỏi:
+
+| Loại ca MVP 6.3 yêu cầu | Case |
+|---|---|
+| SUCCESS bình thường | case-002, 009–014 |
+| SUCCESS chất lượng kém | **Không có** — data mẫu không có cuộc chất lượng kém có nhãn (mục 7) |
+| FAIL thiết lập | case-004, 007 (server từ chối, mã 428) |
+| FAIL media (ICE / TURN) | case-001 (ICE); 005, 006, 008 (TURN) |
+| UNKNOWN do thiếu file | case-018 — đáp án suy từ luật "thiếu file → UNKNOWN" (MVP 4.1), không phải nhãn mentor |
+| Bình thường có WARN | Mọi case SUCCESS: signaling của cả 7 cuộc có 5–13 event `level=WARN` |
+| Thiếu file một bên | case-015 (và các cuộc vốn chỉ có log một bên: 001, 006, 008, 009) |
+| Tên file sai loại | case-016; case-013 có sẵn file gõ sai tên `calleer_webrtc.log` |
+| File khác Call-ID | case-017 |
+| `OUT_OF_SCOPE` (≥ 5 câu) | 7 câu: case-003 (5 câu) + 1 câu ở case-010, 1 câu ở case-012 |
+| Ngoài 6.3 | case-019 (dữ liệu nhạy cảm giả, MVP 10 scenario 6), case-020 (câu hỏi giả định sai) |
+
+## 2. Kết quả trên `dev` — lượt cuối Sprint 3, 2026-10-14 (MVP mục 6.5)
 
 | Metric | Sprint 2 (06/10) | Mốc P0.3 (10/10) | Cuối Sprint 3 (14/10) | Target | Mức |
 |---|---|---|---|---|---|
@@ -33,7 +69,7 @@ So với mốc P0.3 (`moc-sprint-3.md`), bộ case thêm `case-020` (câu hỏi 
 | Metric Correctness | 100% | 100% | **100% (310/310)** | 100% | Bắt buộc |
 | Security Leakage input / output | 0/7 005 · 0 | 0/7 005 · 0 | **0/8 255 · 0** (345 lần chạy, gồm application log) | 0% · 0 | Bắt buộc |
 | Issue Category Accuracy | N/A | N/A | N/A — ground truth chưa có nhãn category | ≥ 70% | Báo cáo |
-| Consistency | 100% | 100% | **100% (310/310)**, mọi case giống hệt qua 5 lần | ≥ 95% | Báo cáo |
+| Consistency | 100% (17/17 case) | 100% (17/17 case) | **100% (19/19 case)**, mọi case giống hệt qua 5 lần | ≥ 95% | Báo cáo |
 | Template Compliance | 100% | 100% | **100%** | 100% | Báo cáo |
 | Intent Accuracy | 100% (290/290) | 100% (290/290) | **100% (320/320)** | ≥ 90% | Báo cáo |
 | Unsupported Claim — AI trước Guardrails | 2,9% (8/280) | 0% (0/280) | **0% (0/309)** | 0% | Báo cáo |
@@ -56,7 +92,7 @@ pipeline vẫn dưới 1 s. Số đo độ trễ trên máy cá nhân chỉ dùn
 case, ×5, **cùng dấu vân tay prompt** (`analyze-call.system.txt e8941db2acc1`, ba file còn lại cũng trùng), chạy sau
 commit `bf0114b`, xong lúc 11:54:
 
-| | Bản cuối (chính thức) | Chạy lại |
+| | Lượt 14/10 (mục 2) | Chạy lại 14/10 |
 |---|---|---|
 | Latency P50 / P95 / chậm nhất | 3,6 s / 14,9 s / 47,7 s | **3,0 s / 4,5 s / 9,0 s** |
 | Fallback | 1/310 (TIMEOUT) | 0/310 |
@@ -64,7 +100,8 @@ commit `bf0114b`, xong lúc 11:54:
 | Unsupported Claim AI thô / report cuối | 0/309 · 0% | 0/310 · 0% |
 
 Cùng prompt, cùng bộ case, chỉ cách nhau khoảng một giờ mà P95 giảm từ 14,9 s xuống 4,5 s và không còn lần quá giờ —
-phù hợp với kết luận độ trễ cao là do phía OpenAI lúc đo. Số chính thức vẫn lấy từ lượt bản cuối.
+phù hợp với kết luận độ trễ cao là do phía OpenAI lúc đo. Bảng mục 2 vẫn ghi số của lượt bản cuối; số của bản nộp ở
+mục 9.
 
 ## 3. AI vs Rule
 
@@ -83,8 +120,8 @@ toàn bộ các lượt: [`phan-tich-loi-dev.md`](phan-tich-loi-dev.md) mục 4)
 
 Code sau các sửa theo nhận xét mentor: G05 bắt số viết liền đơn vị (design-decisions mục 43), cổng fail-closed trước khi
 gửi AI (mục 44), ngưỡng mất gói cả cuộc từ 5 % (mục 46). Cùng bộ case `dev` (20 case, 69 câu × 5 = 345 lần chạy), cùng
-dấu vân tay prompt `analyze-call.system.txt e8941db2acc1`. Số chính thức của Sprint 3 vẫn là lượt 14/10 ở mục 2; lượt này
-cho biết các sửa trên không làm hỏng gì. Kết quả: `benchmark/results/gop-y-mentor-json/evaluation-20261015-174838.md`.
+dấu vân tay prompt `analyze-call.system.txt e8941db2acc1`. Lượt này cho biết các sửa trên không làm hỏng gì; số của bản
+nộp ở mục 9. Kết quả: `benchmark/results/gop-y-mentor-json/evaluation-20261015-174838.md`.
 
 | Metric | Lượt 14/10 (mục 2) | Sau góp ý mentor (15/10) |
 |---|---|---|
@@ -129,7 +166,7 @@ chạy cùng ngày, cùng code, cùng bộ case ×5. Kết quả văn bản: `be
 
 | Mảng | Trước | Sau | Đo bằng |
 |---|---|---|---|
-| Số AI tự viết | 2,9% đầu ra thô (Sprint 2); 4/310 và 5/310 ở `case-007` câu 3 (hai lượt 13/10, AI trừ hai mốc giờ ra `0.112`) | **0/309** lượt cuối (lượt kiểm riêng sau khi sửa 4b: 0/45) | Unsupported Claim thô |
+| Số AI tự viết | 2,9% đầu ra thô (Sprint 2); 4/310 và 5/310 ở `case-007` câu 3 (hai lượt 13/10, AI trừ hai mốc giờ ra `0.112`) | **0/309** lượt 14/10 (lượt kiểm riêng sau khi sửa 4b: 0/45); **0/310** lượt trước nộp 19/10, G05 mới | Unsupported Claim thô |
 | Gán sai nghĩa con số | `271D1FAF`: mẫu 11,3% bị gọi là mất gói cả cuộc | AI nhắc chỉ số bằng mã, code điền tên + giá trị (T1a, mục 32) | Kiểm tay |
 | Tóm tắt ca FAIL | AI viết "không thiết lập được" cho cuộc đã thiết lập ở 10/10 lần (`70C388AD`, `FE4EF5E7`) | Code viết từ lý do của rule (mục 40) | Kiểm tay, test |
 | Câu hỏi giả định sai | AI nhận giả định, tìm "nguyên nhân" cho lỗi không có (`4FD495C1`) | Một phần: không còn bịa nguyên nhân, chưa luôn phủ nhận thẳng giả định (`case-020`, đọc tay) | Đọc tay |
@@ -139,26 +176,24 @@ chạy cùng ngày, cùng code, cùng bộ case ×5. Kết quả văn bản: `be
 | Log | `key=value`, thiếu `call_id` | JSON đủ bảy trường MVP 6.2, latency từng bước (T5) | Test log |
 | Quan sát | Không có | Mỗi request một bản ghi vào ES, view Kibana (T9) | Kibana |
 | Thống kê toàn kho | Chỉ xem từng cuộc | `--batch-analyze`: mọi Call-ID trong ES, phân bố verdict / loại lỗi tách theo nguồn dữ liệu (T10); dashboard kết quả và dashboard hàng loạt (T11) | Mục 10, Kibana |
-| Độ trễ P95 | 8,4 s (gồm ~7 s sanitizer chậm ở `DE7DD314`) | Sanitizer đã sửa ở T4 (lượt 13/10: 3,8 s); lượt cuối 14,9 s do OpenAI chậm | Runner |
+| Độ trễ P95 | 8,4 s (gồm ~7 s sanitizer chậm ở `DE7DD314`) | Sanitizer đã sửa ở T4 (lượt 13/10: 3,8 s); lượt 14/10 14,9 s do OpenAI chậm; trước nộp 19/10: **4,04 s** (mục 9) | Runner |
 
 ## 5. Chạy trên dataset mới của mentor (`ai20k_new_dataset`, 2026-10-13 → 14)
 
-7 cuộc gọi, **không có nhãn** — bảng dưới là kết luận của tool, không phải độ chính xác. Ảnh chụp Web UI và report
-Markdown của từng cuộc: `../image-report-final/<CALL-ID>/` (trước khi sửa: `../image-report-new-dataset/`).
+7 cuộc gọi, **không có nhãn** — bảng dưới là kết luận của tool, không phải độ chính xác. Số của bản code cuối
+(`--analyze-all=../ai20k_new_dataset`, chỉ rule, chạy lại 2026-10-20; 7/7 report hợp lệ theo schema). Cột "13–14/10" là
+kết luận trước khi đổi ngưỡng mất gói sang cả cuộc từ 5 % (2026-10-15, theo mentor; design-decisions mục 46). Ảnh chụp
+Web UI và report Markdown của từng cuộc (chụp 2026-10-14, trước khi đổi ngưỡng mất gói — khớp cột "13–14/10" của bảng dưới, không phải kết luận hiện tại): `../image-report-final/<CALL-ID>/` (trước khi sửa: `../image-report-new-dataset/`).
 
-| Cuộc | Kết luận | Loại lỗi | Tin cậy | Ghi chú |
-|---|---|---|---|---|
-| 06BCA48C | SUCCESS | NETWORK_PACKET_LOSS | LOW | Mất gói cả cuộc 0,36% / 0,15%, có đợt mẫu tới 38,6% |
-| 4FD495C1 | SUCCESS | NETWORK_PACKET_LOSS | LOW | Caller 6/91 mẫu > 5%, cả cuộc 1,39% |
-| 70C388AD | FAIL | ICE_FAILURE | MEDIUM | Caller nhận ~0,7 s âm thanh rồi im 12 s; thiếu end call log callee |
-| B5F19381 | SUCCESS | NETWORK_PACKET_LOSS | LOW | Caller mất gói 8,48% cả cuộc, MOS thấp nhất 1,94 |
-| FC3187B4 | SUCCESS | NETWORK_DELAY_JITTER | LOW | RTT trung bình ~540 ms cả cuộc; callee có 2 thiết bị |
-| FE4E4BDC | SUCCESS | NETWORK_PACKET_LOSS | LOW | Cuộc 9 s, RTT ~690 ms; luật mất gói xét trước độ trễ |
-| FE4EF5E7 | FAIL | ICE_FAILURE | MEDIUM | Nói ~30 s rồi rớt; BYE của callee không tới server |
-
-**Sau khi đổi ngưỡng mất gói (2026-10-15, cả cuộc từ 5 %, theo mentor)**, chạy lại bằng rule (`--analyze-all`):
-`06BCA48C`, `4FD495C1`, `FE4E4BDC` thành `SUCCESS` không cờ (mất gói cả cuộc 0,36 %, 1,39 %, 4,65 %); `B5F19381` là cuộc
-duy nhất còn `NETWORK_PACKET_LOSS`; `FC3187B4` (độ trễ), `70C388AD`, `FE4EF5E7` (FAIL) không đổi.
+| Cuộc | Kết luận | Loại lỗi | Tin cậy | 13–14/10 | Ghi chú |
+|---|---|---|---|---|---|
+| 06BCA48C | SUCCESS | — | HIGH | `NETWORK_PACKET_LOSS`, LOW | Mất gói cả cuộc 0,36% / 0,15%, có đợt mẫu tới 38,6% |
+| 4FD495C1 | SUCCESS | — | HIGH | `NETWORK_PACKET_LOSS`, LOW | Caller 6/91 mẫu > 5%, cả cuộc 1,39% |
+| 70C388AD | FAIL | ICE_FAILURE | MEDIUM | không đổi | Caller nhận ~0,7 s âm thanh rồi im 12 s; thiếu end call log callee |
+| B5F19381 | SUCCESS | NETWORK_PACKET_LOSS | LOW | không đổi | Caller mất gói 8,48% cả cuộc, MOS thấp nhất 1,94 |
+| FC3187B4 | SUCCESS | NETWORK_DELAY_JITTER | LOW | không đổi | RTT trung bình ~540 ms cả cuộc; callee có 2 thiết bị |
+| FE4E4BDC | SUCCESS | — | HIGH | `NETWORK_PACKET_LOSS`, LOW | Cuộc 9 s, mất gói cả cuộc 4,65 % (dưới ngưỡng 5 %), RTT ~690 ms |
+| FE4EF5E7 | FAIL | ICE_FAILURE | MEDIUM | không đổi | Nói ~30 s rồi rớt; BYE của callee không tới server |
 
 Lỗi tool tìm ra nhờ dataset này và đã sửa (chi tiết: [`bay-du-lieu.md`](bay-du-lieu.md) bẫy #20–#22, design-decisions mục 40–41):
 
@@ -201,7 +236,8 @@ Cách chạy: README, mục "Chạy bộ case `held-out`".
 - Tín hiệu `network_lost` (end call log, `originator=remote`) chỉ dùng để giải thích; nó không chứng minh bên kia mất
   mạng — app báo nó ~7 s sau khi hết dữ liệu từ bên kia.
 - **Gọi nhóm** (3 người trở lên) không hỗ trợ; nhiều thiết bị của **một** người nhận thì có ([`bay-du-lieu.md`](bay-du-lieu.md) bẫy #21).
-- Các mục còn mở từ Sprint 2 vẫn giữ: `UNKNOWN` chưa có ca có nhãn; "evidence mâu thuẫn" chưa cài; mã 428 xếp tạm
+- Các mục còn mở từ Sprint 2 vẫn giữ: `UNKNOWN` chưa có nhãn của mentor (đáp án `UNKNOWN` của case-018 suy từ luật
+  "thiếu file → UNKNOWN" của MVP 4.1); "evidence mâu thuẫn" chưa cài; mã 428 xếp tạm
   `SIGNALING_FAILURE`; thiếu log một bên ra SUCCESS / FAIL (theo nhãn `5E0800AE`) chứ không `UNKNOWN` như scenario 5.
 
 ### Phần chữ AI viết
@@ -252,7 +288,7 @@ Sau khi sửa: 600 test, 0 lỗi; `--analyze-all` 20 cuộc ra đúng từng dò
 `case-017` (F03, có end call log khớp) vẫn giữ WebRTC log. (Chiều ngược lại — báo cáo của mình về repo bạn ấy:
 [`peer-evaluation-report.md`](peer-evaluation-report.md).)
 
-## 8. Thay đổi sau lượt đo cuối (2026-10-19)
+## 8. Thay đổi sau lượt 14/10 (rà soát theo MVP, 2026-10-19)
 
 Rà soát code theo MVP tìm ra năm chỗ; đã sửa kèm test (`mvn test`: 565 test, 0 lỗi). Lý do: design-decisions mục 47.
 
@@ -270,7 +306,7 @@ Prompt và schema AI không đổi (dấu vân tay như mục 1), nhưng request
 ## 9. Chạy lại trước khi nộp (MVP 7.1, 2026-10-19)
 
 > MVP 7.1: *"Trước khi nộp, chạy lại toàn bộ: S01-S08, G01-G05 (kèm unexpected enum, missing fields, oversized input),
-> F01-F04 và toàn bộ benchmark `dev` để so với kết quả Sprint 2."* Code: bản cuối sau mục 8 (`mvn test` 565 test, 0 lỗi).
+> F01-F04 và toàn bộ benchmark `dev` để so với kết quả Sprint 2."* Code: bản sau mục 8 (`mvn test` lúc chạy: 565 test, 0 lỗi; bản nộp sau T10 và sửa theo Peer Evaluation: 600).
 
 ### S01-S08, G01-G05, F01-F04
 
@@ -290,7 +326,8 @@ ba nhóm của MVP 7.1 liệt kê tên test tường minh trong script.
 | 7.1 enum lạ | 4 | qua | | F04 Hỏng / quá lớn | 8 | qua |
 | 7.1 thiếu trường | 5 | qua | | 7.1 input quá lớn | 5 | qua |
 
-**67/67 test qua.** Sprint 2 (2026-10-07): đủ 17 ca có test, `mvn test` 390 test qua; chưa có test cho thiếu trường
+**67/67 test qua** (2026-10-19; sau sửa theo Peer Evaluation 2026-10-20, F03 thêm 2 test: 69/69). Phép đo leakage trên `dev` (bên dưới) và kiểm độc lập bằng script trên data mẫu: Security Evaluation
+Report [`bao-cao-bao-mat.md`](bao-cao-bao-mat.md). Sprint 2 (2026-10-07): đủ 17 ca có test, `mvn test` 390 test qua; chưa có test cho thiếu trường
 bắt buộc, câu hỏi quá dài, trần token ra, SĐT dính `_`, Call-ID khác hoa thường; S06 khi đó kiểm một class pipeline
 không gọi (mục 8).
 

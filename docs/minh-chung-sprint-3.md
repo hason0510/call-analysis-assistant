@@ -7,7 +7,7 @@ test tham số hoá tính từng bộ tham số).
 
 | | |
 |---|---|
-| Code | Sprint 3 trên `main`, tác giả `hason123`: `bf0114b` (2026-10-14, hardening, đo lường, dataset mới — 125 file, +7 174 / −368 dòng), `4156a20` (T11), `a3b4995` (nhận xét Sprint 2 của mentor), `05ad4d0` (rà soát theo MVP), `10962e7` (T10), commit sửa theo Peer Evaluation (2026-10-20), cùng các commit tài liệu. Cả Sprint 3 (`bf0114b^..HEAD`): 180 file, +11 310 / −797 dòng, trong đó 52 file test (+3 133 dòng) |
+| Code | Sprint 3 trên `main`, tác giả `hason123`: `bf0114b` (2026-10-14, hardening, đo lường, dataset mới — 125 file, +7 174 / −368 dòng), `4156a20` (T11), `a3b4995` (nhận xét Sprint 2 của mentor), `05ad4d0` (rà soát theo MVP), `10962e7` (T10), `8a3c278` (sửa theo Peer Evaluation, 2026-10-20), cùng các commit tài liệu. Cả Sprint 3 (`bf0114b^..HEAD`): 180 file, +11 310 / −797 dòng, trong đó 52 file test (+3 133 dòng) |
 | Test | `mvn test` 2026-10-20: **600 test, 0 lỗi** (Docker bật, 6 test Testcontainers cũng chạy; 565 trước T10, 590 trước khi sửa theo Peer Evaluation). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
 | Benchmark | `dev` 20 case, 69 câu × 5 lần = 345 lần chạy, `gpt-4o-mini`. Lượt cuối Sprint 3: 2026-10-14 — `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md`. Lượt chạy lại trước khi nộp trên bản code cuối (MVP 7.1): 2026-10-19 — `benchmark/results/truoc-nop-2026-10-19/evaluation-20261019-162735.md`, cùng dấu vân tay prompt |
 | Lý do từng thay đổi | `docs/design-decisions.md` mục 32–49 |
@@ -33,7 +33,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 | Mục MVP | Nội dung | Trạng thái |
 |---|---|---|
 | 7.1 | 7 task Core (T1–T7) | 7/7 ✅ (Issue Category Accuracy N/A: ground truth không có nhãn) |
-| 7.1 | 4 task Nếu kịp (T8–T11) | 4/4 — T10 làm 2026-10-19 (hai chế độ: chỉ signaling và kèm log máy) |
+| 7.1 | 4 task Nếu kịp (T8–T11) | 4/4 ✅ — T10 làm 2026-10-19 (hai chế độ: chỉ signaling và kèm log máy) |
 | 7.2 | Confidence Design theo bảng | ✅ `ConfidencePolicy`, test từng dòng bảng |
 | 7.3 | Peer Evaluation | ✅ `docs/peer-evaluation-report.md` |
 | 7.4 | 3 tài liệu bàn giao + Final Demo | ✅ — Final Evaluation Report mục 6 dành cho kết quả `held-out` do mentor chạy |
@@ -45,7 +45,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 
 | Task | MVP yêu cầu | Code | Test | Bằng chứng chạy thật |
 |---|---|---|---|---|
-| **T1 Improve Accuracy & Consistency** | Phân tích lỗi trên `dev`; cải tiến prompt / evidence / rule | (a) AI nhắc chỉ số bằng mã: `domain/ai/MetricCodes` (file mới), `AiContextBuilder`, `domain/guardrail/Guardrails` (G05 mã lạ); đo: `domain/evaluation/MetricMentions`. (b) Evidence mang cờ căn cứ: `domain/evidence/Evidence.ruleBasis`, `EvidenceEngine`, `domain/rule/SignalExtractor.basis`; đo: `domain/evaluation/EvidenceCitation`. (c) `scripts/error-analysis/analyze_runs.py` → `docs/phan-tich-loi-dev.md`. Phụ trợ đo: `infrastructure/ai/AiPromptFingerprint`, `cli/RescoreCommand`, `domain/evaluation/RunAlignment` | `MetricCodesTest` (4), `MetricMentionsTest` (2), `GuardrailsTest::g05ChecksMetricCodes`, `AiContextBuilderTest::metricCodesMatchWhatAiSaw`, `::ruleBasisReachesAi`, `EvidenceEngineTest::ruleBasisIsMarked`, `CallLogNormalizationServiceTest::iceFailedTransitionIsBasis`, `ChatAnalysisServiceTest::metricCodesAreExpandedInReport`, `EvaluationScorerTest::metricCodeShare`, `::evidenceCitationMetrics`, `AiPromptFingerprintTest` (3), `RunAlignmentTest` (4), `EvaluationRunJsonTest` (2) | Unsupported Claim thô 2,9% (Sprint 2) → **0/309**; AI nhắc chỉ số qua mã 90,9%; evidence AI trích trung bình 5,2 → 3,1 / 13,1, giống nhau giữa các lần lặp 95,5%. Phân tích lỗi: 8 lượt, 1 332 lần chạy. Kết quả trước / sau: `benchmark/results/t1a-sprint-3/`, `t1b-truoc/`, `t1b-sau/`. **Còn thiếu:** Issue Category Accuracy — ground truth chưa có nhãn category |
+| **T1 Improve Accuracy & Consistency** | Phân tích lỗi trên `dev`; cải tiến prompt / evidence / rule | (a) AI nhắc chỉ số bằng mã: `domain/ai/MetricCodes` (file mới), `AiContextBuilder`, `domain/guardrail/Guardrails` (G05 mã lạ); đo: `domain/evaluation/MetricMentions`. (b) Evidence mang cờ căn cứ: `domain/evidence/Evidence.ruleBasis`, `EvidenceEngine`, `domain/rule/SignalExtractor.basis`; đo: `domain/evaluation/EvidenceCitation`. (c) `scripts/error-analysis/analyze_runs.py` → `docs/phan-tich-loi-dev.md`. Phụ trợ đo: `infrastructure/ai/AiPromptFingerprint`, `cli/RescoreCommand`, `domain/evaluation/RunAlignment` | `MetricCodesTest` (4), `MetricMentionsTest` (2), `GuardrailsTest::g05ChecksMetricCodes`, `AiContextBuilderTest::metricCodesMatchWhatAiSaw`, `::ruleBasisReachesAi`, `EvidenceEngineTest::ruleBasisIsMarked`, `CallLogNormalizationServiceTest::iceFailedTransitionIsBasis`, `ChatAnalysisServiceTest::metricCodesAreExpandedInReport`, `EvaluationScorerTest::metricCodeShare`, `::evidenceCitationMetrics`, `AiPromptFingerprintTest` (3), `RunAlignmentTest` (4), `EvaluationRunJsonTest` (2) | Unsupported Claim thô 2,9% (Sprint 2) → **0/309** (14/10), **0/310** (19/10); AI nhắc chỉ số qua mã 90,9%; evidence AI trích trung bình 5,2 → 3,1 / 13,1, giống nhau giữa các lần lặp 95,5%. Phân tích lỗi: 8 lượt, 1 332 lần chạy. Kết quả trước / sau: `benchmark/results/t1a-sprint-3/`, `t1b-truoc/`, `t1b-sau/`. Issue Category Accuracy N/A: ground truth không có nhãn category (giới hạn dữ liệu, Known Limitations) |
 | **T2 Explainability & Suggestion** | Bộ đề xuất chuẩn theo issue category; phân tích trả lời: chuyện gì xảy ra, vì sao, evidence nào, điều tra gì tiếp | `domain/report/ReportBuilder` (đề xuất chuẩn luôn giữ; dòng Tóm tắt ca FAIL do code viết), `domain/rule/SignalingCause` (file mới, 6 nguyên nhân con của `SIGNALING_FAILURE`), `ReportDecision`, `resources/taxonomy.yaml`, `schema/report-v1.schema.json` (`aiSuggestions`), `prompts/analyze-call.system.txt` | `ReportDecisionTest::aiSuggestionsAreOnlyAdditions`, `::noAiSuggestionsWithoutUsableAi`, `RuleVerdictEngineTest::signalingCauseDrivesSuggestions`, `::failVerdictHasNoCauseBasis`, `AiContextBuilderTest::standardSuggestionsReachAi`, `ReportBuilderTest` (10) | `--analyze` 22 report: kết luận, cờ, độ tin cậy giữ nguyên; `dev` ×1 có AI: Verdict / Consistency / Intent 100% — `benchmark/results/sau-t2/` |
 | **T3 Confidence Design** | HIGH / MEDIUM / LOW tất định theo bảng 7.2 | `domain/confidence/` (5 file mới: `ConfidencePolicy`, `ConfidenceBasis`, `ConfidenceAssessment`, `DataCoverage`, `EvidenceStrength`); `RuleVerdictEngine` chỉ khai báo `ConfidenceBasis`; report thêm `confidenceReasons` | `ConfidencePolicyTest` (14) — xem mục 7.2 | 22 report `--analyze` giữ nguyên mức; `dev` có AI: mức của 59/59 câu trùng lượt trước — `benchmark/results/sau-t3-t4/` |
 | **T4 Reliability Hardening** | Timeout AI / ES, lỗi thân thiện trên UI | `resources/static/app.js` (`AbortController`, banner "Quá thời gian chờ"); `infrastructure/ai/OpenAiChatClient` (429 → `QUOTA_EXCEEDED` / `RATE_LIMITED`); `domain/request/GarbledText` (file mới); `service/CallLogNormalizationService` (`--parse-*` khi ES tắt); `domain/security/SensitiveDataSanitizer.policyForKey` (tra bảng thay vì duyệt inventory) | `OpenAiChatClientTest::quotaExceeded`, `::rateLimited`, `GarbledTextTest` (15), `RequestParserServiceTest::garbledQuestionIsFlagged`, `ChatAnalysisServiceTest::garbledQuestionIsReported`, `CallLogNormalizationServiceTest::parseSurvivesSignalingOutage`, `SensitiveDataSanitizerTest::policyLookupMatchesLinearScan` | Sanitizer `DE7DD314`: 9 405 ms → 977 ms một request, 10 request đồng thời 12,5 s → 2,2 s, report trùng từng byte; `--parse-call` với ES ở cổng chết ra đủ 1 140 event; file 20 MB − 1 KB ra report sau 6,9 s. P95 có AI 8,1 s → 4,5 s (`sau-t3-t4/`) |
@@ -67,7 +67,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 | Cuộc rớt giữa chừng bị giải thích là "media không thiết lập được" | `RuleVerdictEngine`, `ReportBuilder` (Tóm tắt ca FAIL do code viết — design-decisions mục 40) | `RuleVerdictEngineTest::mediaLostMidCallKeepsVerdictButExplainsIt` |
 | Độ trễ cao kéo dài không được gắn cờ (`FC3187B4`) | `domain/rule/LegQuality`, `RuleVerdictEngine` — rule `NETWORK_DELAY_JITTER` theo ngưỡng Teams CQD (mục 41) | `RuleVerdictEngineTest::sustainedHighRttFlagsDelayJitter`, `::delayThresholdBoundaries`, `::lossWinsOverDelay` |
 
-Kết luận trên data mẫu sau các sửa trên: 13/13 cuộc có nhãn vẫn đúng. Report và ảnh Web UI của 7 cuộc:
+Kết luận trên data mẫu sau các sửa trên: 13/13 cuộc có nhãn vẫn đúng. Report và ảnh Web UI của 7 cuộc (chụp 2026-10-14, trước khi đổi ngưỡng mất gói — khớp cột "13–14/10" của bảng dưới, không phải kết luận hiện tại):
 `../image-report-final/<CALL-ID>/`. Kết luận từng cuộc: `docs/final-evaluation-report.md` mục 5.
 
 ---
@@ -109,7 +109,7 @@ Chiều ngược lại — báo cáo của bạn ấy về repo này (commit `a9
 | Automated Tests + Evaluation Suite | `mvn test` 600 test; Evaluation Runner `--evaluate` / `--rescore`, bộ `benchmark/dev-cases.yaml`; S/G/F 67/67 (Final Evaluation Report mục 9) |
 | Runbook | `docs/runbook.md` |
 | Architecture & Security Design | `docs/architecture-security-design.md` |
-| Final Evaluation Report & Known Limitations | `docs/final-evaluation-report.md` — ⏳ mục 6 chờ kết quả `held-out` của mentor |
+| Final Evaluation Report & Known Limitations | `docs/final-evaluation-report.md` ✅ — mục 6: tập `held-out` do mentor giữ và chạy; chưa có số đo |
 | Security Evaluation Report | `docs/bao-cao-bao-mat.md` (T6) |
 | Kịch bản Final Demo (6 scenario MVP mục 10) | `docs/demo-sprint-3.md` — kết quả chạy thật 2026-10-12 ghi dưới từng scenario |
 | Peer Evaluation Report | `docs/peer-evaluation-report.md` (T7) |
@@ -163,9 +163,10 @@ WebRTC log vì có end call log khớp).
 
 ## Kết quả đo
 
-Bảng metric MVP 6.5 so Sprint 2 với cuối Sprint 3: README mục "Kết quả đo được — Sprint 3" và
-`docs/final-evaluation-report.md` mục 2. Nguồn: `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md`
-(dấu vân tay prompt `analyze-call.system.txt e8941db2acc1`).
+Bảng metric MVP 6.5 của bản nộp so với Sprint 2: README mục "Kết quả đo được — Sprint 3" và
+`docs/final-evaluation-report.md` mục 9 (lượt chạy lại trước khi nộp, 2026-10-19). Lượt 14/10
+(`benchmark/results/ban-cuoi-2026-10-14/`, mục 2) giữ làm lịch sử, có phân tích độ trễ; dấu vân tay prompt hai lượt
+như nhau (`analyze-call.system.txt e8941db2acc1`).
 
 Lượt chạy lại trước khi nộp (MVP 7.1, 2026-10-19, bản code cuối, cùng dấu vân tay prompt): S/G/F 67/67 test; `dev` ×5 —
 310/310 verdict, Leakage 0/8 255 · 0, Unsupported Claim thô 0/310, 0 fallback, P50 / P95 2,95 / 4,04 s, ≈ 0,32 USD.

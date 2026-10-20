@@ -2,6 +2,12 @@
 
 > Viết ngày 2026-10-06. Tài liệu này gom về một chỗ: MVP yêu cầu đo gì, dự án đo thế nào, và vì sao đo như vậy.
 > Mỗi chỗ đều ghi rõ là **MVP quy định** hay **dự án tự quyết** — MVP thường chỉ có một dòng mô tả cho mỗi metric.
+>
+> **Cập nhật Sprint 3 (2026-10-20).** Các điểm mở ở mục 4 đã xử lý: 4.1 phần còn lại (IPv6, câu hỏi, application log)
+> đã đo — Security Evaluation Report; 4.2 giữ công thức A, báo cáo in kèm B ("n/m case giống hệt"); 4.3 hướng c đã làm
+> ở T1a bằng mã chỉ số THEO TÊN (`{PACKET_LOSS_CALLER}`), không đánh số `{Mxx}` như dự kiến dưới đây (design-decisions
+> mục 32); 4.4 định dạng case theo mẫu MVP 6.3 (README mục "Chạy bộ case `held-out`"), `expected_evidence` để `null`.
+> Số đo của bản nộp: Final Evaluation Report mục 9.
 
 Có ba lớp "metric" khác nhau, đừng lẫn:
 
@@ -273,9 +279,9 @@ Không câu nào bị hỏng. Chưa có số 5 lần cho phiên bản này — c
 | # | Điểm | Mức độ | Hướng | Cần xác nhận? | Trạng thái |
 |---|---|---|---|---|---|
 | 4.1 | Security Leakage khi chạy `held-out` | **Cao** — metric bắt buộc, điều kiện đạt tối thiểu (mục 8.1) | Đối chiếu giá trị gốc trong runner | Không | **Đã làm** 2026-10-06 |
-| 4.2 | Công thức Consistency, đơn vị "lần chạy" | Trung bình | Giữ công thức A, in kèm B | **Có** | Chưa chốt |
+| 4.2 | Công thức Consistency, đơn vị "lần chạy" | Trung bình | Giữ công thức A, in kèm B | Không | Đã chọn (Sprint 3) |
 | 4.3 | Metric Correctness gần như luôn đúng | Trung bình | Ghi rõ ngay; đề xuất AI trích mã chỉ số `{Mxx}` ở Sprint 3 | Không | Đã ghi rõ |
-| 4.4 | Format case + cách A | **Cao** — runner phải đọc được `held-out` | Làm rõ định dạng case và ý nghĩa `expected_evidence` | **Có** | Chưa chốt |
+| 4.4 | Format case + cách A | **Cao** — runner phải đọc được `held-out` | Làm rõ định dạng case và ý nghĩa `expected_evidence` | Không | Đã chốt (Sprint 3): mẫu MVP 6.3, `expected_evidence` để `null` |
 | 4.5 | Pipeline Success Rate tính câu từ chối là thành công | Thấp | Chỉ tính câu phải ra report | Không | **Đã làm** 2026-10-06 |
 
 ### 4.1. Security Leakage khi Mentor chạy `held-out`
@@ -297,7 +303,7 @@ service), cột end call log, cặp `deviceId=` / `csid=`, `a=ice-pwd`, `u/p=`, 
 loopback, broadcast). `EvaluationService` đối chiếu với chuỗi gửi AI (câu hỏi + context JSON) và toàn bộ phản hồi.
 Kết quả chỉ lưu số đếm theo loại.
 
-**Còn lại:** IPv6; giá trị nhạy cảm nằm trong câu hỏi người dùng; application log.
+**Sprint 3 đã làm:** IPv6; giá trị nhạy cảm nằm trong câu hỏi người dùng; application log (Security Evaluation Report).
 
 ### 4.2. Công thức Consistency và đơn vị "lần chạy"
 
@@ -314,7 +320,7 @@ Cùng câu hỏi với Verdict Accuracy: tính theo lần chạy (lần sai nào
 lần chạy chập chờn)?
 
 **Hướng:** giữ A làm số chính (cách đọc tự nhiên của "x% giống nhau"), in B bên cạnh (đã có: "n/m case giống hệt").
-Cần xác nhận. File JSON lưu từng lần chạy, nên đổi công thức thì **tính lại từ JSON, không tốn API**.
+Đã chọn như trên ở Sprint 3. File JSON lưu từng lần chạy, nên đổi công thức thì **tính lại từ JSON, không tốn API**.
 
 ### 4.3. Metric Correctness gần như luôn đúng
 
@@ -341,7 +347,7 @@ số và đúng bên: AI viết "MOS bên gọi 4.42201" trong khi đó là MOS 
 | **`expected_evidence: [EV002, EV005]` nghĩa là gì?** | Mã `EV002` do HỆ THỐNG tự sinh — người viết đáp án không biết trước hệ thống đánh số thế nào, nên so mã với mã vô nghĩa. Có thể ý định là nêu dòng log / sự kiện phải có trong evidence | Chưa dùng trường này |
 | Cách A (runner truyền `call_id`) | Nếu yêu cầu là chỉ dùng câu hỏi + file → số đo hiện tại thuận lợi hơn thực tế | Đã làm A, ghi rõ ở mục 3.1 |
 
-**Hướng:** xác nhận các điểm trên, ý nghĩa của `expected_evidence` và cách A trước khi Mentor chạy `held-out`.
+**Hướng (đã làm ở Sprint 3):** định dạng case theo mẫu MVP 6.3 (README mục "Chạy bộ case `held-out`"); `expected_evidence` để `null`; giữ cách A và ghi rõ trong Final Evaluation Report.
 
 ### 4.5. Pipeline Success Rate tính câu từ chối là thành công
 
