@@ -7,21 +7,22 @@ test tham số hoá tính từng bộ tham số).
 
 | | |
 |---|---|
-| Code | `main` @ `bf0114b` — *feat: Sprint 3 — hardening, đo lường và xử lý dataset mới*, tác giả `hason123`, 2026-10-14: 125 file, +7 174 / −368 dòng, trong đó 35 file test (+2 062 dòng) |
-| Test | `mvn test` 2026-10-19: **590 test, 0 lỗi** (Docker bật, 6 test Testcontainers cũng chạy; 565 trước T10). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
-| Benchmark | `dev` 20 case, 69 câu × 5 lần = 345 lần chạy, `gpt-4o-mini`, 2026-10-14 — `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` |
-| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–48 |
+| Code | Sprint 3 trên `main`, tác giả `hason123`: `bf0114b` (2026-10-14, hardening, đo lường, dataset mới — 125 file, +7 174 / −368 dòng), `4156a20` (T11), `a3b4995` (nhận xét Sprint 2 của mentor), `05ad4d0` (rà soát theo MVP), `10962e7` (T10), commit sửa theo Peer Evaluation (2026-10-20), cùng các commit tài liệu. Cả Sprint 3 (`bf0114b^..HEAD`): 180 file, +11 310 / −797 dòng, trong đó 52 file test (+3 133 dòng) |
+| Test | `mvn test` 2026-10-20: **600 test, 0 lỗi** (Docker bật, 6 test Testcontainers cũng chạy; 565 trước T10, 590 trước khi sửa theo Peer Evaluation). Ở `bf0114b`: 533. Cuối Sprint 2: 390 |
+| Benchmark | `dev` 20 case, 69 câu × 5 lần = 345 lần chạy, `gpt-4o-mini`. Lượt cuối Sprint 3: 2026-10-14 — `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md`. Lượt chạy lại trước khi nộp trên bản code cuối (MVP 7.1): 2026-10-19 — `benchmark/results/truoc-nop-2026-10-19/evaluation-20261019-162735.md`, cùng dấu vân tay prompt |
+| Lý do từng thay đổi | `docs/design-decisions.md` mục 32–49 |
 
 ## Tự kiểm lại
 
 ```bash
-git show --stat bf0114b                                   # danh sách file Sprint 3
+git log --oneline bf0114b^..HEAD                         # các commit Sprint 3
+git show --stat bf0114b                                   # danh sách file của commit Sprint 3 lớn nhất
 git show bf0114b -- src/main/java/io/hason/callanalysis/domain/confidence/   # xem code một task (ví dụ T3)
 export JAVA_HOME="/c/Users/Admin/.jdks/jbr-21.0.10"
-mvn test                                                  # 590 test
+mvn test                                                  # 600 test
 mvn test -Dtest=ConfidencePolicyTest                      # chạy riêng test của một task
-# Chấm lại lượt benchmark cuối theo đáp án hiện tại — không gọi AI, không cần ES, không tốn tiền
-mvn spring-boot:run -Dspring-boot.run.arguments="--rescore=benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.json"
+# Chấm lại lượt benchmark trước khi nộp theo đáp án hiện tại — không gọi AI, không cần ES, không tốn tiền
+mvn spring-boot:run -Dspring-boot.run.arguments="--rescore=benchmark/results/truoc-nop-2026-10-19/evaluation-20261019-162735.json"
 ```
 
 Thư mục `benchmark/results/` không commit (`.gitignore`) — số được chép vào `docs/final-evaluation-report.md`. Khi cần
@@ -31,10 +32,10 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 
 | Mục MVP | Nội dung | Trạng thái |
 |---|---|---|
-| 7.1 | 7 task Core (T1–T7) | 6/7 — T1 🟡 (Issue Category Accuracy chờ nhãn), T7 ⬜ (cần repo của bạn cùng nhóm) |
+| 7.1 | 7 task Core (T1–T7) | 7/7 — T1 🟡 (Issue Category Accuracy chờ nhãn) |
 | 7.1 | 4 task Nếu kịp (T8–T11) | 4/4 — T10 làm 2026-10-19 (đầu vào mentor muốn dùng vẫn hỏi ở câu 17; làm cả hai chế độ) |
 | 7.2 | Confidence Design theo bảng | ✅ `ConfidencePolicy`, test từng dòng bảng |
-| 7.3 | Peer Evaluation | ⬜ |
+| 7.3 | Peer Evaluation | ✅ `docs/peer-evaluation-report.md` |
 | 7.4 | 3 tài liệu bàn giao + Final Demo | ✅ — Final Evaluation Report còn chờ kết quả `held-out` của mentor |
 | — | Dataset mới của mentor (`ai20k_new_dataset`) | 5 lỗi tool tìm ra và đã sửa, có test; data mẫu vẫn 13/13 |
 
@@ -50,7 +51,7 @@ chứng minh số đo, gửi kèm file `.md` + `.json` của lượt chạy.
 | **T4 Reliability Hardening** | Timeout AI / ES, lỗi thân thiện trên UI | `resources/static/app.js` (`AbortController`, banner "Quá thời gian chờ"); `infrastructure/ai/OpenAiChatClient` (429 → `QUOTA_EXCEEDED` / `RATE_LIMITED`); `domain/request/GarbledText` (file mới); `service/CallLogNormalizationService` (`--parse-*` khi ES tắt); `domain/security/SensitiveDataSanitizer.policyForKey` (tra bảng thay vì duyệt inventory) | `OpenAiChatClientTest::quotaExceeded`, `::rateLimited`, `GarbledTextTest` (15), `RequestParserServiceTest::garbledQuestionIsFlagged`, `ChatAnalysisServiceTest::garbledQuestionIsReported`, `CallLogNormalizationServiceTest::parseSurvivesSignalingOutage`, `SensitiveDataSanitizerTest::policyLookupMatchesLinearScan` | Sanitizer `DE7DD314`: 9 405 ms → 977 ms một request, 10 request đồng thời 12,5 s → 2,2 s, report trùng từng byte; `--parse-call` với ES ở cổng chết ra đủ 1 140 event; file 20 MB − 1 KB ra report sau 6,9 s. P95 có AI 8,1 s → 4,5 s (`sau-t3-t4/`) |
 | **T5 Observability** | Structured log đã làm sạch: `request_id`, latency, kết quả, fallback, lỗi; dòng AI call đúng 7 trường MVP 6.2 | `infrastructure/logging/SanitizedJsonLogFormatter`, `SanitizingKeyValueConverter` (file mới); `infrastructure/ai/AiCallLog` (file mới); `resources/logback-spring.xml`, `application-web.yml`; `service/ChatAnalysisService` (latency từng bước) | `AiCallLogTest` (5) — `allowedFieldsAreMvpList` khẳng định đúng tập 7 khoá; `SanitizedJsonLogFormatterTest` (2), `SanitizingConvertersTest` (3), `ChatAnalysisServiceTest::requestLogHasStepLatencies` | Web không khoá AI: 9/9 dòng JSON hợp lệ; `call_id` dạng `CALL_xxxxxx` (HMAC). Benchmark: leakage application log 0 trên 345/345 lần chạy |
 | **T6 Security Evaluation Report** | Báo cáo bảo mật | `docs/bao-cao-bao-mat.md`; phép đo mới: `domain/evaluation/SensitiveValues` (IPv6, bí mật, giá trị trong câu hỏi), `service/port/ApplicationLogTap` + `infrastructure/logging/LogbackLogTap` (quét log từng lần chạy) | `SensitiveValuesTest` (8), `LogbackLogTapTest` (3), `EvaluationScorerTest::leakageMetrics`, `::logNotCapturedIsSaidSo`, `SensitiveDataSanitizerTest::questionKeepsRequestAfterSecret`, các test S01–S08 (Sprint 2) | Leakage 0/8 255 đầu vào AI, 0 phản hồi, 0 application log (lượt cuối); `scripts/verify-sanitizer`: 42 file, 0 sót — `benchmark/results/bao-mat-sprint-3/` |
-| **T7 Peer Evaluation** ⬜ | Chạy sản phẩm bạn cùng nhóm theo Runbook của họ, báo cáo ≥ 2 issue | — | — | Chưa làm: cần repo + Runbook của bạn cùng nhóm |
+| **T7 Peer Evaluation** | Chạy sản phẩm bạn cùng nhóm theo Runbook của họ, báo cáo ≥ 2 issue | `docs/peer-evaluation-report.md` (tài liệu, không có code) | — | Chạy repo của Trần Anh Tú (commit `a5010a6`) theo Runbook của bạn ấy trên cả `ai20k_sample` và `ai20k_new_dataset`, 2026-10-19. Dựng lại từ đầu theo Runbook, `mvn test` 328/328 + `npm test` 15/15, `dev` ×5 (461 lần chạy, ≈ 0,3 USD) khớp đúng số bạn ấy công bố. 3 vấn đề Runbook, 5 issue có bước tái hiện, 3 điểm học được |
 | **T8 Retry & Error Classification** (Nếu kịp) | Controlled retry, phân loại lỗi | `domain/ai/RetryPolicy` (file mới; chỉ `TIMEOUT` / `PROVIDER_ERROR`, `max-attempts: 2` = tối đa 2 lần gọi, ngân sách 45 s — `application.yml`); `OpenAiChatClient` (thêm `AUTH_FAILED`, `INPUT_TOO_LARGE`, `REQUEST_REJECTED`); `AiCallLog` dòng `RETRY` | `RetryPolicyTest` (14), `OpenAiChatClientTest` (8): `transientErrorIsRetried`, `retriesAreBounded`, `permanentErrorsAreNotRetried`, `timeoutIsRetriedWithinBudget`, `noRetryBeyondBudget`, `httpErrorsAreClassified`; `AiCallLogTest::retryLine` | Cổng chết → 1 lần thử lại rồi fallback; API thật với khoá giả → `AUTH_FAILED`; câu 1 MB → `INPUT_TOO_LARGE`. Lượt cuối: OpenAI trả 3 lỗi nhà cung cấp, thử lại xử lý được |
 | **T9 Kibana View** (Nếu kịp) | Ghi log và kết quả vào ES local; Kibana view request / latency / fallback / lỗi | `domain/observability/RequestRecord`, `service/port/RequestRecordSink`, `infrastructure/es/ElasticsearchRequestRecordSink` (file mới); `resources/es/analysis-requests-mapping.json`; `scripts/kibana/setup_views.py` (data view + 4 saved search) | `ElasticsearchRequestRecordSinkTest` (2) — `noNullsNoFreeText`; `ChatAnalysisServiceTest::everyRequestLeavesOneRecord`, `::unexpectedErrorIsRecorded` | 6 request → 6 tài liệu trong index `analysis-requests`; saved search "fallback" hiện đúng trên Kibana |
 | **T10 Batch Analysis** (Nếu kịp) | Phân tích hàng loạt các Call-ID trong ES local, thống kê phân bố verdict / issue category | `cli/BatchAnalyzeCommand`, `service/BatchAnalysisService`, `domain/batch/` (`SourceGroup`, `BatchResult`, `BatchSummary`, `BatchReportRenderer`), `service/port/CallCatalog` + `BatchResultSink`, `infrastructure/es/ElasticsearchCallCatalog` + `ElasticsearchBatchResultSink`, `infrastructure/file/CallLogDirectory`, `resources/es/call-analysis-results-mapping.json`; dashboard thứ hai trong `scripts/kibana/setup_dashboard.py` (file mới trừ script) | `BatchSummaryTest` (4), `BatchReportRendererTest` (5), `BatchAnalysisServiceTest` (6), `CallLogDirectoryTest` (6), `ElasticsearchBatchResultSinkTest` (2), `SignalingImporterIntegrationTest::catalogListsEveryCallIdAcrossPages`, `::batchResultsReplacePreviousRun` | 27 Call-ID trong ES. Chỉ signaling: 0 SUCCESS · 11 FAIL · 16 UNKNOWN (thiếu log máy), loại lỗi chỉ là triệu chứng. Kèm `--logs`: 13 SUCCESS · 14 FAIL · 0 UNKNOWN, 13/13 cuộc có nhãn đúng. Dashboard "Phân tích hàng loạt — toàn kho" hiển thị đúng. Final Evaluation Report mục 10 |
@@ -86,17 +87,32 @@ bắt buộc trong `report-v1.schema.json`): *"Độ tin cậy: MEDIUM — thi�
 
 ## 7.3. Peer Evaluation
 
-⬜ Chưa làm — cần repo và Runbook của bạn cùng nhóm.
+✅ [`docs/peer-evaluation-report.md`](peer-evaluation-report.md) — chạy repo của Trần Anh Tú (commit `a5010a6`) theo Runbook của bạn ấy trên cả `ai20k_sample` và `ai20k_new_dataset`, 2026-10-19. Đủ ba ý MVP 7.3:
+
+| MVP 7.3 yêu cầu | Trong báo cáo |
+|---|---|
+| Runbook có đủ để tự dựng và chạy được không | Mục 1: đủ, nhưng phải tự xử lý 3 chỗ (giới hạn trên JDK; bước build chạy test trước khi import nên không có jar; cổng 8080 viết cứng) |
+| ≥ 2 issue kèm bước tái hiện | Mục 2: 5 issue, mỗi issue đối chiếu với log gốc (chỉ số "No sessions found" ra 0 thay vì N/A; cờ mất gói theo mẫu đỉnh; signaling bị cắt bớt không vào Giới hạn dữ liệu; evidence WebRTC không trace được về dòng gốc; chạy chỉ rule ghi là `AI_UNAVAILABLE`), cộng mục "đã kiểm, không phải issue" |
+| ≥ 1 điểm thiết kế học được | Mục 3: 3 điểm (kiểm Output Sanitizer bằng AI giả cố tình rò rỉ; đo AI độc lập với rule; `/api/health` + banner) |
+
+Không sửa code của bạn ấy: clone chỉ đọc, `git status` sạch sau khi review; dữ liệu mẫu và key AI đã xoá khỏi bản clone.
+Bạn ấy đã sửa cả 5 issue và 3 vấn đề Runbook; kiểm lại ở mục 6 của báo cáo.
+
+Chiều ngược lại — báo cáo của bạn ấy về repo này (commit `a905256`): Runbook "đủ", 2 issue, đã sửa — mục "Sửa theo Peer Evaluation" bên dưới.
 
 ## 7.4. Deliverables
 
 | Deliverable | Ở đâu |
 |---|---|
+| Final End-to-End Assistant (Web UI + Rule + AI) | Profile `web` (`controller/`, `resources/static/`), cách chạy: README "Dành cho người chấm"; 6 scenario Final Demo trong `docs/demo-sprint-3.md` |
+| Reliability Mechanisms + Observability | T4, T5, T8, T9, T11 ở mục 7.1 |
+| Automated Tests + Evaluation Suite | `mvn test` 600 test; Evaluation Runner `--evaluate` / `--rescore`, bộ `benchmark/dev-cases.yaml`; S/G/F 67/67 (Final Evaluation Report mục 9) |
 | Runbook | `docs/runbook.md` |
 | Architecture & Security Design | `docs/architecture-security-design.md` |
 | Final Evaluation Report & Known Limitations | `docs/final-evaluation-report.md` — ⏳ mục 6 chờ kết quả `held-out` của mentor |
 | Security Evaluation Report | `docs/bao-cao-bao-mat.md` (T6) |
 | Kịch bản Final Demo (6 scenario MVP mục 10) | `docs/demo-sprint-3.md` — kết quả chạy thật 2026-10-12 ghi dưới từng scenario |
+| Peer Evaluation Report | `docs/peer-evaluation-report.md` (T7) |
 | Mốc so sánh đầu Sprint 3 | `docs/moc-sprint-3.md` |
 
 ## Sửa theo nhận xét Sprint 2 của mentor (2026-10-15, sau commit `bf0114b`)
@@ -116,7 +132,7 @@ bắt buộc trong `report-v1.schema.json`): *"Độ tin cậy: MEDIUM — thi�
 | T11 Sprint 2 (structured vs semi-structured) | `domain/ai/AiContextText`, `OpenAiAnalyzer` (`ai.context-format`), runner ghi dòng "Context AI" | `AiContextTextTest` (3), `OpenAiAnalyzerTest::contextFormatSelectsTextOrJson` | Hai lượt `dev` ×5 — Final Evaluation Report mục 3b |
 | Retry có kiểm soát | `domain/ai/RetryPolicy` (Sprint 3 T8, đã có ở `bf0114b`) | `RetryPolicyTest`, `OpenAiChatClientTest` | Mục 7.1, T8 |
 
-Chưa làm: quay video demo 6 kịch bản trên trình duyệt, Peer Evaluation (T7).
+Chưa làm: quay video demo 6 kịch bản trên trình duyệt. Peer Evaluation (T7) làm ngày 2026-10-19 — mục 7.3.
 
 ## Sửa sau rà soát theo MVP (2026-10-19)
 
@@ -131,8 +147,27 @@ Rà soát từng mục MVP với code tìm ra năm chỗ test vẫn xanh mà sai
 | S06 kiểm `JsonSanitizer`, class pipeline không gọi | Xoá `infrastructure/security/JsonSanitizer` | `SensitiveDataSanitizerTest::s06NestedJsonIsSanitized`, `ChatAnalysisServiceTest::s06NestedJsonInLogNeverLeaks` | — |
 | Thiếu trường / đầu vào quá lớn (MVP 7.1) | `infrastructure/ai/OpenAiAnalyzer.read` (theo `required` của schema), `domain/guardrail/Guardrails` (G02 `analysis`), `infrastructure/ai/OpenAiChatClient` (`max_completion_tokens`), `controller/AnalyzeController` (`QUESTION_TOO_LONG`), `static/app.js` | `OpenAiAnalyzerTest::missingFieldsAreInvalid`, `::wrongShapeIsInvalid`, `GuardrailsTest::g02BlankAnalysisIsRejected`, `AnalyzeControllerTest::tooLongQuestionIsRejectedBeforeAnalysis` | `--ai-analyze` `2D9057AA` với AI thật: 2/2 lời gọi `OK`, Guardrails qua |
 
+## Sửa theo Peer Evaluation của bạn cùng nhóm (2026-10-20)
+
+Báo cáo của Trần Anh Tú về repo này có 2 issue, cả hai tái hiện được trên server profile `web`. `mvn test` sau các sửa:
+**600 test, 0 lỗi**. Lý do: `docs/design-decisions.md` mục 49.
+
+| Issue | Code | Test | Bằng chứng chạy thật |
+|---|---|---|---|
+| Câu hỏi ghi Call-ID cuộc khác: WebRTC log (không mang Call-ID) của cuộc đính kèm quyết định kết luận | `domain/validation/FileValidator` (`UNVERIFIABLE_CALL_ID`); `domain/timeline/TimelineNote` (`FOREIGN_CALL_FILE`), `service/CallLogNormalizationService`, `domain/rule/SignalExtractor`, `RuleSignals`, `RuleVerdictEngine`, `domain/report/ReportBuilder`; `service/ChatAnalysisService` (ca chỉ WebRTC log + Call-ID gõ tay) | `FileValidatorTest::f03WebRtcWithOnlyForeignEndCallLogIsQuarantined`, `::f03WebRtcIsKeptWhenAMatchingEndCallLogExists`, `::webRtcOnlyIsKeptWithoutContraryEvidence`; `ChatAnalysisServiceTest::mistypedCallIdDoesNotBorrowAnotherCallsWebRtcLog`, `::foreignFilesAreExplainedWhereTheUserLooksFirst`, `::callIdFromQuestionWithOnlyWebRtcIsFlagged`; `RuleVerdictEngineTest::foreignFilesOnlyIsUnknownWithTheRealReason` | Log `2D9057AA` + Call-ID `DE7DD314`: trước FAIL / ICE MEDIUM, nay `UNKNOWN` LOW; Tóm tắt, Đề xuất ("kiểm tra lại Call-ID") và hai dòng đầu Giới hạn dữ liệu nói log thuộc cuộc gọi khác |
+| End call log có BOM UTF-8 / lưu UTF-16 bị coi là hỏng → `UNKNOWN` | `infrastructure/file/CallFolderReader.decode` (dùng chung cho file tải lên và đọc từ đĩa); `FileValidator` (thông báo gợi ý lưu UTF-8) | `CallFolderReaderTest::utf8BomIsStripped`, `::utf16WithBomIsDecoded`, `::diskReadMatchesUploadDecoding` | Cùng file của `2D9057AA` có BOM / UTF-16: trước `UNKNOWN`, nay FAIL / ICE như file gốc |
+| Góp ý Runbook: dò JDK 21 trong `~/.jdks`; Python cho Kibana | `build.ps1`; `docs/runbook.md` | — | `build.ps1 -v` vẫn chọn đúng JDK 21 |
+
+Không hồi quy: `--analyze-all` 20 cuộc giống từng dòng trước khi sửa; `dev` chỉ rule Verdict 62/62 (`case-017` F03 vẫn giữ
+WebRTC log vì có end call log khớp).
+
 ## Kết quả đo
 
 Bảng metric MVP 6.5 so Sprint 2 với cuối Sprint 3: README mục "Kết quả đo được — Sprint 3" và
 `docs/final-evaluation-report.md` mục 2. Nguồn: `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md`
 (dấu vân tay prompt `analyze-call.system.txt e8941db2acc1`).
+
+Lượt chạy lại trước khi nộp (MVP 7.1, 2026-10-19, bản code cuối, cùng dấu vân tay prompt): S/G/F 67/67 test; `dev` ×5 —
+310/310 verdict, Leakage 0/8 255 · 0, Unsupported Claim thô 0/310, 0 fallback, P50 / P95 2,95 / 4,04 s, ≈ 0,32 USD.
+Nguồn: `benchmark/results/truoc-nop-2026-10-19/`, Final Evaluation Report mục 9. T10 làm sau lượt này nhưng không sửa
+luồng phân tích, nên số đo vẫn là của bản nộp; kết quả T10: Final Evaluation Report mục 10.

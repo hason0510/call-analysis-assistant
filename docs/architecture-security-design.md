@@ -5,7 +5,7 @@
 | Người phụ trách | Chủ repo (`hason0510`) |
 | Cập nhật lần cuối | 2026-10-19 (cuối Sprint 3, sau góp ý mentor, rà soát theo MVP và T10) |
 | Thay cho | `docs/architecture-v1.md` (kiến trúc Sprint 1, chưa có AI và Web UI) |
-| Chi tiết từng quyết định | `docs/design-decisions.md` (48 mục) — tài liệu này trỏ tới số mục, không chép lại |
+| Chi tiết từng quyết định | `docs/design-decisions.md` (49 mục) — tài liệu này trỏ tới số mục, không chép lại |
 | Bẫy dữ liệu | `docs/bay-du-lieu.md` — các tài liệu trích theo số hiệu ("bẫy #13") |
 
 Tài liệu mô tả hệ thống ở trạng thái hiện tại: kiến trúc, luồng dữ liệu, phần nào code làm và phần nào AI làm, cách
@@ -53,7 +53,7 @@ io.hason.callanalysis
 **Luật bắt buộc:** `domain` không import `infrastructure`, không có annotation Spring, không đọc file, không gọi mạng.
 
 Luật này cho ba thứ đo được: pipeline tất định (cùng input ra cùng output — điều kiện của Consistency ≥ 95%); toàn
-bộ logic test được không cần Elasticsearch hay AI (584 unit test, 2026-10-19); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
+bộ logic test được không cần Elasticsearch hay AI (594 unit test, 2026-10-20); đổi nhà cung cấp AI chỉ cần viết adapter mới cho
 hai cổng `AiAnalyzer` và `IntentClassifier` (MVP 6.6).
 
 **Adapter chỉ làm việc cơ học.** `ElasticsearchSignalingSource` map document thành `RawSignalingRecord` rồi dừng; parse
@@ -88,7 +88,9 @@ lạ bị báo lỗi ngay (mục 3, 7).
         │                    AI lỗi → bộ từ khoá dự phòng
         ├── OUT_OF_SCOPE ──► câu từ chối cố định, dừng
         ▼
- [3] FileValidator ── nhận loại file theo NỘI DUNG, kiểm Call-ID, loại file hỏng / quá cỡ (nêu tên)
+ [3] FileValidator ── nhận loại file theo NỘI DUNG, kiểm Call-ID, loại file hỏng / quá cỡ (nêu tên);
+                      WebRTC log đi cùng lượt tải lên chỉ có log của cuộc khác cũng bị loại. File đọc UTF-8,
+                      có BOM thì theo BOM (UTF-16) — design-decisions mục 49
         ▼
  [4] Parse → CanonicalEvent ◄── Elasticsearch: signaling theo Call-ID (lỗi ES → ghi Giới hạn dữ liệu, chạy tiếp)
         ▼
@@ -259,7 +261,7 @@ và trạng thái kiểm chứng trên data có nhãn:
 | `TURN_FAILURE` | VALIDATED | `TurnFailure`: không tạo được socket, lỗi gửi ngay trên máy, gửi mà không ai trả lời, có phản hồi mà không cấp phát |
 | `NETWORK_PACKET_LOSS` | UNVALIDATED | Mất gói CẢ CUỘC từ 5 % theo ngưỡng mentor (mục 46); không có cuộc chất lượng kém nào có nhãn để kiểm |
 | `NETWORK_DELAY_JITTER` | UNVALIDATED | RTT hoặc jitter trung bình > 500 ms / 30 ms trên luồng > 500 gói, ngưỡng Microsoft Teams CQD (mục 41); xét sau mất gói |
-| `UNKNOWN` | UNVALIDATED | Thiếu signaling, thiếu log client, không thấy `BYE` |
+| `UNKNOWN` | UNVALIDATED | Thiếu signaling, thiếu log client (kể cả khi mọi log đính kèm thuộc cuộc gọi khác — report nói rõ nguyên nhân), không thấy `BYE` |
 
 Category `UNVALIDATED` luôn kèm một dòng ở "Giới hạn dữ liệu" của report. Taxonomy do `ReportBuilder` đọc và được gửi
 cho AI; điều kiện của rule nằm trong code, không trong file (mục 17).

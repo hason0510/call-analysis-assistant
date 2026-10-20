@@ -1054,6 +1054,41 @@ Có log máy: 13 SUCCESS, 14 FAIL, 0 UNKNOWN (Final Evaluation Report mục 10).
 index giữ 27 bản ghi sau hai lượt. Không sửa dòng nào của luồng phân tích → số đo `dev` mục 9 của Final Evaluation
 Report không đổi.
 
+## 49. Sửa theo Peer Evaluation: WebRTC log của cuộc khác, file có BOM (2026-10-20)
+
+Báo cáo của Trần Anh Tú (MVP 7.3) có hai issue, tái hiện được trên server profile `web`:
+
+1. **Gõ nhầm Call-ID thì WebRTC log của cuộc khác quyết định kết luận.** Log của `2D9057AA` (ICE failed) kèm câu hỏi ghi
+   Call-ID của `DE7DD314` (cuộc thành công): end call log bị loại vì lệch Call-ID, nhưng WebRTC log không ghi Call-ID nên
+   được giữ, và report kết luận `DE7DD314` FAIL / ICE_FAILURE, MEDIUM.
+   - **Sửa (`FileValidator`):** lượt tải lên có end call log của cuộc KHÁC mà không có end call log nào của cuộc đang
+     phân tích → loại cả WebRTC log, lý do `UNVERIFIABLE_CALL_ID`. Lượt đó chỉ có bằng chứng về cuộc khác, nên WebRTC log
+     đi kèm nhiều khả năng cũng của cuộc đó. Có end call log khớp thì giữ WebRTC log — loại cả khi đó sẽ bỏ log hợp lệ
+     của F03 (`case-017`: log caller đúng cuộc kèm một end call log lạ).
+   - **Không sửa được, ghi Known Limitations:** chỉ đính kèm WebRTC log và gõ Call-ID trong câu hỏi. WebRTC log không có
+     Call-ID, signaling không có gì để đối chiếu; mà đây lại là cách dùng hợp lệ (chỉ có WebRTC log thì phải nói Call-ID).
+     `ChatAnalysisService` thêm cảnh báo vào "Giới hạn dữ liệu" khi Call-ID lấy từ câu hỏi mà không có end call log.
+     Call-ID do runner / CLI truyền vào (file case, tên thư mục) là nguồn tin cậy nên không cảnh báo.
+2. **File có BOM bị coi là hỏng.** Notepad và PowerShell 5.1 chèn BOM UTF-8 khi lưu lại; BOM dính vào `#H1` nên parser
+   không nhận ra header → không có Call-ID → `UNKNOWN`. Notepad "Unicode" lưu UTF-16 → byte 0 → File Validator loại vì
+   "nhị phân". **Sửa (`CallFolderReader.decode`, một chỗ cho cả file tải lên lẫn đọc từ đĩa):** bỏ BOM UTF-8, đọc UTF-16
+   LE / BE theo BOM. UTF-16 không BOM không đoán (đoán sai sẽ đọc hỏng file UTF-8 hợp lệ); thông báo file hỏng nay gợi ý
+   lưu lại dạng UTF-8.
+
+3. **Report phải nói ĐÚNG nguyên nhân, không chỉ ra đúng kết luận.** Sau bước 1, ca Call-ID lệch ra `UNKNOWN` — đúng
+   — nhưng Tóm tắt ghi "không có log client", Đề xuất ghi "bổ sung các file log còn thiếu", lý do thật nằm cuối "Giới
+   hạn dữ liệu". Người gõ nhầm Call-ID sẽ gửi lại đúng các file cũ. Sửa: file bị loại vì thuộc cuộc khác sinh ghi chú
+   **có kiểu** `TimelineNote.Kind.FOREIGN_CALL_FILE` (không dò chuỗi) → `RuleSignals.clientFilesFromOtherCall`. Khi mọi
+   log đều bị loại vì lý do đó: lý do của rule nói "log đính kèm thuộc cuộc gọi khác"; Tóm tắt do code viết kể cả khi có
+   AI (AI thấy "không có log client" sẽ viết lại đúng câu sai đó); Đề xuất là "kiểm tra lại Call-ID…"; hai dòng giải
+   thích việc loại file đứng đầu "Giới hạn dữ liệu" (với mọi ca có file lệch Call-ID, kể cả F03).
+
+**Kiểm:** 10 test mới (`CallFolderReaderTest` 3, `FileValidatorTest` 3, `ChatAnalysisServiceTest` 3, `RuleVerdictEngineTest`
+1); 600 test, 0 lỗi. Tái hiện lại 6 ca của báo cáo trên server: ca Call-ID lệch ra `UNKNOWN` LOW, Tóm tắt / Đề xuất / Giới
+hạn dữ liệu nói đúng nguyên nhân; hai ca mã hoá ra đúng FAIL / ICE như file gốc. `--analyze-all` 20 cuộc giống từng dòng
+trước khi sửa; `dev` chỉ rule Verdict 62/62. Không đổi prompt hay rule kết luận; context AI chỉ khác ở ca có file thuộc
+cuộc khác (thứ tự và câu chữ "Giới hạn dữ liệu") — số đo mục 9 của Final Evaluation Report vẫn là của bản nộp.
+
 ## Còn để mở
 
 Năm mục từng để mở ở bản trước nay đã chốt — xem mục 11, 17, 19, 20, 21.

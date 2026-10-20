@@ -9,6 +9,8 @@
 >
 > Code đã đổi sau lượt đo này (2026-10-19, mục 8). Số đo của bản code cuối, so với Sprint 2: mục 9 (lượt chạy lại trước
 > khi nộp — mọi metric như lượt này). Phân tích hàng loạt (T10, làm sau mục 9, không đổi luồng phân tích): mục 10.
+> Sửa theo Peer Evaluation của bạn cùng nhóm (2026-10-20; không đổi prompt hay rule kết luận, `dev` chỉ rule vẫn
+> 62/62): mục 7, "Peer Evaluation về repo này".
 
 ## 1. Cấu hình đo
 
@@ -136,6 +138,7 @@ chạy cùng ngày, cùng code, cùng bộ case ×5. Kết quả văn bản: `be
 | Lỗi khi hạ tầng hỏng | Không timeout phía trình duyệt | 429 tách lý do, ES tắt vẫn ra report, thử lại có kiểm soát (T4, T8) | Thử ES tắt, 429, file lớn |
 | Log | `key=value`, thiếu `call_id` | JSON đủ bảy trường MVP 6.2, latency từng bước (T5) | Test log |
 | Quan sát | Không có | Mỗi request một bản ghi vào ES, view Kibana (T9) | Kibana |
+| Thống kê toàn kho | Chỉ xem từng cuộc | `--batch-analyze`: mọi Call-ID trong ES, phân bố verdict / loại lỗi tách theo nguồn dữ liệu (T10); dashboard kết quả và dashboard hàng loạt (T11) | Mục 10, Kibana |
 | Độ trễ P95 | 8,4 s (gồm ~7 s sanitizer chậm ở `DE7DD314`) | Sanitizer đã sửa ở T4 (lượt 13/10: 3,8 s); lượt cuối 14,9 s do OpenAI chậm | Runner |
 
 ## 5. Chạy trên dataset mới của mentor (`ai20k_new_dataset`, 2026-10-13 → 14)
@@ -230,6 +233,22 @@ Các lỗi diễn giải còn gặp trên dataset mới:
 - Signaling nạp vào ES ở dạng gốc (`appUserId`), chưa qua Sanitizer — chờ mentor xác nhận cách hiểu MVP 6.2.
 - Phân tích hàng loạt (T10) chỉ bằng dữ liệu trong ES không kết luận được SUCCESS và chỉ thấy triệu chứng phía server
   (lỗi TURN hiện thành `SIGNALING_FAILURE`): ES không có log máy. Muốn thống kê có ý nghĩa phải kèm `--logs`. Mục 10.
+
+### Peer Evaluation về repo này
+
+Báo cáo của Trần Anh Tú về repo này (2026-10-20, commit `a905256`; nằm trong repo của bạn ấy,
+`docs/peer-evaluation-report.md`): Runbook **đủ** để dựng lại, mọi số khớp (590 test, `--analyze-all` 13/13, `dev`
+100 %); 2 issue, đều tái hiện được trên server profile `web` của mình, đã sửa ngày 2026-10-20 (design-decisions mục 49):
+
+| Issue của bạn ấy | Xử lý |
+|---|---|
+| Call-ID trong câu hỏi khác cuộc gọi của file: end call log bị loại nhưng WebRTC log vẫn quyết định verdict (log `2D9057AA` + Call-ID `DE7DD314` ra `DE7DD314` FAIL / ICE, MEDIUM) | **Sửa:** lượt tải lên chỉ có end call log của cuộc khác thì WebRTC log đi kèm cũng bị loại → ca này nay ra `UNKNOWN`, LOW; Tóm tắt, Đề xuất ("kiểm tra lại Call-ID…") và hai dòng đầu "Giới hạn dữ liệu" nói thẳng log thuộc cuộc gọi khác. **Còn lại (Known Limitation):** chỉ đính kèm WebRTC log và gõ Call-ID — không có gì để kiểm; report ghi cảnh báo "Call-ID lấy từ câu hỏi … không kiểm chứng được" |
+| End call log có BOM UTF-8 / lưu UTF-16 bị coi là hỏng → `UNKNOWN` | **Sửa:** bỏ BOM UTF-8, đọc UTF-16 theo BOM; hai ca này nay ra đúng FAIL / ICE như file gốc. UTF-16 không BOM vẫn bị loại, thông báo gợi ý lưu lại dạng UTF-8 |
+| Góp ý Runbook: `build.ps1` dò thêm `~/.jdks/*21*`; mục 1 thiếu Python cho Kibana | Đã sửa cả hai |
+
+Sau khi sửa: 600 test, 0 lỗi; `--analyze-all` 20 cuộc ra đúng từng dòng như trước; `dev` chỉ rule: Verdict 62/62,
+`case-017` (F03, có end call log khớp) vẫn giữ WebRTC log. (Chiều ngược lại — báo cáo của mình về repo bạn ấy:
+[`peer-evaluation-report.md`](peer-evaluation-report.md).)
 
 ## 8. Thay đổi sau lượt đo cuối (2026-10-19)
 

@@ -31,7 +31,7 @@ nhận câu từ chối. **Đã sửa** theo phương án C (2026-10-10); chạy
 
 ## 2. S01-S08
 
-`mvn test` 2026-10-10: **413 test, 0 lỗi**; chạy lại 2026-10-19: **565 test, 0 lỗi** (590 sau T10, cùng ngày). Các test mang tên ca:
+`mvn test` 2026-10-10: **413 test, 0 lỗi**; chạy lại 2026-10-19: **565 test, 0 lỗi** (590 sau T10, cùng ngày; 600 sau khi sửa theo Peer Evaluation, 2026-10-20). Các test mang tên ca:
 
 | Ca | Test | Kiểm |
 |---|---|---|

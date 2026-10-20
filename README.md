@@ -5,8 +5,8 @@ gồm kết luận (`SUCCESS` / `FAIL` / `UNKNOWN`), evidence trích dẫn đư�
 chỉ số cuộc gọi, đề xuất và giới hạn dữ liệu.
 
 Dự án OJT AI 20K — 6 tuần, 3 sprint. **Đang ở cuối Sprint 3** (Hardening, Consistency & Handover): độ tin cậy theo
-chính sách, thử lại có kiểm soát, log JSON đã làm sạch, Kibana view + dashboard, 3 tài liệu bàn giao — tiến độ ở mục
-[Trạng thái — Sprint 3](#trạng-thái--sprint-3-67-task-core-34-task-nếu-kịp). Sprint 2: Web UI, Chat API, AI
+chính sách, thử lại có kiểm soát, log JSON đã làm sạch, Kibana view + dashboard, phân tích hàng loạt, 3 tài liệu bàn
+giao, Peer Evaluation — tiến độ ở mục [Trạng thái — Sprint 3](#trạng-thái--sprint-3-77-task-core-44-task-nếu-kịp). Sprint 2: Web UI, Chat API, AI
 (`gpt-4o-mini`) có Guardrails và fallback về rule, Sanitizer đầu vào và đầu ra, Evaluation Runner. Sprint 1 là rule
 baseline, vẫn là mốc đối chiếu và đường lui khi AI lỗi.
 
@@ -47,7 +47,7 @@ dưới từng scenario — 2026-10-12, riêng scenario 2 đổi sang `B5F19381`
 
 **2. Chạy bộ case `held-out`** — mục [Chạy bộ case `held-out`](#chạy-bộ-case-held-out) bên dưới.
 
-**3. Chạy test** — `.\build.ps1 test` → **590 test, 0 lỗi**. 6 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
+**3. Chạy test** — `.\build.ps1 test` → **600 test, 0 lỗi**. 6 test tích hợp cần Docker; không có Docker thì tự bỏ qua.
 
 **Lỗi thường gặp**
 
@@ -125,7 +125,7 @@ Kết quả import đúng: **1 059 document / 20 cuộc gọi**. Importer gửi 
 
 ```bash
 ./mvnw clean compile
-./mvnw test          # unit test không cần Elasticsearch; 3 test tích hợp ES chạy qua
+./mvnw test          # unit test không cần Elasticsearch; 6 test tích hợp ES chạy qua
                      # Testcontainers khi có Docker, không có Docker thì tự bỏ qua
 ```
 
@@ -359,7 +359,7 @@ Guardrails:
 | `resources/schema/report-v1.schema.json` | Cấu trúc report; report sai schema bị dựng lại từ rule |
 | `resources/schema/ai-analysis.schema.json` · `request-intent.schema.json` | Structured output của AI phân tích và AI phân loại câu hỏi |
 | `resources/prompts/*.system.txt` | Prompt của hai lời gọi AI |
-| `resources/es/signaling-mapping.json` · `analysis-requests-mapping.json` | Mapping Elasticsearch, `dynamic: strict` |
+| `resources/es/signaling-mapping.json` · `analysis-requests-mapping.json` · `call-analysis-results-mapping.json` | Mapping Elasticsearch, `dynamic: strict` (signaling, bản ghi request T9, kết quả hàng loạt T10) |
 | `benchmark/dev-cases.yaml` · `intent-check.yaml` | Bộ case benchmark `dev` (20 case, 69 câu) và bộ câu kiểm phân loại |
 | `scripts/benchmark-variants/make_variants.py` | Tạo file biến thể cho case-016 (F02, tên file sai loại) và case-019 (dữ liệu nhạy cảm giả), đặt ngoài repo |
 | `scripts/error-analysis/analyze_runs.py` | Phân tích lỗi trên các lượt benchmark (S3-T1) |
@@ -440,11 +440,11 @@ Benchmark `dev` (`benchmark/dev-cases.yaml` lúc đó: 18 case, 63 câu hỏi), 
 | Latency | P50 **3,8 s** · P95 **8,4 s** | — |
 | Chi phí AI | ≈ 0,20 USD / 315 lần chạy (~3 000 token vào, ~175 token ra mỗi lần phân tích) | — |
 
-## Trạng thái — Sprint 3: 6/7 task Core, 4/4 task Nếu kịp
+## Trạng thái — Sprint 3: 7/7 task Core, 4/4 task Nếu kịp
 
-Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đo:
-[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (`mvn test` 2026-10-19: 590 test, 0 lỗi). Lý do từng thay
-đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–48.
+Cập nhật 2026-10-20. Đối chiếu từng task với code, test và số đo:
+[`docs/minh-chung-sprint-3.md`](docs/minh-chung-sprint-3.md) (`mvn test` 2026-10-20: 600 test, 0 lỗi). Lý do từng thay
+đổi: [`docs/design-decisions.md`](docs/design-decisions.md) mục 32–49.
 
 | Task | Trạng thái | Nằm ở |
 |---|---|---|
@@ -454,7 +454,7 @@ Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đ
 | T4 — Reliability Hardening | ✅ | Timeout AI / ES / trình duyệt, 429 tách lý do, `GarbledText`, ES tắt vẫn ra report, sanitizer 9,4 s → 1,0 s |
 | T5 — Observability | ✅ | Log JSON đã làm sạch (profile `web`), dòng AI call đúng 7 trường MVP 6.2 (`AiCallLog`) |
 | T6 — Security Evaluation Report | ✅ | [`docs/bao-cao-bao-mat.md`](docs/bao-cao-bao-mat.md) — S01-S08 qua, leakage 0 ở AI input / output / application log |
-| T7 — Peer Evaluation | ⬜ | Chưa làm — cần repo và Runbook của bạn cùng nhóm |
+| T7 — Peer Evaluation | ✅ | [`docs/peer-evaluation-report.md`](docs/peer-evaluation-report.md) — chạy repo của Trần Anh Tú (commit `a5010a6`) theo Runbook của bạn ấy trên cả `ai20k_sample` và `ai20k_new_dataset`, 2026-10-19: Runbook đủ nhưng phải tự xử lý 3 chỗ, 5 issue kèm bước tái hiện, 3 điểm học được; benchmark `dev` tái hiện đúng số bạn ấy công bố. Chiều ngược lại: bạn ấy review repo này (Runbook "đủ", 2 issue) — đã sửa cả hai ngày 2026-10-20 (Final Evaluation Report mục 7) |
 | T8 — Retry & Error Classification (Nếu kịp) | ✅ | `RetryPolicy`: chỉ thử lại lỗi tạm thời, tối đa 2 lần gọi, ngân sách 45 s cho cả hai |
 | T9 — Kibana View (Nếu kịp) | ✅ | Mỗi request một bản ghi vào index `analysis-requests` (chỉ mã / số / cờ), `scripts/kibana/setup_views.py` |
 | T10 — Batch Analysis (Nếu kịp) | ✅ | `--batch-analyze`: mọi Call-ID trong ES qua đúng pipeline, chỉ rule; thống kê tách "chỉ signaling" / "signaling + log máy"; index `call-analysis-results` + dashboard "Phân tích hàng loạt — toàn kho" |
@@ -463,7 +463,8 @@ Cập nhật 2026-10-19. Đối chiếu từng task với code, test và số đ
 **Tài liệu bàn giao (MVP 7.4):** [Runbook](docs/runbook.md) ✅ · [Architecture & Security
 Design](docs/architecture-security-design.md) ✅ · [Final Evaluation Report & Known
 Limitations](docs/final-evaluation-report.md) ✅ (còn chờ kết quả `held-out` của mentor) · [Kịch bản Final
-Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12).
+Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12) · [Peer Evaluation
+Report](docs/peer-evaluation-report.md) ✅.
 
 **Dataset mới của mentor** (`ai20k_new_dataset`, 7 cuộc, chưa có nhãn): chạy được cả 7 cuộc sau khi sửa 5 lỗi tool —
 signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số media không ghi chiều, cuộc rớt giữa chừng, thêm rule
@@ -481,7 +482,8 @@ signaling có 2 định dạng export, callee nhiều thiết bị, chỉ số m
 | Cổng fail-closed trước khi gửi AI | ✅ `OutboundGate` trong `OpenAiChatClient`, cả hai lời gọi AI; chạy không key trên 27 cuộc: 0 lần chặn nhầm |
 | Ngưỡng packet loss / jitter, bảng độ nhạy | ✅ mất gói CẢ CUỘC từ 5 % mới gắn cờ (trước: một mẫu > 5 % / MOS < 3,5 / hasMediaPoor); jitter trung bình 30 ms đã khớp sẵn. Bảng độ nhạy: `scripts/quality-thresholds/sensitivity.py`. `dev` không đổi; `271D1FAF` và 3 cuộc dataset mới hết cờ, kịch bản demo scenario 2 chuyển sang `B5F19381` |
 | T11 Sprint 2 (structured vs semi-structured) | ✅ `ai.context-format=text` (`AiContextText`), hai lượt `dev` ×5: accuracy / consistency như nhau (100%), văn bản ít hơn 7,5 % token, JSON cho evidence tốt hơn (trích đủ căn cứ 96 so với 77/115) → giữ JSON. Final Evaluation Report mục 3b |
-| Quay demo đủ 6 kịch bản trên trình duyệt; Peer Evaluation | ⬜ |
+| Quay demo đủ 6 kịch bản trên trình duyệt | ⬜ |
+| Peer Evaluation | ✅ [`docs/peer-evaluation-report.md`](docs/peer-evaluation-report.md) (2026-10-19) |
 
 ### Kết quả đo được — Sprint 3
 
@@ -524,12 +526,11 @@ phía server: 6 cuộc lỗi TURN hiện ra thành `SIGNALING_FAILURE`. Báo cá
 
 ## Known Limitations
 
-Cập nhật cuối Sprint 3 (2026-10-19). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
+Cập nhật cuối Sprint 3 (2026-10-20). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
 cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-report.md) mục 7.
 
 **Chưa làm hoặc còn chờ mentor**
 
-- Sprint 3 T7 (Peer Evaluation): cần repo và Runbook của bạn cùng nhóm.
 - Sprint 3 T10 (Batch Analysis) chỉ dùng signaling (đúng chữ "Call-ID trong ES local") thì gần như vô dụng: trên 13 cuộc
   có nhãn 5 đúng, 8 `UNKNOWN`, và lỗi TURN hiện thành `SIGNALING_FAILURE`. Có `--logs` thì 13/13. Đã làm cả hai chế
   độ và tách nhóm trong báo cáo; chế độ mentor muốn dùng vẫn chờ trả lời (câu 17).
@@ -608,8 +609,8 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - AI vẫn có lúc tự chép con số trùng giá trị một chỉ số thay vì dùng mã: 30 số ở 21/309 lần trả lời của lượt cuối (cận
   trên — số trùng ngẫu nhiên như "1" cũng tính). Hiện chỉ đo, không chặn.
 - Evidence AI trích: mới kiểm có chứa dòng căn cứ của rule (94/115 lần có căn cứ ở lượt cuối 14/10, 96/115 ở lượt đo
-  lại 15/10), chưa kiểm evidence trích có **đúng**
-  là căn cứ không. Ca SUCCESS không cờ không có dòng căn cứ của rule nên AI tự chọn.
+  lại 15/10, 98/115 ở lượt chạy lại trước khi nộp 19/10), chưa kiểm evidence trích có **đúng** là căn cứ không. Ca
+  SUCCESS không cờ không có dòng căn cứ của rule nên AI tự chọn.
 - Câu hỏi giả định sai (ví dụ hỏi vì sao lỗi khi cuộc gọi không lỗi): AI không còn bịa nguyên nhân nhưng chưa luôn phủ
   nhận thẳng giả định (`case-020`, kiểm bằng đọc tay).
 - Đề xuất: bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung tối đa 3 câu ("Bổ sung (AI)"); câu AI chép nguyên văn bộ
@@ -646,8 +647,9 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - Signaling nạp vào Elasticsearch local ở dạng gốc, chưa qua Sanitizer (trường nhạy cảm: `appUserId`; thêm `isp`, `asn`;
   không có IP). MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới mục *Output*; dự án hiểu đó là **kết quả phân tích** ghi vào
   ES. Cách hiểu này chưa được xác nhận. Kết quả phân tích ghi vào ES từ Sprint 3 T9 (index `analysis-requests`) chỉ gồm
-  mã, số và cờ, `call_id` đã mã giả — không có chữ tự do để lộ. Nếu phải che cả data nạp, cần mã giả hoá `appUserId` lúc
-  import và sửa cách suy ra leg (end call log vẫn mang `appUserId` gốc).
+  mã, số và cờ, `call_id` đã mã giả — không có chữ tự do để lộ; index `call-analysis-results` của T10 cùng nguyên tắc.
+  Nếu phải che cả data nạp, cần mã giả hoá `appUserId` lúc import và sửa cách suy ra leg (end call log vẫn mang
+  `appUserId` gốc).
 - Bí mật dạng `tên=giá trị` / `tên: giá trị` (mục DROP): trong log che **tới hết dòng** (để `Authorization: Basic dXNl…`
   không lộ phần sau khoảng trắng); trong **câu hỏi** người dùng gõ chỉ che một từ, hoặc `Basic` / `Bearer` … + một từ,
   để giữ phần yêu cầu viết tiếp. Cái giá: bí mật có khoảng trắng gõ thẳng vào câu hỏi (`password=my secret pass`) lộ phần
@@ -663,10 +665,14 @@ cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-repor
 - Signaling bắt buộc lấy từ Elasticsearch. ES tắt thì `--analyze*` và Web UI vẫn chạy và trả `UNKNOWN` kèm lý do;
   `--parse-*` vẫn parse log đính kèm và báo thiếu signaling.
 - File Validator loại file quá lớn (mặc định 20 MB, cấu hình `call-analysis.files.max-size-per-file`), rỗng, hỏng, không
-  nhận diện được, hoặc end call log mang Call-ID khác. WebRTC log không mang Call-ID nên không kiểm được file WebRTC của
-  cuộc gọi khác.
-- Độ trễ phụ thuộc OpenAI: lượt cuối P95 14,9 s, chậm nhất 47,7 s. Mỗi lời gọi AI quá giờ sau 30 s, thử lại trong ngân
-  sách 45 s; trình duyệt chờ 150 s. Số đo độ trễ trên máy cá nhân chỉ dùng để so xu hướng.
+  nhận diện được, hoặc end call log mang Call-ID khác. WebRTC log không mang Call-ID: lượt tải lên chỉ có end call log
+  của cuộc khác thì WebRTC log đi kèm cũng bị loại (2026-10-20). Còn lại một ca không kiểm được: **chỉ** đính kèm WebRTC
+  log và gõ Call-ID trong câu hỏi — gõ nhầm Call-ID thì kết luận là của cuộc khác. Report ghi cảnh báo ở "Giới hạn dữ
+  liệu" nhưng không loại file, vì đây cũng là cách dùng hợp lệ (design-decisions mục 49).
+- File log đọc UTF-8; có BOM thì theo BOM (bỏ BOM UTF-8, đọc UTF-16 LE / BE). UTF-16 **không** BOM vẫn bị coi là file
+  hỏng — thông báo gợi ý lưu lại dạng UTF-8.
+- Độ trễ phụ thuộc OpenAI: lượt 14/10 P95 14,9 s, chậm nhất 47,7 s; lượt chạy lại 19/10 P95 4,04 s, chậm nhất 11,3 s.
+  Mỗi lời gọi AI quá giờ sau 30 s, thử lại trong ngân sách 45 s; trình duyệt chờ 150 s. Số đo độ trễ trên máy cá nhân chỉ dùng để so xu hướng.
 - `--ai-context` in context với trọng tâm câu hỏi để trống, nên với câu có trọng tâm thì thiếu dòng "Trọng tâm câu hỏi"
   so với thứ thật sự gửi AI.
 

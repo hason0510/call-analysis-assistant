@@ -29,8 +29,10 @@ Lệnh trong tài liệu viết cho **PowerShell trên Windows**, chạy ở th�
       ```
 
       Mọi lệnh dùng đường dẫn `../ai20k_sample`. Data mẫu không có trong repo vì chứa IP công cộng thật.
+- [ ] **Dataset mới `ai20k_new_dataset/` (tuỳ chọn)**, 7 cuộc gọi chưa có nhãn, đặt cạnh `ai20k_sample/`. Chỉ dùng ở
+      bước 2.5 (nạp thêm) và 3.2 (phân tích hàng loạt); không có thì bỏ qua các dòng ghi "dataset mới".
 - [ ] **Key OpenAI (tuỳ chọn).** Không có key, ứng dụng vẫn chạy đủ luồng nhưng report dựng từ rule.
-- [ ] **Python 3 (tuỳ chọn).** Chỉ cần nếu chạy benchmark `dev` đầy đủ (bước 4.2).
+- [ ] **Python 3 (tuỳ chọn).** Chỉ cần cho benchmark `dev` đầy đủ (bước 4.2) và dựng view / dashboard Kibana (mục 5).
 
 ---
 
@@ -66,8 +68,8 @@ Sinh khoá HMAC: `openssl rand -hex 32` (hoặc chuỗi ngẫu nhiên dài 64 k�
 .\build.ps1 -q clean compile
 ```
 
-`build.ps1` tự tìm JDK 21 theo thứ tự: biến `JAVA_HOME_21`, `%USERPROFILE%\.jdks\jbr-21.0.10`,
-`C:\Program Files\Java\jdk-21`, `C:\Program Files\Eclipse Adoptium\jdk-21`. Nó chỉ đặt `JAVA_HOME` trong phiên chạy,
+`build.ps1` tự tìm JDK 21 theo thứ tự: biến `JAVA_HOME_21`, `%USERPROFILE%\.jdks\jbr-21.0.10`, mọi thư mục có "21"
+trong tên dưới `%USERPROFILE%\.jdks` (nơi IntelliJ tải JDK về), `C:\Program Files\Java\jdk-21`, `C:\Program Files\Eclipse Adoptium\jdk-21`. Nó chỉ đặt `JAVA_HOME` trong phiên chạy,
 không đổi cấu hình máy. JDK đặt ở chỗ khác:
 
 ```powershell
@@ -102,6 +104,13 @@ Vấn đề       : không có
 ```
 
 Chạy lại không sinh bản trùng. Muốn xoá index rồi nạp lại từ đầu, thêm `--recreate-index` vào sau đường dẫn.
+
+Có dataset mới thì nạp thêm (tuỳ chọn): `File đọc được: 7`, `Document nạp : 753` — index có tổng 1 812 document / 27
+cuộc gọi.
+
+```powershell
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--import-signaling=../ai20k_new_dataset"
+```
 
 Index tạo bằng bản code cũ vẫn dùng được: mỗi lần nạp, trường mới (nếu có) được thêm vào mapping. Từ 2026-10-19 có
 trường `noSessionsFound` (cờ "No sessions found" đọc từ bản export thô) — đã nạp `ai20k_new_dataset` trước ngày đó thì
@@ -164,12 +173,15 @@ Phân tích một cuộc gọi và in report:
 Phân tích hàng loạt mọi Call-ID trong Elasticsearch (T10), chỉ rule, không tốn tiền:
 
 ```powershell
-.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--batch-analyze --logs=../ai20k_sample --logs=../ai20k_new_dataset"
+.\build.ps1 -q spring-boot:run "-Dspring-boot.run.arguments=--batch-analyze --logs=../ai20k_sample"
 ```
 
-Kết quả: `target/batch/batch-<thời điểm>.md` + `.json`, và index `call-analysis-results` (dashboard ở mục 5). `--logs`
-là tuỳ chọn: bỏ đi thì mọi cuộc chỉ có signaling — phần lớn ra `UNKNOWN` vì thiếu log máy, đó là đúng (báo cáo có mục
-"Cách đọc"). Lượt mới thay lượt cũ trong index.
+Kết quả đúng (chỉ nạp `ai20k_sample` ở bước 2.5): 20 cuộc, cả 20 tìm được log máy — `SUCCESS` 8, `FAIL` 12, `UNKNOWN` 0.
+Đã nạp cả dataset mới thì thêm `--logs=../ai20k_new_dataset`: 27 cuộc — `SUCCESS` 13, `FAIL` 14, `UNKNOWN` 0.
+
+Kết quả ghi vào `target/batch/batch-<thời điểm>.md` + `.json`, và index `call-analysis-results` (dashboard ở mục 5).
+`--logs` là tuỳ chọn và lặp được: bỏ đi thì mọi cuộc chỉ có signaling — phần lớn ra `UNKNOWN` vì thiếu log máy, đó là
+đúng (báo cáo có mục "Cách đọc"). Lượt mới thay lượt cũ trong index.
 
 Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `--ai-context*`, `--ai-analyze*`…): README, mục
 "Toàn bộ lệnh".
@@ -184,7 +196,7 @@ Danh sách đầy đủ các lệnh (`--parse-*`, `--timeline`, `--metrics*`, `-
 .\build.ps1 test
 ```
 
-Kết quả đúng: 590 test, 0 lỗi. 6 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 6 test
+Kết quả đúng: 600 test, 0 lỗi. 6 test tích hợp chạy Elasticsearch thật qua Testcontainers; không có Docker thì 6 test
 này tự bỏ qua. Unit test không cần Elasticsearch hay key AI.
 
 ### 4.2. Benchmark `dev`
@@ -271,6 +283,7 @@ Kibana dừng cùng Elasticsearch khi `docker compose down`.
 | Mọi report ra `UNKNOWN`, mục "Giới hạn dữ liệu" ghi *"Không truy vấn được signaling"* | Elasticsearch chưa bật, chưa sẵn sàng, hoặc chưa nạp | Kiểm tra `curl.exe -s http://localhost:9200/_cluster/health`; chạy lại bước 2.4 và 2.5 |
 | `--evaluate` in `Signaling: có cho 0/… Call-ID` ở đầu báo cáo | Chưa nạp signaling của bộ log đang dùng | Chạy bước 2.5 với đúng thư mục log đó |
 | `--batch-analyze` báo *"Không lấy được danh sách Call-ID từ Elasticsearch"* | Elasticsearch chưa bật hoặc chưa nạp signaling | Như dòng đầu: bước 2.4 và 2.5 |
+| `--batch-analyze` báo *"Không có thư mục log: …"* rồi dừng | Đường dẫn trong `--logs` không tồn tại (ví dụ chưa có `ai20k_new_dataset`) | Sửa đường dẫn, hoặc bỏ `--logs` đó |
 | `--batch-analyze` ra gần hết `UNKNOWN` | Không có `--logs`, hoặc thư mục log không chứa thư mục con trùng Call-ID (dòng "Log máy: … tìm thấy cho 0/… cuộc") | Đúng thiết kế: chỉ signaling thì không kiểm được âm thanh. Thêm `--logs=<thư mục log>` |
 | Dashboard "Phân tích hàng loạt" trống | Chưa chạy `--batch-analyze` | Chạy lệnh ở mục 3.2 rồi tải lại trang |
 | `Unknown lifecycle phase ".run.profiles=web"` | PowerShell cắt tham số `-D…` tại dấu chấm | Đặt cả `"-D…"` trong ngoặc kép như các lệnh mẫu |
@@ -285,6 +298,8 @@ Kibana dừng cùng Elasticsearch khi `docker compose down`.
 | Log server khó đọc (toàn JSON) | Profile `web` in log JSON | Thêm profile `plain-log` |
 | Trình duyệt báo *"Quá thời gian chờ"* sau 150 giây | Server treo hoặc Elasticsearch không phản hồi | Kiểm tra server còn chạy, Elasticsearch còn sống; thử lại |
 | File log bị loại, "Giới hạn dữ liệu" ghi *"vượt giới hạn"* | File lớn hơn 20 MB | Giới hạn đặt ở `call-analysis.files.max-size-per-file` trong `application.yml` |
+| File log bị loại, ghi *"mã hoá không đọc được"* | File không phải UTF-8 hay UTF-16 có BOM (ví dụ UTF-16 không BOM) | Mở file, lưu lại dạng UTF-8 rồi gửi lại. File có BOM (Notepad, PowerShell 5.1) đọc bình thường |
+| Report `UNKNOWN`, Tóm tắt ghi *"log đính kèm thuộc cuộc gọi khác"* | Call-ID gõ trong câu hỏi khác Call-ID trong log đã gửi | Kiểm lại Call-ID; muốn phân tích các log đã gửi thì hỏi lại không kèm Call-ID |
 | `--evaluate` báo case thiếu file `_variants/…` | Chưa tạo thư mục biến thể | Chạy `make_variants.py` (bước 4.2) |
 
 Lỗi không có trong bảng: xem log của server (mỗi dòng có `request_id`, lọc theo mã này để thấy đủ các bước của một
