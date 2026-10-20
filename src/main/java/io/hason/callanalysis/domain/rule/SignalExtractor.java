@@ -105,7 +105,8 @@ public class SignalExtractor {
                 sources,
                 legsWithClientLog,
                 qualityByLeg(timeline),
-                !partnerLostNetworkEvents(timeline).isEmpty());
+                !partnerLostNetworkEvents(timeline).isEmpty(),
+                timeline.notes().stream().anyMatch(n -> n.kind() == TimelineNote.Kind.FOREIGN_CALL_FILE));
     }
 
     /** Bản ghi `signal` của end call log báo bên kia mất mạng (`network_lost`, originator remote). */

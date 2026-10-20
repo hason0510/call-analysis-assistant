@@ -15,6 +15,7 @@ import io.hason.callanalysis.domain.timeline.TimelineBuilder;
 import io.hason.callanalysis.domain.timeline.TimelineNote;
 import io.hason.callanalysis.domain.validation.AttachedFile;
 import io.hason.callanalysis.domain.validation.FileValidation;
+import io.hason.callanalysis.domain.validation.FileValidation;
 import io.hason.callanalysis.domain.validation.FileValidation.RejectedFile;
 import io.hason.callanalysis.domain.validation.FileValidator;
 import io.hason.callanalysis.service.port.SignalingSource;
@@ -151,7 +152,10 @@ public class CallLogNormalizationService {
         // File bị loại không được phân tích; không báo thì người dùng tưởng file đó đã được
         // xét (MVP mục 6.4, ca F02-F04).
         for (RejectedFile file : outcome.rejected()) {
-            notes.add(TimelineNote.of(TimelineNote.Kind.DATA_LIMITATION, file.message()));
+            boolean otherCall = file.reason() == FileValidation.Reason.CALL_ID_MISMATCH
+                    || file.reason() == FileValidation.Reason.UNVERIFIABLE_CALL_ID;
+            notes.add(TimelineNote.of(otherCall ? TimelineNote.Kind.FOREIGN_CALL_FILE
+                    : TimelineNote.Kind.DATA_LIMITATION, file.message()));
         }
         for (FileOutcome file : outcome.files()) {
             List<ParseWarning> warnings = file.result().warnings();

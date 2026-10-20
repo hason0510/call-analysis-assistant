@@ -47,12 +47,14 @@ class RuleVerdictEngineTest {
         Set<Leg> legsWithClientLog = Set.of(Leg.CALLER, Leg.CALLEE);
         List<LegQuality> qualityByLeg = List.of();
         boolean partnerLostNetwork = false;
+        boolean clientFilesFromOtherCall = false;
 
         RuleSignals build() {
             return new RuleSignals(sentInvite, reachedConfirmed, terminatedNormally, cancelled,
                     failHard, iceEverConnected, iceEverFailed, mediaFailFlag, noMediaBytes,
                     qualityDegraded, signalingTruncated, turnFailure, candidateTimeout,
-                    initCallRejection, clientFailure, sources, legsWithClientLog, qualityByLeg, partnerLostNetwork);
+                    initCallRejection, clientFailure, sources, legsWithClientLog, qualityByLeg, partnerLostNetwork,
+                    clientFilesFromOtherCall);
         }
     }
 
@@ -383,6 +385,23 @@ class RuleVerdictEngineTest {
         assertThat(v.issueCategory()).isEqualTo(IssueCategory.UNKNOWN);
         assertThat(v.confidence()).isEqualTo(ConfidenceLevel.LOW);
         assertThat(v.dataLimitations()).anyMatch(s -> s.contains("Không có log client"));
+    }
+
+    @Test
+    @DisplayName("có gửi log nhưng mọi log thuộc cuộc gọi khác -> vẫn UNKNOWN, lý do nói đúng nguyên nhân (Peer Evaluation)")
+    void foreignFilesOnlyIsUnknownWithTheRealReason() {
+        RuleVerdict v = engine.decide(signals(b -> {
+            b.sources = Set.of(LogSource.SIGNALING);
+            b.legsWithClientLog = Set.of();
+            b.iceEverConnected = false;
+            b.clientFilesFromOtherCall = true;
+        }));
+
+        assertThat(v.verdict()).isEqualTo(Verdict.UNKNOWN);
+        assertThat(v.confidence()).isEqualTo(ConfidenceLevel.LOW);
+        assertThat(v.reasoning()).contains("thuộc cuộc gọi khác");
+        assertThat(v.dataLimitations()).noneMatch(s -> s.contains("Không có log client nào"))
+                .anyMatch(s -> s.contains("Mọi log đính kèm đều thuộc cuộc gọi khác"));
     }
 
     @Test

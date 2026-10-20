@@ -19,9 +19,13 @@
 $ErrorActionPreference = 'Stop'
 
 # Cac vi tri thuong gap cua JDK 21. Them duong dan cua ban vao day neu khac.
+# ~/.jdks la noi IntelliJ tai JDK ve; ten thu muc tuy ban (jbr-21.0.10, openjdk-21.0.1, temurin-21...),
+# nen do moi thu muc co "21" trong ten — phien ban that van kiem bang file `release` ben duoi.
 $candidates = @(
     $env:JAVA_HOME_21
     "$env:USERPROFILE\.jdks\jbr-21.0.10"
+    (Get-ChildItem -Path "$env:USERPROFILE\.jdks" -Directory -Filter '*21*' -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | ForEach-Object { $_.FullName })
     "C:\Program Files\Java\jdk-21"
     "C:\Program Files\Eclipse Adoptium\jdk-21"
 ) | Where-Object { $_ }

@@ -2,6 +2,7 @@ package io.hason.callanalysis.service;
 
 import io.hason.callanalysis.domain.ai.AiContext;
 import io.hason.callanalysis.domain.ai.TokenUsage;
+import io.hason.callanalysis.domain.event.LogSource;
 import io.hason.callanalysis.domain.evidence.Evidence;
 import io.hason.callanalysis.domain.observability.RequestRecord;
 import io.hason.callanalysis.domain.report.CallReport;
@@ -9,6 +10,7 @@ import io.hason.callanalysis.domain.report.ReportRenderer;
 import io.hason.callanalysis.domain.request.Intent;
 import io.hason.callanalysis.domain.request.ParsedRequest;
 import io.hason.callanalysis.domain.rule.RuleVerdict;
+import io.hason.callanalysis.domain.timeline.CallTimeline;
 import io.hason.callanalysis.domain.validation.AttachedFile;
 import io.hason.callanalysis.infrastructure.report.ReportSchemaValidator;
 import io.hason.callanalysis.service.port.RequestRecordSink;
@@ -20,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -166,7 +169,8 @@ public class ChatAnalysisService {
         long aiMs = elapsedMs(step);
 
         step = System.nanoTime();
-        CallReport report = analyzeService.finalReport(analysis, outcome, request.notes());
+        List<String> notes = withUnverifiedWebRtcNote(request, analysis);
+        CallReport report = analyzeService.finalReport(analysis, outcome, notes);
         ReportSchemaValidator.Result check = schemaValidator.validate(report);
         if (!check.valid() && outcome.source() == AiVerdictService.Source.AI) {
             // MVP mục 6.1 T2: JSON phải qua schema trước khi render. Phần AI làm hỏng → dựng lại từ rule.
@@ -174,7 +178,7 @@ public class ChatAnalysisService {
                     .addKeyValue("fallback_reason", "REPORT_SCHEMA_INVALID").addKeyValue("errors", check.errors().size())
                     .log("Report schema");
             report = analyzeService.finalReport(analysis,
-                    AiVerdictService.Outcome.ruleFallback(analysis.verdict(), "REPORT_SCHEMA_INVALID"), request.notes());
+                    AiVerdictService.Outcome.ruleFallback(analysis.verdict(), "REPORT_SCHEMA_INVALID"), notes);
             check = schemaValidator.validate(report);
         }
         if (!check.valid()) {
@@ -205,6 +209,24 @@ public class ChatAnalysisService {
         return new Trace(new Response(requestId, Type.REPORT, request.intent(), request.focus(), null, report,
                 rendered), request, analysis.verdict(), outcome, analysis.report().metrics(),
                 context, analysis.evidence());
+    }
+
+    /**
+     * Call-ID lấy từ câu hỏi mà log máy chỉ có WebRTC log: loại log này không ghi Call-ID, nên không gì kiểm được nó thuộc
+     * cuộc gọi người dùng nêu. Dán nhầm Call-ID là ra kết luận về cuộc khác (Peer Evaluation 2026-10-20) — không loại file
+     * vì đây cũng là cách dùng hợp lệ (chỉ có WebRTC log thì phải nói Call-ID), nhưng nói rõ trong "Giới hạn dữ liệu".
+     * Call-ID do runner / CLI truyền vào (từ file case, tên thư mục) là nguồn tin cậy nên không ghi.
+     */
+    static List<String> withUnverifiedWebRtcNote(ParsedRequest request, AnalyzeCallService.Analysis analysis) {
+        CallTimeline timeline = analysis.timeline();
+        if (request.callId() == null || timeline.hasSource(LogSource.ENDCALL) || !timeline.hasSource(LogSource.WEBRTC)) {
+            return request.notes();
+        }
+        List<String> notes = new ArrayList<>(request.notes());
+        notes.add("Call-ID " + request.callId() + " lấy từ câu hỏi, nhưng chỉ có WebRTC log mà loại log này không ghi "
+                + "Call-ID: không kiểm chứng được log thuộc cuộc gọi này. Kết luận không khớp thực tế thì kiểm lại Call-ID, "
+                + "hoặc gửi kèm end call log");
+        return notes;
     }
 
     private static RequestRecord noReport(String requestId, String status, ParsedRequest request,

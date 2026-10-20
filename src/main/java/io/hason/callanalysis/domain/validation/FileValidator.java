@@ -11,9 +11,11 @@ import io.hason.callanalysis.domain.validation.FileValidation.ValidFile;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * File Validator (MVP mục 6.1 T3, ca kiểm thử F02-F04 mục 6.4).
@@ -26,7 +28,8 @@ import java.util.Optional;
  * Không kiểm ở đây:
  * - Thiếu file của một leg (F01): leg của WebRTC log chỉ biết sau khi parse (vai SDP), nên
  *   ReportBuilder báo thiếu sau bước gán leg.
- * - Call-ID của WebRTC log: libwebrtc không ghi Call-ID của ứng dụng (ParseContext).
+ * - Call-ID của WebRTC log: libwebrtc không ghi Call-ID của ứng dụng (ParseContext). Chỉ loại WebRTC log khi lượt
+ *   tải lên chứng minh được nó đi cùng cuộc khác ({@link #quarantineUnverifiableWebRtc}).
  *
  * Thuần domain: nhận nội dung đã đọc, không đụng đĩa hay mạng.
  */
@@ -85,18 +88,47 @@ public class FileValidator {
         String resolved = given == null ? resolveCallId(recognized) : given;
 
         List<ValidFile> accepted = new ArrayList<>();
+        Set<String> foreignCallIds = new LinkedHashSet<>();
         for (ValidFile file : recognized) {
             Optional<String> declared = declaredCallId(file);
             if (resolved != null && declared.isPresent() && !declared.get().equals(resolved)) {
                 rejected.add(new RejectedFile(file.name(), Reason.CALL_ID_MISMATCH,
                         "Call-ID trong file (" + declared.get() + ") khác Call-ID đang phân tích ("
                                 + resolved + ")"));
+                foreignCallIds.add(declared.get());
                 continue;
             }
             accepted.add(file);
         }
+        quarantineUnverifiableWebRtc(accepted, rejected, foreignCallIds);
         rejected.sort(Comparator.comparing(RejectedFile::name));
         return new FileValidation(resolved, accepted, rejected);
+    }
+
+    /**
+     * WebRTC log không mang Call-ID nên không tự chứng minh được nó thuộc cuộc nào. Khi lượt tải lên có end call log của
+     * cuộc KHÁC mà không có end call log nào của cuộc đang phân tích, mọi bằng chứng trong lượt này chỉ về cuộc khác:
+     * WebRTC log đi kèm nhiều khả năng cũng của cuộc đó, nên loại thay vì để nó quyết định kết luận.
+     *
+     * Ca thật (Peer Evaluation 2026-10-20): log của {@code 2D9057AA} (ICE failed) kèm câu hỏi ghi Call-ID của
+     * {@code DE7DD314} (cuộc thành công) — end call log bị loại đúng, nhưng WebRTC log được giữ và report kết luận
+     * {@code DE7DD314} FAIL / ICE_FAILURE, độ tin cậy MEDIUM.
+     *
+     * Có end call log khớp thì giữ WebRTC log (F03, {@code case-017}: log caller đúng cuộc kèm một end call log lạ).
+     */
+    private static void quarantineUnverifiableWebRtc(List<ValidFile> accepted, List<RejectedFile> rejected,
+                                                     Set<String> foreignCallIds) {
+        boolean matchingEndCallLog = accepted.stream().anyMatch(f -> f.type() == DetectedLogType.ENDCALL_LOG);
+        if (foreignCallIds.isEmpty() || matchingEndCallLog) {
+            return;
+        }
+        String others = String.join(", ", foreignCallIds);
+        accepted.removeIf(file -> {
+            rejected.add(new RejectedFile(file.name(), Reason.UNVERIFIABLE_CALL_ID,
+                    "WebRTC log không ghi Call-ID, mà cùng lượt tải lên chỉ có end call log của cuộc gọi khác ("
+                            + others + "), nên không xác định được file này thuộc cuộc nào"));
+            return true;
+        });
     }
 
     private Optional<RejectedFile> checkContent(AttachedFile file) {
@@ -111,7 +143,8 @@ public class FileValidator {
         }
         if (looksBinary(file.lines())) {
             return Optional.of(new RejectedFile(file.name(), Reason.CORRUPT,
-                    "file hỏng hoặc không phải văn bản (có ký tự nhị phân)"));
+                    "file hỏng, không phải văn bản, hoặc mã hoá không đọc được (có ký tự nhị phân; hệ thống đọc "
+                            + "UTF-8 và UTF-16 có BOM — lưu lại file dạng UTF-8 rồi gửi lại)"));
         }
         return Optional.empty();
     }

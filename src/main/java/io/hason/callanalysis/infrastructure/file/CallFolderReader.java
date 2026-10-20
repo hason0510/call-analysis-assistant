@@ -7,7 +7,7 @@ import org.springframework.util.unit.DataSize;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.charset.MalformedInputException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,16 +61,10 @@ public class CallFolderReader {
                 : new AttachedFile(name, size, readLines(file));
     }
 
-    /**
-     * Log chứa tiếng Việt ("Loa ngoài", "Micro của iPhone") nên bắt buộc đọc UTF-8.
-     * File không phải UTF-8 hợp lệ vẫn đọc được, ký tự hỏng bị thay thế thay vì ném lỗi —
-     * parser không được crash vì input xấu (MVP mục 3.3).
-     */
+    /** Cùng cách giải mã với file tải lên qua Chat API ({@link #decode}). */
     public List<String> readLines(Path file) {
         try {
-            return Files.readAllLines(file, StandardCharsets.UTF_8);
-        } catch (MalformedInputException e) {
-            return decodeLenient(file);
+            return decode(Files.readAllBytes(file));
         } catch (IOException e) {
             throw new UncheckedIOException("Không đọc được file " + file, e);
         }
@@ -82,20 +76,40 @@ public class CallFolderReader {
     }
 
     /**
-     * Nội dung file tải lên (Chat API) → dòng, cùng cách tách dòng với {@link #readLines}: \n, \r\n, \r.
-     * Byte không phải UTF-8 hợp lệ bị thay bằng U+FFFD, không ném lỗi — File Validator dựa vào chính
-     * ký tự này để nhận ra file hỏng.
+     * Nội dung file → dòng, tách theo \n, \r\n, \r. Log chứa tiếng Việt ("Loa ngoài", "Micro của iPhone") nên đọc
+     * UTF-8; có BOM thì theo BOM:
+     * - BOM UTF-8 ({@code EF BB BF}) bị bỏ. Notepad và PowerShell 5.1 ({@code Out-File}, {@code Set-Content -Encoding
+     *   UTF8}) chèn nó khi lưu lại file; giữ lại thì nó dính vào {@code #H1} và parser không nhận ra header.
+     * - BOM UTF-16 LE / BE ({@code FF FE} / {@code FE FF}, Notepad "Unicode") → đọc UTF-16. Đọc như UTF-8 thì mỗi ký tự
+     *   kèm một byte 0, và File Validator loại cả file vì "có ký tự nhị phân".
+     *
+     * Byte không giải mã được bị thay bằng U+FFFD, không ném lỗi — parser không được crash vì input xấu (MVP mục 3.3),
+     * và File Validator dựa vào chính ký tự này để nhận ra file hỏng.
      */
     public static List<String> decode(byte[] bytes) {
-        return new String(bytes, StandardCharsets.UTF_8).lines().toList();
+        Charset charset = StandardCharsets.UTF_8;
+        int skip = 0;
+        if (startsWith(bytes, 0xEF, 0xBB, 0xBF)) {
+            skip = 3;
+        } else if (startsWith(bytes, 0xFF, 0xFE)) {
+            charset = StandardCharsets.UTF_16LE;
+            skip = 2;
+        } else if (startsWith(bytes, 0xFE, 0xFF)) {
+            charset = StandardCharsets.UTF_16BE;
+            skip = 2;
+        }
+        return new String(bytes, skip, bytes.length - skip, charset).lines().toList();
     }
 
-    private List<String> decodeLenient(Path file) {
-        try {
-            byte[] bytes = Files.readAllBytes(file);
-            return List.of(new String(bytes, StandardCharsets.UTF_8).split("\n", -1));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Không đọc được file " + file, e);
+    private static boolean startsWith(byte[] bytes, int... prefix) {
+        if (bytes.length < prefix.length) {
+            return false;
         }
+        for (int i = 0; i < prefix.length; i++) {
+            if ((bytes[i] & 0xFF) != prefix[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 }

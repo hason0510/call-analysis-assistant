@@ -384,8 +384,10 @@ class CallLogNormalizationServiceTest {
                 new StubSource(new SignalingFetch("CALL-1", healthyCall(), false, 4, 4)))
                 .buildTimeline("CALL-1", Map.of("caller_endcall.log", endCallLog("CALL-KHAC")));
 
+        // Kiểu riêng FOREIGN_CALL_FILE (2026-10-20): report đưa ghi chú này lên đầu "Giới hạn dữ liệu", và khi mọi log
+        // đều thuộc cuộc khác thì Tóm tắt / Đề xuất nói thẳng nguyên nhân thay vì "không có log client".
         assertThat(timeline.notes())
-                .filteredOn(n -> n.kind() == TimelineNote.Kind.DATA_LIMITATION)
+                .filteredOn(n -> n.kind() == TimelineNote.Kind.FOREIGN_CALL_FILE)
                 .singleElement()
                 .satisfies(n -> assertThat(n.message())
                         .contains("caller_endcall.log")

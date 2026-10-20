@@ -85,7 +85,8 @@ public class ReportBuilder {
             // ca FAIL bằng "Cuộc gọi không thiết lập được…" 10/10 lần ở 70C388AD và FE4EF5E7 — hai cuộc ĐÃ thiết lập
             // rồi mới mất dữ liệu — dù prompt (9a) và định nghĩa taxonomy đều nói ngược lại. MVP 3.2: phần code tính
             // được thì không giao cho AI; câu "vì sao hỏng" chính là lý do của rule.
-            summary = base.verdict() == Verdict.FAIL || isBlank(decision.summary()) ? summary : decision.summary();
+            summary = base.verdict() == Verdict.FAIL || onlyForeignClientFiles(timeline) || isBlank(decision.summary())
+                    ? summary : decision.summary();
             // MVP 7.1 T2 "bộ đề xuất chuẩn theo issue category": đề xuất của rule luôn giữ, AI chỉ BỔ SUNG.
             // Trước Sprint 3 T2 đề xuất AI thay hẳn — với 703100CF (chưa request TURN nào rời máy) AI vẫn khuyên
             // "kiểm tra cấu hình TURN server".
@@ -103,6 +104,22 @@ public class ReportBuilder {
                 decision.degraded() ? decision.fallbackReason() : null,
                 analysis == null ? List.of() : decision.citedEvidenceIds(), aiSuggestions);
     }
+
+    /**
+     * Người dùng có gửi log nhưng mọi log đều bị loại vì thuộc cuộc gọi khác — thường là gõ nhầm Call-ID trong câu hỏi
+     * (Peer Evaluation 2026-10-20). Khi đó đề xuất chuẩn của UNKNOWN ("bổ sung log còn thiếu") dẫn người dùng gửi lại
+     * đúng các file cũ, và tóm tắt AI viết theo "không có log client" cũng sai; report nói thẳng nguyên nhân.
+     */
+    static boolean onlyForeignClientFiles(CallTimeline timeline) {
+        return !timeline.hasSource(LogSource.ENDCALL) && !timeline.hasSource(LogSource.WEBRTC)
+                && timeline.notes().stream().anyMatch(n -> n.kind() == TimelineNote.Kind.FOREIGN_CALL_FILE);
+    }
+
+    static final List<String> FOREIGN_FILES_SUGGESTIONS = List.of(
+            "Kiểm tra lại Call-ID ghi trong câu hỏi: các log đã gửi thuộc cuộc gọi khác (Call-ID của chúng ghi ở"
+                    + " Giới hạn dữ liệu).",
+            "Muốn phân tích chính các log đã gửi: hỏi lại không kèm Call-ID, hoặc ghi đúng Call-ID của chúng.",
+            "Muốn phân tích cuộc gọi đang hỏi: gửi log của đúng cuộc gọi đó.");
 
     /** Đề xuất AI có thêm được gì: bỏ câu trùng bộ chuẩn (so sau khi bỏ dấu câu, hoa thường), tối đa ba câu. */
     static final int MAX_AI_SUGGESTIONS = 3;
@@ -171,7 +188,7 @@ public class ReportBuilder {
                 evidenceEntries,
                 metricEntries,
                 possibleCauses(verdict, taxonomy, evidence),
-                standardSuggestions(verdict),
+                onlyForeignClientFiles(timeline) ? FOREIGN_FILES_SUGGESTIONS : standardSuggestions(verdict),
                 dataLimitations(timeline, metrics, verdict, taxonomy),
                 false, null, CallReport.AnalysisSource.RULE, false, null, List.of(), List.of());
     }
@@ -337,7 +354,13 @@ public class ReportBuilder {
      */
     public static List<String> dataLimitations(CallTimeline timeline, CallMetrics metrics,
                                                RuleVerdict verdict, IssueTaxonomy taxonomy) {
-        Set<String> limitations = new LinkedHashSet<>(verdict.dataLimitations());
+        // File bị loại vì thuộc cuộc gọi khác đứng đầu: người gõ nhầm Call-ID cần thấy ngay vì sao log của họ không dùng.
+        Set<String> limitations = new LinkedHashSet<>();
+        timeline.notes().stream()
+                .filter(n -> n.kind() == TimelineNote.Kind.FOREIGN_CALL_FILE)
+                .map(TimelineNote::message)
+                .forEach(limitations::add);
+        limitations.addAll(verdict.dataLimitations());
 
         limitations.addAll(missingClientLogs(timeline));
         limitations.addAll(multiDeviceLegs(timeline));

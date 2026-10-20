@@ -30,7 +30,8 @@ public record FileValidation(String callId, List<ValidFile> accepted, List<Rejec
 
     public record ValidFile(String name, DetectedLogType type, List<String> lines) {}
 
-    public enum Reason { TOO_LARGE, EMPTY, CORRUPT, UNRECOGNIZED, CALL_ID_MISMATCH }
+    /** {@code UNVERIFIABLE_CALL_ID}: WebRTC log (không mang Call-ID) đi cùng lượt tải lên chỉ có log của cuộc khác. */
+    public enum Reason { TOO_LARGE, EMPTY, CORRUPT, UNRECOGNIZED, CALL_ID_MISMATCH, UNVERIFIABLE_CALL_ID }
 
     public record RejectedFile(String name, Reason reason, String detail) {
 

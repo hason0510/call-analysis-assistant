@@ -50,7 +50,9 @@ public record RuleSignals(
          * từ bên kia (70C388AD, FE4EF5E7); ở 70C388AD máy bên kia VẪN ping server — nên đọc là "không nhận được gì
          * từ bên kia", không phải bằng chứng bên kia mất mạng. Chỉ dùng để GIẢI THÍCH, không dùng để kết luận.
          */
-        boolean partnerLostNetwork
+        boolean partnerLostNetwork,
+        /** Có file đính kèm bị loại vì thuộc cuộc gọi khác ({@code TimelineNote.Kind.FOREIGN_CALL_FILE}). */
+        boolean clientFilesFromOtherCall
 ) {
 
     public RuleSignals {

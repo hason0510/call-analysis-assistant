@@ -285,6 +285,55 @@ class ChatAnalysisServiceTest {
         assertThat(report.dataLimitations()).noneMatch(l -> l.contains("Call-ID trong file"));
     }
 
+    private static final String OTHER_CALL_ID = "DE7DD314-F432-45CB-BCB4-AE9103CC0919";
+
+    private static AttachedFile webRtcLog(String name) {
+        return AttachedFile.of(name, List.of("[000:120][5507] (peer_connection.cc:659): DoSetLocalDescription: answer"));
+    }
+
+    @Test
+    @DisplayName("câu hỏi ghi Call-ID cuộc khác, log của cuộc đính kèm -> WebRTC log không được dùng (Peer Evaluation 2026-10-20)")
+    void mistypedCallIdDoesNotBorrowAnotherCallsWebRtcLog() {
+        Response r = ask("Phân tích cuộc gọi " + OTHER_CALL_ID + " giúp mình", List.of(
+                AttachedFile.of("callee_endcall.log", ChatPipelineFixture.endCallLog("callee")),
+                webRtcLog("callee_webrtc.log")), agreeingAi);
+
+        assertThat(r.report().callId()).isEqualTo(OTHER_CALL_ID);
+        assertThat(r.report().dataLimitations())
+                .anyMatch(l -> l.startsWith("callee_endcall.log: Call-ID trong file"))
+                .anyMatch(l -> l.startsWith("callee_webrtc.log: WebRTC log không ghi Call-ID"));
+        assertThat(r.report().evidence()).noneMatch(e -> String.valueOf(e.sourceRef()).contains("webrtc"));
+    }
+
+    @Test
+    @DisplayName("mọi log đều của cuộc khác -> Tóm tắt, Đề xuất, Giới hạn dữ liệu nói thẳng nguyên nhân (kể cả khi có AI)")
+    void foreignFilesAreExplainedWhereTheUserLooksFirst() {
+        Response r = ask("Phân tích cuộc gọi " + OTHER_CALL_ID + " giúp mình", List.of(
+                AttachedFile.of("callee_endcall.log", ChatPipelineFixture.endCallLog("callee")),
+                webRtcLog("callee_webrtc.log")), agreeingAi);
+
+        assertThat(r.report().verdict()).isEqualTo(Verdict.UNKNOWN);
+        // AI giả viết "Tóm tắt do AI viết." — ca này tóm tắt do code viết, nói đúng nguyên nhân
+        assertThat(r.report().summary()).contains("thuộc cuộc gọi khác").doesNotContain("do AI viết");
+        assertThat(r.report().suggestions().getFirst()).startsWith("Kiểm tra lại Call-ID");
+        assertThat(r.report().suggestions()).noneMatch(s -> s.contains("Bổ sung các file log còn thiếu"));
+        assertThat(r.report().dataLimitations().subList(0, 2)).allMatch(l -> l.startsWith("callee_"));
+    }
+
+    @Test
+    @DisplayName("Call-ID gõ trong câu hỏi + chỉ có WebRTC log -> Giới hạn dữ liệu nói không kiểm chứng được")
+    void callIdFromQuestionWithOnlyWebRtcIsFlagged() {
+        Response flagged = ask("Phân tích cuộc gọi " + ChatPipelineFixture.CALL_ID + " giúp mình",
+                List.of(webRtcLog("callee_webrtc.log")), agreeingAi);
+        Response withEndCall = ask("Phân tích cuộc gọi " + ChatPipelineFixture.CALL_ID + " giúp mình",
+                List.of(AttachedFile.of("callee_endcall.log", ChatPipelineFixture.endCallLog("callee")),
+                        webRtcLog("callee_webrtc.log")), agreeingAi);
+
+        assertThat(flagged.report().dataLimitations()).anyMatch(l -> l.contains("lấy từ câu hỏi")
+                && l.contains("không kiểm chứng được log thuộc cuộc gọi này"));
+        assertThat(withEndCall.report().dataLimitations()).noneMatch(l -> l.contains("lấy từ câu hỏi"));
+    }
+
     @Test
     @DisplayName("tên file chứa số điện thoại -> trích dẫn evidence trong report đã che, số dòng giữ nguyên")
     void fileNameInCitationIsSanitized() {

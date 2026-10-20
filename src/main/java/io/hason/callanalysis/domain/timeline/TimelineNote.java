@@ -28,6 +28,13 @@ public record TimelineNote(Kind kind, String message) {
          * là bản export bị cắt.
          */
         SIGNALING_TRUNCATED,
+        /**
+         * File đính kèm bị loại vì thuộc cuộc gọi KHÁC (end call log lệch Call-ID, hoặc WebRTC log đi cùng lượt tải lên
+         * chỉ có log của cuộc khác). Tách khỏi DATA_LIMITATION vì report phải nói thẳng nguyên nhân này: khi mọi log đều
+         * bị loại vì lý do đó, "không có log client" là sai — người dùng có gửi, chỉ là của cuộc khác (thường do gõ nhầm
+         * Call-ID; Peer Evaluation 2026-10-20).
+         */
+        FOREIGN_CALL_FILE,
         /** Thiếu dữ liệu, ảnh hưởng đến kết luận. */
         DATA_LIMITATION
     }

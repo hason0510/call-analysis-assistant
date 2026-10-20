@@ -159,6 +159,15 @@ public class RuleVerdictEngine {
         // Không có log client nào thì không có gì để thấy: 2D9057AA có signaling hoàn hảo mà
         // vẫn FAIL vì media. MVP mục 4.1: thiếu file → UNKNOWN.
         if (!signals.hasClientLog()) {
+            if (signals.clientFilesFromOtherCall()) {
+                // Người dùng CÓ gửi log, nhưng là log của cuộc khác (thường do gõ nhầm Call-ID). Nói "không có log
+                // client" thì họ gửi lại đúng các file cũ — phải nói thẳng nguyên nhân (Peer Evaluation 2026-10-20).
+                limitations.add("Mọi log đính kèm đều thuộc cuộc gọi khác Call-ID đang phân tích nên đã bị loại;"
+                        + " signaling đẹp chưa đủ để kết luận SUCCESS");
+                return unknown("Các log đính kèm thuộc cuộc gọi khác (xem Giới hạn dữ liệu), không phải cuộc gọi"
+                        + " đang phân tích, nên không có log client nào để kiểm chứng media",
+                        "log đính kèm thuộc cuộc gọi khác", limitations);
+            }
             limitations.add("Không có log client nào (end call / WebRTC) nên không kiểm chứng được"
                     + " media; signaling đẹp chưa đủ để kết luận SUCCESS");
             return unknown("Signaling đạt OK_ACK_OK nhưng không có log client để kiểm chứng media",

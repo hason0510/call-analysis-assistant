@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** Ca kiểm thử F02-F04 của MVP mục 6.4 (F01 ở CallLogNormalizationServiceTest — cần gán leg). */
 class FileValidatorTest {
@@ -123,6 +124,42 @@ class FileValidatorTest {
                 file("b_endcall.log", endCallLog("CALL-1"))));
 
         assertThat(v.callId()).isEqualTo("CALL-1");
+        assertThat(v.rejected()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("F03 — chỉ có end call log của cuộc KHÁC kèm WebRTC log -> WebRTC log cũng bị loại (Peer Evaluation 2026-10-20)")
+    void f03WebRtcWithOnlyForeignEndCallLogIsQuarantined() {
+        // Ca thật: log 2D9057AA (ICE failed) kèm câu hỏi ghi Call-ID của DE7DD314 -> report từng kết luận DE7DD314 FAIL.
+        FileValidation v = validator.validate("CALL-1", List.of(
+                file("callee_endcall.log", endCallLog("CALL-2")),
+                file("callee_webrtc.log", webRtcLog())));
+
+        assertThat(v.accepted()).isEmpty();
+        assertThat(v.rejected()).extracting(RejectedFile::name, RejectedFile::reason).containsExactly(
+                tuple("callee_endcall.log", Reason.CALL_ID_MISMATCH),
+                tuple("callee_webrtc.log", Reason.UNVERIFIABLE_CALL_ID));
+        assertThat(v.rejected().get(1).message()).contains("CALL-2").contains("không xác định được file này thuộc cuộc nào");
+    }
+
+    @Test
+    @DisplayName("F03 — có end call log KHỚP thì giữ WebRTC log dù có thêm một end call log lạ (case-017)")
+    void f03WebRtcIsKeptWhenAMatchingEndCallLogExists() {
+        FileValidation v = validator.validate("CALL-1", List.of(
+                file("caller_endcall.log", endCallLog("CALL-1")),
+                file("caller_webrtc.log", webRtcLog()),
+                file("other_callee_endcall.log", endCallLog("CALL-2"))));
+
+        assertThat(v.accepted()).extracting(ValidFile::name).containsExactly("caller_endcall.log", "caller_webrtc.log");
+        assertThat(v.rejected()).singleElement().extracting(RejectedFile::reason).isEqualTo(Reason.CALL_ID_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("chỉ có WebRTC log, không có log nào của cuộc khác -> giữ (không có bằng chứng để loại)")
+    void webRtcOnlyIsKeptWithoutContraryEvidence() {
+        FileValidation v = validator.validate("CALL-1", List.of(file("caller_webrtc.log", webRtcLog())));
+
+        assertThat(v.accepted()).hasSize(1);
         assertThat(v.rejected()).isEmpty();
     }
 
