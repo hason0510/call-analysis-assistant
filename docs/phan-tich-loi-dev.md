@@ -90,7 +90,7 @@ case-019 dùng log của `2D9057AA`); `dev` không có case SUCCESS nào có c�
 có nhãn.
 
 **Chưa chấm được: category so với đáp án.** Đáp án category do mentor cung cấp (MVP dòng 51, mục 6.3), mà ground truth
-hiện chỉ có `fail/` / `success/` — không có category, nên Issue Category Accuracy là N/A ở mọi lượt (câu hỏi mentor số 5).
+hiện chỉ có `fail/` / `success/` — không có category, nên Issue Category Accuracy là N/A ở mọi lượt.
 Dự án không tự đặt nhãn: nhãn category không suy ra được từ nhãn fail / success. Khi có nhãn, `--rescore` chấm lại
 được ngay mọi lượt ở trên, không cần chạy lại AI.
 
@@ -176,4 +176,4 @@ Các lượt cũ không chấm lại được, vì file kết quả không lưu 
 | 5 | Thêm vào context thứ gì thì thêm vào căn cứ G05 | ✅ sau đợt `3478` (T2) |
 | 6 | Giữ G05 làm chốt chặn kiểu "tự trừ mốc thời gian" | ✅ — kiểu lỗi duy nhất tái phát |
 | 7 | Biến thể context không có `ruleVerdict` để biết AI tự suy luận được không | ⬜ chưa làm (T11 Sprint 2, Nếu kịp) |
-| 8 | Issue Category Accuracy | ⬜ chờ nhãn category của mentor (7 case FAIL) |
+| 8 | Issue Category Accuracy | N/A — ground truth không có nhãn category (7 case FAIL) |

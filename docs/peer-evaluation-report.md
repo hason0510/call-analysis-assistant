@@ -174,7 +174,7 @@ Những chỗ trông như lỗi nhưng đối chiếu log gốc thì đúng:
 Lúc import, trường `rawEvent` lưu nguyên văn sự kiện signaling gốc vào ES, gồm cả `clientIp` (IP công cộng thật; 419
 document) và `message` (có User-ID). Bảng phân loại của chính repo xếp IP client là `SENSITIVE` — "bắt buộc mask trước
 khi ra khỏi hệ thống", và MVP 6.2 đặt "dữ liệu ghi vào ES local" dưới Output Sanitizer. Cách hiểu điểm này của MVP chưa
-rõ (bên mình cũng đang hỏi mentor, câu 5), nên chỉ ghi để bạn cân nhắc; Security Evaluation Report hiện chưa nhắc tới.
+rõ, nên chỉ ghi để bạn cân nhắc; Security Evaluation Report hiện chưa nhắc tới.
 
 ---
 
@@ -220,7 +220,7 @@ gọi AI, khoảng 1,76 triệu token (≈ 0,3 USD) — khớp ước tính tron
 
 - 15 lần sai Verdict đều là case `var-single-file` (chỉ `caller_webrtc.log` của `DE7DD314`): nhãn `UNKNOWN` theo scenario 5
   của MVP mục 10, hệ thống ra `SUCCESS`. File case ghi rõ "XUNG ĐỘT NHÃN" với `success/5E0800AE` (nhãn SUCCESS của mentor,
-  cũng chỉ có một file client) và đang chờ mentor — đúng câu hỏi bên mình cũng đang chờ.
+  cũng chỉ có một file client) — cùng mâu thuẫn mà repo bên mình ghi ở Known Limitations.
 - Issue Category Accuracy 100 % là so với nhãn category lấy từ chính đầu ra của rule (đã kiểm tay), vì mentor chưa gán nhãn
   category — `cases.yaml` ghi rõ điều này.
 - Bộ `dev` chỉ gồm 20 cuộc của `ai20k_sample`; 7 cuộc của dataset mới được thử tay qua Web UI (mục 2) và qua `batch`.

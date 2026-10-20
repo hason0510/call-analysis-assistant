@@ -1031,8 +1031,8 @@ Có log máy: 13 SUCCESS, 14 FAIL, 0 UNKNOWN (Final Evaluation Report mục 10).
 - **Danh sách Call-ID lấy từ ES** (`CallCatalog`, composite aggregation có phân trang), không từ thư mục — đúng chữ MVP.
   Cổng riêng, không thêm hàm vào `SignalingSource`: cổng đó là interface một hàm, test dựng bằng lambda.
 - **Log máy tuỳ chọn** (`--logs`, lặp được): thư mục trùng tên Call-ID, so không phân biệt hoa thường (bẫy #23). Không
-  bắt buộc vì MVP nói "trong ES"; không bỏ hẳn vì chỉ signaling thì phân bố gần như vô nghĩa. Mentor chọn chế độ nào là
-  câu 17 (`cau-hoi-mentor.md`); làm cả hai thì câu trả lời nào cũng không phải sửa code.
+  bắt buộc vì MVP nói "trong ES"; không bỏ hẳn vì chỉ signaling thì phân bố gần như vô nghĩa. Làm cả hai chế độ, nên
+  dùng chế độ nào cũng không phải sửa code.
 - **Tách theo nguồn dữ liệu của TỪNG cuộc** (`SourceGroup`, xét theo timeline chứ không theo "có thư mục" — thư mục có
   thể chỉ chứa file bị loại). Gộp chung thì "59 % UNKNOWN" lẫn hai nghĩa: thiếu log máy, và đủ log mà vẫn không kết luận
   được. Báo cáo in mục "Cách đọc" khi có cuộc chỉ có signaling; dashboard tách màu theo nguồn.

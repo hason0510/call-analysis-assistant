@@ -194,8 +194,8 @@ Chi tiết: `docs/bao-cao-bao-mat.md`. Tóm tắt (lượt cuối 2026-10-14 và
 - Lỗi không lường trước trả câu thông báo chung, không trả stack trace hay nội dung file.
 - Chữ từ server (kể cả chữ AI viết) hiển thị trên Web UI bằng `textContent`, không bao giờ `innerHTML`.
 
-**Còn mở:** signaling nạp vào Elasticsearch ở dạng gốc (có `appUserId`). Đang chờ mentor trả lời "dữ liệu ghi vào ES
-local" của MVP 6.2 có gồm dữ liệu nạp không.
+**Giới hạn:** signaling nạp vào Elasticsearch ở dạng gốc (có `appUserId`). Dự án hiểu "dữ liệu ghi vào ES local" của
+MVP 6.2 là kết quả phân tích; lý do: Security Evaluation Report mục 4.3.
 
 ---
 

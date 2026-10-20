@@ -126,13 +126,13 @@ từ đầu tiên. JWT, `Bearer …`, `sk-…`, AKIA, AIza vẫn bị bắt bằ
 Temp của Windows — quét **0 file** mà vẫn in "còn sót=0" ở mọi dòng. Đã sửa: thư mục ra tương đối `target/verify-sanitizer`;
 `verify_sanitized.py` dừng với lỗi khi không đọc được file nào. Chạy lại: 42 file, 0 sót.
 
-### 4.3 Còn chờ mentor
+### 4.3 Signaling trong Elasticsearch
 
 Signaling nạp vào Elasticsearch local ở dạng gốc (`appUserId`, `isp`, `asn`). MVP 6.2 đặt "dữ liệu ghi vào ES local"
 dưới mục Output; dự án hiểu là kết quả phân tích ghi vào ES — từ Sprint 3 T9 là index `analysis-requests`, chỉ gồm mã,
 số và cờ, `call_id` đã mã giả; T10 (2026-10-19) thêm index `call-analysis-results` cùng nguyên tắc (mỗi Call-ID một bản
 ghi: verdict, loại lỗi, độ tin cậy, nguồn dữ liệu, số evidence; test `ElasticsearchBatchResultSinkTest` khẳng định không
-có trường chữ tự do). Nếu mentor tính cả dữ liệu nạp: mã giả `appUserId` lúc import và sửa cách suy ra leg.
+có trường chữ tự do). Nếu cần làm sạch cả dữ liệu nạp: mã giả `appUserId` lúc import và sửa cách suy ra leg.
 Bản export thô có thêm `message` (chữ tự do mang User-ID, Call-ID gốc) và `clientIp`: cả hai KHÔNG được nạp; từ
 `message` chỉ giữ cờ có kiểu `noSessionsFound` (2026-10-19).
 

@@ -448,7 +448,7 @@ Cập nhật 2026-10-20. Đối chiếu từng task với code, test và số đ
 
 | Task | Trạng thái | Nằm ở |
 |---|---|---|
-| T1 — Improve Accuracy & Consistency | 🟡 | AI nhắc chỉ số bằng mã, code điền giá trị (`MetricCodes`); evidence mang cờ `ruleBasis`; phân tích lỗi `scripts/error-analysis/`. Issue Category Accuracy chờ nhãn của mentor |
+| T1 — Improve Accuracy & Consistency | ✅ | AI nhắc chỉ số bằng mã, code điền giá trị (`MetricCodes`); evidence mang cờ `ruleBasis`; phân tích lỗi `scripts/error-analysis/`. Issue Category Accuracy N/A: ground truth không có nhãn category (Known Limitations) |
 | T2 — Explainability & Suggestion | ✅ | Bộ đề xuất chuẩn của rule luôn giữ, AI chỉ bổ sung (`aiSuggestions`); dòng Tóm tắt ca FAIL do code viết (`ReportBuilder`) |
 | T3 — Confidence Design | ✅ | `ConfidencePolicy` theo bảng MVP 7.2, report ghi lý do |
 | T4 — Reliability Hardening | ✅ | Timeout AI / ES / trình duyệt, 429 tách lý do, `GarbledText`, ES tắt vẫn ra report, sanitizer 9,4 s → 1,0 s |
@@ -462,7 +462,7 @@ Cập nhật 2026-10-20. Đối chiếu từng task với code, test và số đ
 
 **Tài liệu bàn giao (MVP 7.4):** [Runbook](docs/runbook.md) ✅ · [Architecture & Security
 Design](docs/architecture-security-design.md) ✅ · [Final Evaluation Report & Known
-Limitations](docs/final-evaluation-report.md) ✅ (còn chờ kết quả `held-out` của mentor) · [Kịch bản Final
+Limitations](docs/final-evaluation-report.md) ✅ (mục 6 dành cho kết quả `held-out` do mentor chạy) · [Kịch bản Final
 Demo](docs/demo-sprint-3.md) ✅ (chạy thật 2026-10-12) · [Peer Evaluation
 Report](docs/peer-evaluation-report.md) ✅.
 
@@ -529,14 +529,14 @@ phía server: 6 cuộc lỗi TURN hiện ra thành `SIGNALING_FAILURE`. Báo cá
 Cập nhật cuối Sprint 3 (2026-10-20). Những mục đã sửa trong Sprint 3 không còn ở đây. Bản kèm số đo của lượt benchmark
 cuối nằm ở [`docs/final-evaluation-report.md`](docs/final-evaluation-report.md) mục 7.
 
-**Chưa làm hoặc còn chờ mentor**
+**Phạm vi đo và dữ liệu nhãn**
 
 - Sprint 3 T10 (Batch Analysis) chỉ dùng signaling (đúng chữ "Call-ID trong ES local") thì gần như vô dụng: trên 13 cuộc
   có nhãn 5 đúng, 8 `UNKNOWN`, và lỗi TURN hiện thành `SIGNALING_FAILURE`. Có `--logs` thì 13/13. Đã làm cả hai chế
-  độ và tách nhóm trong báo cáo; chế độ mentor muốn dùng vẫn chờ trả lời (câu 17).
+  độ và tách nhóm trong báo cáo.
 - Issue Category Accuracy chưa đo được: ground truth chỉ có fail / success. Runner và `--rescore` đã sẵn để chấm khi có
   nhãn.
-- Kết quả `held-out`: chờ mentor chạy Evaluation Runner và gửi lại.
+- Chưa có kết quả `held-out`: tập này do mentor giữ và chạy bằng Evaluation Runner (mục "Chạy bộ case `held-out`").
 - Benchmark `dev` thiếu loại ca "SUCCESS chất lượng kém": không có cuộc gọi chất lượng kém có nhãn. Hai ca khác của MVP
   6.3 chỉ phủ một phần: FAIL thiết lập chỉ có kiểu server từ chối (mã 428, case-004 / 007), không có kiểu signaling
   timeout / "không tìm thấy session"; "bình thường có WARN" không có case riêng mà dựa vào việc mọi cuộc SUCCESS đều có

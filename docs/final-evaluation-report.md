@@ -5,7 +5,7 @@
 > tới ở đây: [`design-decisions.md`](design-decisions.md) (số mục trong ngoặc).
 >
 > Số đo: lượt benchmark cuối `benchmark/results/ban-cuoi-2026-10-14/evaluation-20261014-102610.md` (không commit thư mục
-> `benchmark/results/`; số được chép vào đây). Ô ⏳ là việc còn chờ.
+> `benchmark/results/`; số được chép vào đây).
 >
 > Code đã đổi sau lượt đo này (2026-10-19, mục 8). Số đo của bản code cuối, so với Sprint 2: mục 9 (lượt chạy lại trước
 > khi nộp — mọi metric như lượt này). Phân tích hàng loạt (T10, làm sau mục 9, không đổi luồng phân tích): mục 10.
@@ -172,12 +172,13 @@ Lỗi tool tìm ra nhờ dataset này và đã sửa (chi tiết: [`bay-du-lieu.
 
 Kết luận trên data mẫu không đổi sau các sửa trên: 13/13 cuộc có nhãn đúng.
 
-**Câu hỏi mở với mentor:** dataset này có được dùng để sửa tool không (với `for_test/` mentor dặn không hiệu chỉnh); đáp
-án của 7 cuộc, nhất là `70C388AD` và `FE4EF5E7` (tool ra FAIL; một người khác kết luận SUCCESS).
+Dataset không có nhãn nên kết luận của 7 cuộc chưa được kiểm chứng, nhất là `70C388AD` và `FE4EF5E7` (tool ra FAIL;
+một người khác kết luận SUCCESS).
 
 ## 6. Kết quả `held-out`
 
-⏳ Chờ mentor chạy Evaluation Runner trên `held-out` và gửi lại. Cách chạy: README, mục "Chạy bộ case `held-out`".
+Tập `held-out` do mentor giữ và chạy bằng Evaluation Runner của dự án (MVP 6.3); tài liệu này chưa có số đo đó.
+Cách chạy: README, mục "Chạy bộ case `held-out`".
 
 ## 7. Known Limitations
 
@@ -230,7 +231,8 @@ Các lỗi diễn giải còn gặp trên dataset mới:
   bản gọn nên chỉ số này là `N/A`.
 - Giới hạn độ dài câu hỏi (4 000 ký tự) chỉ áp ở Chat API; Evaluation Runner và CLI không chặn.
 - WebRTC log chỉ có mốc tương đối, chưa đồng bộ với timeline signaling.
-- Signaling nạp vào ES ở dạng gốc (`appUserId`), chưa qua Sanitizer — chờ mentor xác nhận cách hiểu MVP 6.2.
+- Signaling nạp vào ES ở dạng gốc (`appUserId`), chưa qua Sanitizer; mọi đường ra AI, report và log đều qua Sanitizer
+  (Security Evaluation Report mục 4.3).
 - Phân tích hàng loạt (T10) chỉ bằng dữ liệu trong ES không kết luận được SUCCESS và chỉ thấy triệu chứng phía server
   (lỗi TURN hiện thành `SIGNALING_FAILURE`): ES không có log máy. Muốn thống kê có ý nghĩa phải kèm `--logs`. Mục 10.
 
@@ -353,4 +355,4 @@ chạy hai chế độ:
 
 Vì vậy báo cáo (`target/batch/*.md`) và dashboard Kibana "Phân tích hàng loạt — toàn kho" (index `call-analysis-results`)
 luôn tách hai nhóm theo nguồn dữ liệu của TỪNG cuộc, và in mục "Cách đọc" khi có cuộc chỉ có signaling. Muốn thống kê
-phân bố có ý nghĩa thì cần log máy (`--logs`); chế độ mentor muốn dùng là câu 17 còn chờ trả lời.
+phân bố có ý nghĩa thì cần log máy (`--logs`).

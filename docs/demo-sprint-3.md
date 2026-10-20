@@ -88,7 +88,7 @@ Ba chỗ Sprint 3 thêm vào report, sẽ thấy ở mọi scenario:
 | `LOW — bằng chứng yếu: ngưỡng chất lượng kém chưa kiểm chứng trên data có nhãn` | Không có cuộc chất lượng kém nào có nhãn: hệ thống tự nói ra thay vì giả vờ chắc chắn |
 | Đầu report ghi *"Phân tích, ưu tiên: bên gọi nghe bị giật"* | Request Parser tách trọng tâm câu hỏi |
 
-`B5F19381` chưa có nhãn (dataset mới, đang hỏi mentor). Có thể mở thêm `271D1FAF` (`for_test/`) để cho thấy ngưỡng mới:
+`B5F19381` chưa có nhãn (dataset mới). Có thể mở thêm `271D1FAF` (`for_test/`) để cho thấy ngưỡng mới:
 nhiều mẫu tăng vọt tới 11 % nhưng cả cuộc 1,83 % thì báo `SUCCESS` không cờ.
 
 Chủ động nói một điểm yếu: dòng *"Bổ sung (AI): Kiểm tra chất lượng mạng của bên gọi…"* là AI diễn đạt lại đề xuất
@@ -148,7 +148,7 @@ Signaling của cuộc này hoàn hảo (có `BYE`, `PAIR_PING` đều), nhưng 
 Report ra `SUCCESS`, độ tin cậy `MEDIUM — bằng chứng chưa trọn: không thấy ICE đạt connected; bản export signaling bị
 cắt bớt …; thiếu WebRTC log …; thiếu log client của callee`. "Giới hạn dữ liệu" liệt kê từng file thiếu.
 
-Nói rõ: đây là chỗ **lệch MVP có chủ đích, chờ mentor chốt**. Ground truth của `5E0800AE` (cuộc chỉ có một file) là
+Nói rõ: đây là chỗ **lệch MVP có chủ đích**. Ground truth của `5E0800AE` (cuộc chỉ có một file) là
 `SUCCESS`, mâu thuẫn với scenario 5. Hệ thống đang theo nhãn, nhưng hạ tin cậy và nêu đủ bốn lý do.
 
 ### 5b — không đính kèm file nào
